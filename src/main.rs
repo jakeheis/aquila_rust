@@ -1,7 +1,6 @@
 use aquila;
 
 fn main() {
-    let text = "4 + 5 * 7";
-
-    aquila::run(text);
+    let source = aquila::Source::text("4 + 5 * 7 + 6 + 7 * 1");
+    aquila::run(source);
 }

@@ -1,32 +1,41 @@
-#[derive(Debug)]
+use super::Source;
+use std::rc::Rc;
+use std::fmt;
+
+#[derive(Copy, Clone, PartialEq)]
 pub enum TokenKind {
     NUMBER,
     PLUS, MINUS, STAR, SLASH
 }
 
-#[derive(Debug)]
 pub struct Token {
-    kind: TokenKind,
-    index: usize,
-    length: usize
+    pub kind: TokenKind,
+    pub index: usize,
+    pub length: usize,
+    pub source: Rc<Source>
 }
 
 impl Token {
-    pub fn lexeme<'a>(&self, lexer: &'a Lexer) -> &'a str {
-        let end = self.index + self.length;
-        &lexer.contents[self.index..(end)]
+    pub fn lexeme(&self) -> &str {
+        self.source.lexeme(self.index, self.length)
+    }
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Token(kind: {}, lexeme: {})", self.kind as i32, self.lexeme())
     }
 }
 
 pub struct Lexer {
-    contents: String,
+    source: Rc<Source>,
     start: usize,
     current: usize
 }
 
 impl Lexer {
-    pub fn new(contents: &str) -> Self {
-        Lexer { contents: String::from(contents), start: 0, current: 0 }
+    pub fn new(source: Source) -> Self {
+        Lexer { source: Rc::new(source), start: 0, current: 0 }
     }
 
     pub fn lex(&mut self) -> Vec<Token> {
@@ -73,7 +82,7 @@ impl Lexer {
     }
 
     fn make_token(&self, kind: TokenKind) -> Token {
-        Token { kind, index: self.start, length: self.current - self.start }
+        Token { source: Rc::clone(&self.source), kind, index: self.start, length: self.current - self.start }
     }
 
     fn advance(&mut self) -> char {
@@ -83,11 +92,11 @@ impl Lexer {
     }
 
     fn peek(&self) -> char {
-        self.contents.chars().nth(self.current).unwrap()
+        self.source.character(self.current)
     }
 
     fn is_at_end(&self) -> bool {
-        self.current == self.contents.chars().count()
+        self.current == self.source.length()
     }
 
 }
