@@ -1,7 +1,9 @@
 use std::fs;
 
 pub mod lexer;
-pub mod parser;
+pub mod parsing;
+
+use parsing::parser;
 
 pub struct Source {
     content: String,
