@@ -1,21 +1,21 @@
 use super::lexer::*;
 
 struct Expr {
-    kind: ExprKind
+    kind: ExprKind,
 }
 
 impl Expr {
     fn accept<V: ExprVisitor>(&self, visitor: &mut V) -> V::Result {
         match &self.kind {
             ExprKind::Literal(token) => visitor.visit_literal_expr(&token),
-            ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&lhs, &op, &rhs)
+            ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&lhs, &op, &rhs),
         }
     }
 }
 
 enum ExprKind {
     Literal(Token),
-    Binary(Box<Expr>, Token, Box<Expr>)
+    Binary(Box<Expr>, Token, Box<Expr>),
 }
 
 trait ExprVisitor {
@@ -26,16 +26,16 @@ trait ExprVisitor {
 }
 
 struct ExprPrinter {
-    indent: i32
+    indent: i32,
 }
 
 impl ExprPrinter {
-    fn new() -> ExprPrinter { 
+    fn new() -> ExprPrinter {
         ExprPrinter { indent: 0 }
     }
 
     fn write(&self, token: &Token) {
-        let indent = (0..self.indent).map(|_| "  ").collect::<String>();
+        let indent = (0..self.indent).map(|_| "|--").collect::<String>();
         println!("{}{}", indent, token)
     }
 }
@@ -56,14 +56,48 @@ impl ExprVisitor for ExprPrinter {
     }
 }
 
+struct ParseTableEntry {
+    kind: TokenKind,
+    prefix: Option<fn(&mut Parser) -> Expr>,
+    infix: Option<(fn(&mut Parser, lhs: Expr) -> Expr, Precedence)>,
+}
+
+const PARSE_TABLE: [ParseTableEntry; 5] = [
+    ParseTableEntry {
+        kind: TokenKind::NUMBER,
+        prefix: Some(Parser::number),
+        infix: None,
+    },
+    ParseTableEntry {
+        kind: TokenKind::PLUS,
+        prefix: None,
+        infix: Some((Parser::binary, Precedence::TERM)),
+    },
+    ParseTableEntry {
+        kind: TokenKind::MINUS,
+        prefix: None,
+        infix: Some((Parser::binary, Precedence::TERM)),
+    },
+    ParseTableEntry {
+        kind: TokenKind::STAR,
+        prefix: None,
+        infix: Some((Parser::binary, Precedence::FACTOR)),
+    },
+    ParseTableEntry {
+        kind: TokenKind::SLASH,
+        prefix: None,
+        infix: Some((Parser::binary, Precedence::FACTOR)),
+    },
+];
+
 pub struct Parser {
-    tokens: Vec<Token>
+    tokens: Vec<Token>,
+    index: usize,
 }
 
 impl Parser {
-
     pub fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens }
+        Parser { tokens, index: 0 }
     }
 
     pub fn parse(&mut self) {
@@ -73,38 +107,49 @@ impl Parser {
     }
 
     fn parse_precedence(&mut self, prec: Precedence) -> Expr {
-        let mut lhs = self.number();
+        let prefix_entry = PARSE_TABLE
+            .iter()
+            .find(|t| t.kind == self.advance().kind)
+            .unwrap();
+
+        let mut lhs = prefix_entry.prefix.unwrap()(self);
 
         while let Some(next) = self.peek() {
-            if self.operator_precedence(next) >= prec {
-                let operator = self.advance();
-                let rhs = self.parse_precedence(prec.next());
-                let kind = ExprKind::Binary(Box::new(lhs), operator, Box::new(rhs));
-                lhs = Expr { kind }
+            let infix_entry = PARSE_TABLE
+                .iter()
+                .find(|t| t.kind == next)
+                .unwrap()
+                .infix
+                .as_ref()
+                .unwrap();
+            if infix_entry.1 >= prec {
+                lhs = infix_entry.0(self, lhs);
             } else {
-                break
+                break;
             }
         }
-        
+
         lhs
     }
 
-    fn number(&mut self) -> Expr {
-        let literal = self.consume(TokenKind::NUMBER);
-        let kind = ExprKind::Literal(literal);
+    fn binary(&mut self, lhs: Expr) -> Expr {
+        let operator = self.advance();
+        let rhs = self.parse_precedence(Precedence::TERM.next());
+        let kind = ExprKind::Binary(Box::new(lhs), operator.clone(), Box::new(rhs));
         Expr { kind }
     }
 
-    fn operator_precedence(&self, kind: TokenKind) -> Precedence {
-        match kind {
-            TokenKind::PLUS | TokenKind::MINUS => Precedence::TERM,
-            TokenKind::STAR | TokenKind::SLASH => Precedence::FACTOR,
-            _ => panic!()
-        }
+    fn number(&mut self) -> Expr {
+        let kind = ExprKind::Literal(self.previous().clone());
+        Expr { kind }
     }
 
     fn peek(&mut self) -> Option<TokenKind> {
-        self.tokens.first().map(|t| t.kind)
+        if self.index < self.tokens.len() {
+            Some(self.tokens[self.index].kind)
+        } else {
+            None
+        }
     }
 
     fn consume(&mut self, kind: TokenKind) -> Token {
@@ -117,9 +162,17 @@ impl Parser {
     }
 
     fn advance(&mut self) -> Token {
-        self.tokens.remove(0)
+        self.index += 1;
+        return self.previous();
     }
 
+    fn previous(&self) -> Token {
+        self.tokens[self.index - 1].clone()
+    }
+
+    fn current(&self) -> Token {
+        self.tokens[self.index].clone()
+    }
 }
 
 #[derive(PartialEq, PartialOrd)]
@@ -127,7 +180,7 @@ enum Precedence {
     TERM,
     FACTOR,
     NUMBER,
-    MAX
+    MAX,
 }
 
 impl Precedence {
@@ -136,7 +189,7 @@ impl Precedence {
             Precedence::TERM => Precedence::FACTOR,
             Precedence::FACTOR => Precedence::NUMBER,
             Precedence::NUMBER => Precedence::MAX,
-            Precedence::MAX => panic!()
+            Precedence::MAX => panic!(),
         }
     }
 }
