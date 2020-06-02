@@ -1,13 +1,14 @@
-pub mod lexer;
+pub mod lexing;
 pub mod parsing;
 pub mod source;
 
-use crate::lexer::TokenString;
-use parsing::Parser;
-pub use source::Source;
+pub use source::*;
+use parsing::*;
+use lexing::*;
+use std::rc::Rc;
 
-pub fn run(source: Source) {
-    let mut lexer = lexer::Lexer::new(source);
+pub fn run(source: Rc<Source>) {
+    let mut lexer = Lexer::new(source);
     let tokens = lexer.lex();
 
     println!("{}", tokens.token_string());

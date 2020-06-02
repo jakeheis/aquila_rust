@@ -1,72 +1,6 @@
-use crate::source::Source;
-use std::fmt;
+use crate::source::*;
 use std::rc::Rc;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum TokenKind {
-    Number,
-    Identifier,
-
-    // Operators
-    Plus,
-    Minus,
-    Star,
-    Slash,
-    Ampersand,
-    AmpersandAmpersand,
-    Bar,
-    BarBar,
-    Equal,
-    EqualEqual,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
-
-    // Keywords
-    True,
-    False,
-}
-
-#[derive(Clone)]
-pub struct Token {
-    pub kind: TokenKind,
-    pub index: usize,
-    pub length: usize,
-    pub source: Rc<Source>,
-}
-
-impl Token {
-    pub fn lexeme(&self) -> &str {
-        self.source.lexeme(self.index, self.length)
-    }
-}
-
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Token(kind: {:#?}, lexeme: {})",
-            self.kind,
-            self.lexeme()
-        )
-    }
-}
-
-pub trait TokenString {
-    fn token_string(&self) -> String;
-}
-
-impl TokenString for Vec<Token> {
-    fn token_string(&self) -> String {
-        let start = self[0].to_string();
-        let toks = self
-            .iter()
-            .skip(1)
-            .fold(start, |c, t| c + ", " + &t.to_string());
-        String::from("Vec(") + &toks + ")"
-    }
-}
+use super::token::*;
 
 pub struct Lexer {
     source: Rc<Source>,
@@ -75,9 +9,9 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    pub fn new(source: Source) -> Self {
+    pub fn new(source: Rc<Source>) -> Self {
         Lexer {
-            source: Rc::new(source),
+            source,
             start: 0,
             current: 0,
         }
@@ -167,11 +101,10 @@ impl Lexer {
     }
 
     fn make_token(&self, kind: TokenKind) -> Option<Token> {
+        let span = Span::new(&self.source, self.start, self.current - self.start);
         Some(Token {
-            source: Rc::clone(&self.source),
             kind,
-            index: self.start,
-            length: self.current - self.start,
+            span
         })
     }
 

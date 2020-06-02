@@ -1,7 +1,9 @@
-use crate::lexer::Token;
+use crate::lexing::*;
+use crate::source::*;
 
 pub struct Expr {
-    pub kind: ExprKind,
+    kind: ExprKind,
+    span: Span,
 }
 
 impl Expr {
@@ -10,6 +12,25 @@ impl Expr {
             ExprKind::Literal(token) => visitor.visit_literal_expr(&token),
             ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&lhs, &op, &rhs),
         }
+    }
+
+    pub fn literal(token: &Token) -> Self {
+        Expr {
+            kind: ExprKind::Literal(token.clone()),
+            span: token.span.clone()
+        }
+    }
+
+    pub fn binary(lhs: Expr, operator: Token, rhs: Expr) -> Self {
+        let span = Span::span(&lhs.span, &rhs.span);
+        Expr {
+            kind: ExprKind::Binary(Box::new(lhs), operator, Box::new(rhs)),
+            span
+        }
+    }
+
+    pub fn lexeme(&self) -> &str {
+        self.span.lexeme()
     }
 }
 

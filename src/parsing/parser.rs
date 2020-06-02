@@ -1,5 +1,5 @@
 use super::ast::*;
-use crate::lexer::{Token, TokenKind};
+use crate::lexing::*;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -35,16 +35,14 @@ impl Parser {
     }
 
     fn binary(&mut self, lhs: Expr) -> Expr {
-        let operator = self.advance();
+        let operator = self.advance().clone();
         let next_prec = PARSE_TABLE.precedence_for(operator.kind).next();
         let rhs = self.parse_precedence(next_prec);
-        let kind = ExprKind::Binary(Box::new(lhs), operator.clone(), Box::new(rhs));
-        Expr { kind }
+        Expr::binary(lhs, operator, rhs)
     }
 
     fn literal(&mut self) -> Expr {
-        let kind = ExprKind::Literal(self.previous().clone());
-        Expr { kind }
+        Expr::literal(self.previous())
     }
 
     fn peek(&mut self) -> Option<TokenKind> {
@@ -55,7 +53,7 @@ impl Parser {
         }
     }
 
-    fn consume(&mut self, kind: TokenKind) -> Token {
+    fn consume(&mut self, kind: TokenKind) -> &Token {
         let first = self.advance();
         if first.kind == kind {
             first
@@ -64,13 +62,13 @@ impl Parser {
         }
     }
 
-    fn advance(&mut self) -> Token {
+    fn advance(&mut self) -> &Token {
         self.index += 1;
         return self.previous();
     }
 
-    fn previous(&self) -> Token {
-        self.tokens[self.index - 1].clone()
+    fn previous(&self) -> &Token {
+        &self.tokens[self.index - 1]
     }
 
     fn current(&self) -> Token {
