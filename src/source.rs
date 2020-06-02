@@ -1,22 +1,24 @@
 use std::fs;
 use std::rc::Rc;
 
-pub struct Source {
+pub type Source = Rc<SourceImpl>;
+
+pub fn file(file: &str) -> Source {
+    let content = fs::read_to_string(file).unwrap();
+    Rc::new(SourceImpl { content })
+}
+
+pub fn text(text: &str) -> Source {
+    Rc::new(SourceImpl {
+        content: String::from(text),
+    })
+}
+
+pub struct SourceImpl {
     content: String,
 }
 
-impl Source {
-    pub fn load(file: &str) -> Rc<Self> {
-        let content = fs::read_to_string(file).unwrap();
-        Rc::new(Source { content })
-    }
-
-    pub fn text(text: &str) -> Rc<Self> {
-        Rc::new(Source {
-            content: String::from(text),
-        })
-    }
-
+impl SourceImpl {
     pub fn character(&self, number: usize) -> char {
         self.content.chars().nth(number).unwrap()
     }
@@ -33,13 +35,13 @@ impl Source {
 
 #[derive(Clone)]
 pub struct Span {
-    source: Rc<Source>,
+    source: Source,
     index: usize,
     length: usize,
 }
 
 impl Span {
-    pub fn new(source: &Rc<Source>, index: usize, length: usize) -> Span {
+    pub fn new(source: &Source, index: usize, length: usize) -> Span {
         Span {
             source: Rc::clone(source),
             index,

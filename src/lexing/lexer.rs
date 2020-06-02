@@ -1,15 +1,14 @@
 use super::token::*;
 use crate::source::*;
-use std::rc::Rc;
 
 pub struct Lexer {
-    source: Rc<Source>,
+    source: Source,
     start: usize,
     current: usize,
 }
 
 impl Lexer {
-    pub fn new(source: Rc<Source>) -> Self {
+    pub fn new(source: Source) -> Self {
         Lexer {
             source,
             start: 0,

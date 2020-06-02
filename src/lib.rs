@@ -5,12 +5,11 @@ pub mod source;
 use lexing::*;
 use parsing::*;
 pub use source::*;
-use std::rc::Rc;
 
-pub fn run(source: Rc<Source>) {
+pub fn run(source: Source) {
     let mut lexer = Lexer::new(source);
     let tokens = lexer.lex();
-
+    
     println!("{}", tokens.token_string());
 
     let mut parser = Parser::new(tokens);
