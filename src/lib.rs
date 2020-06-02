@@ -1,43 +1,16 @@
-use std::fs;
-
 pub mod lexer;
 pub mod parsing;
+pub mod source;
 
 use parsing::parser;
-
-pub struct Source {
-    content: String,
-}
-
-impl Source {
-    pub fn load(file: &str) -> Self {
-        let content = fs::read_to_string(file).unwrap();
-        Source { content }
-    }
-
-    pub fn text(text: &str) -> Self {
-        Source {
-            content: String::from(text),
-        }
-    }
-
-    pub fn character(&self, number: usize) -> char {
-        self.content.chars().nth(number).unwrap()
-    }
-
-    pub fn length(&self) -> usize {
-        self.content.chars().count()
-    }
-
-    pub fn lexeme(&self, index: usize, length: usize) -> &str {
-        let end = index + length;
-        &self.content[index..end]
-    }
-}
+pub use source::Source;
+use crate::lexer::TokenString;
 
 pub fn run(source: Source) {
     let mut lexer = lexer::Lexer::new(source);
     let tokens = lexer.lex();
+
+    println!("{}", tokens.token_string());
 
     let mut parser = parser::Parser::new(tokens);
     parser.parse();

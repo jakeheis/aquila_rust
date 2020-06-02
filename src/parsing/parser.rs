@@ -12,7 +12,7 @@ impl Parser {
     }
 
     pub fn parse(&mut self) {
-        let expr = self.parse_precedence(Precedence::TERM);
+        let expr = self.parse_precedence(Precedence::LOGIC);
         let mut printer = ExprPrinter::new();
         expr.accept(&mut printer);
     }
@@ -36,12 +36,13 @@ impl Parser {
 
     fn binary(&mut self, lhs: Expr) -> Expr {
         let operator = self.advance();
-        let rhs = self.parse_precedence(Precedence::TERM.next());
+        let next_prec = PARSE_TABLE.precedence_for(operator.kind).next();
+        let rhs = self.parse_precedence(next_prec);
         let kind = ExprKind::Binary(Box::new(lhs), operator.clone(), Box::new(rhs));
         Expr { kind }
     }
 
-    fn number(&mut self) -> Expr {
+    fn literal(&mut self) -> Expr {
         let kind = ExprKind::Literal(self.previous().clone());
         Expr { kind }
     }
@@ -83,10 +84,10 @@ type PrefixFn = fn(&mut Parser) -> Expr;
 type InfixFn = fn(&mut Parser, lhs: Expr) -> Expr;
 
 struct ParseTable {
-    entries: [ParseTableEntry; 5],
+    entries: [ParseTableEntry; 9],
 }
 
-impl ParseTable {    
+impl ParseTable {
     fn entry(&self, kind: TokenKind) -> Option<&ParseTableEntry> {
         self.entries.iter().find(|t| t.kind == kind)
     }
@@ -97,6 +98,10 @@ impl ParseTable {
 
     fn infix(&self, kind: TokenKind) -> Option<&(InfixFn, Precedence)> {
         self.entry(kind).and_then(|e| e.infix.as_ref())
+    }
+
+    fn precedence_for(&self, kind: TokenKind) -> Precedence {
+        self.infix(kind).unwrap().1
     }
 }
 
@@ -109,35 +114,56 @@ struct ParseTableEntry {
 const PARSE_TABLE: ParseTable = ParseTable {
     entries: [
         ParseTableEntry {
-            kind: TokenKind::NUMBER,
-            prefix: Some(Parser::number),
+            kind: TokenKind::Number,
+            prefix: Some(Parser::literal),
             infix: None,
         },
         ParseTableEntry {
-            kind: TokenKind::PLUS,
+            kind: TokenKind::Plus,
             prefix: None,
             infix: Some((Parser::binary, Precedence::TERM)),
         },
         ParseTableEntry {
-            kind: TokenKind::MINUS,
+            kind: TokenKind::Minus,
             prefix: None,
             infix: Some((Parser::binary, Precedence::TERM)),
         },
         ParseTableEntry {
-            kind: TokenKind::STAR,
+            kind: TokenKind::Star,
             prefix: None,
             infix: Some((Parser::binary, Precedence::FACTOR)),
         },
         ParseTableEntry {
-            kind: TokenKind::SLASH,
+            kind: TokenKind::Slash,
             prefix: None,
             infix: Some((Parser::binary, Precedence::FACTOR)),
         },
+        ParseTableEntry {
+            kind: TokenKind::AmpersandAmpersand,
+            prefix: None,
+            infix: Some((Parser::binary, Precedence::LOGIC)),
+        },
+        ParseTableEntry {
+            kind: TokenKind::BarBar,
+            prefix: None,
+            infix: Some((Parser::binary, Precedence::LOGIC)),
+        },
+        ParseTableEntry {
+            kind: TokenKind::True,
+            prefix: Some(Parser::literal),
+            infix: None
+        },
+        ParseTableEntry {
+            kind: TokenKind::False,
+            prefix: Some(Parser::literal),
+            infix: None
+        }
     ],
 };
 
-#[derive(PartialEq, PartialOrd)]
+#[derive(Clone, Copy, PartialEq, PartialOrd)]
 enum Precedence {
+    LOGIC,
     TERM,
     FACTOR,
     NUMBER,
@@ -147,6 +173,7 @@ enum Precedence {
 impl Precedence {
     fn next(&self) -> Precedence {
         match self {
+            Precedence::LOGIC => Precedence::TERM,
             Precedence::TERM => Precedence::FACTOR,
             Precedence::FACTOR => Precedence::NUMBER,
             Precedence::NUMBER => Precedence::MAX,
