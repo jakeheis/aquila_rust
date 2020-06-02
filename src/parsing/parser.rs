@@ -12,7 +12,7 @@ impl Parser {
     }
 
     pub fn parse(&mut self) {
-        let expr = self.parse_precedence(Precedence::LOGIC);
+        let expr = self.parse_precedence(Precedence::Logic);
         let mut printer = ExprPrinter::new();
         expr.accept(&mut printer);
     }
@@ -84,7 +84,7 @@ type PrefixFn = fn(&mut Parser) -> Expr;
 type InfixFn = fn(&mut Parser, lhs: Expr) -> Expr;
 
 struct ParseTable {
-    entries: [ParseTableEntry; 9],
+    entries: [ParseTableEntry; 14],
 }
 
 impl ParseTable {
@@ -121,32 +121,57 @@ const PARSE_TABLE: ParseTable = ParseTable {
         ParseTableEntry {
             kind: TokenKind::Plus,
             prefix: None,
-            infix: Some((Parser::binary, Precedence::TERM)),
+            infix: Some((Parser::binary, Precedence::Term)),
         },
         ParseTableEntry {
             kind: TokenKind::Minus,
             prefix: None,
-            infix: Some((Parser::binary, Precedence::TERM)),
+            infix: Some((Parser::binary, Precedence::Term)),
         },
         ParseTableEntry {
             kind: TokenKind::Star,
             prefix: None,
-            infix: Some((Parser::binary, Precedence::FACTOR)),
+            infix: Some((Parser::binary, Precedence::Factor)),
         },
         ParseTableEntry {
             kind: TokenKind::Slash,
             prefix: None,
-            infix: Some((Parser::binary, Precedence::FACTOR)),
+            infix: Some((Parser::binary, Precedence::Factor)),
         },
         ParseTableEntry {
             kind: TokenKind::AmpersandAmpersand,
             prefix: None,
-            infix: Some((Parser::binary, Precedence::LOGIC)),
+            infix: Some((Parser::binary, Precedence::Logic)),
         },
         ParseTableEntry {
             kind: TokenKind::BarBar,
             prefix: None,
-            infix: Some((Parser::binary, Precedence::LOGIC)),
+            infix: Some((Parser::binary, Precedence::Logic)),
+        },
+        ParseTableEntry {
+            kind: TokenKind::EqualEqual,
+            prefix: None,
+            infix: Some((Parser::binary, Precedence::Equality)),
+        },
+        ParseTableEntry {
+            kind: TokenKind::Greater,
+            prefix: None,
+            infix: Some((Parser::binary, Precedence::Comparison)),
+        },
+        ParseTableEntry {
+            kind: TokenKind::GreaterEqual,
+            prefix: None,
+            infix: Some((Parser::binary, Precedence::Comparison)),
+        },
+        ParseTableEntry {
+            kind: TokenKind::Less,
+            prefix: None,
+            infix: Some((Parser::binary, Precedence::Comparison)),
+        },
+        ParseTableEntry {
+            kind: TokenKind::LessEqual,
+            prefix: None,
+            infix: Some((Parser::binary, Precedence::Comparison)),
         },
         ParseTableEntry {
             kind: TokenKind::True,
@@ -163,21 +188,23 @@ const PARSE_TABLE: ParseTable = ParseTable {
 
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
 enum Precedence {
-    LOGIC,
-    TERM,
-    FACTOR,
-    NUMBER,
-    MAX,
+    Logic,
+    Equality,
+    Comparison,
+    Term,
+    Factor,
+    Atom,
 }
 
 impl Precedence {
     fn next(&self) -> Precedence {
         match self {
-            Precedence::LOGIC => Precedence::TERM,
-            Precedence::TERM => Precedence::FACTOR,
-            Precedence::FACTOR => Precedence::NUMBER,
-            Precedence::NUMBER => Precedence::MAX,
-            Precedence::MAX => panic!(),
+            Precedence::Logic => Precedence::Equality,
+            Precedence::Equality => Precedence::Comparison,
+            Precedence::Comparison => Precedence::Term,
+            Precedence::Term => Precedence::Factor,
+            Precedence::Factor => Precedence::Atom,
+            Precedence::Atom => panic!(),
         }
     }
 }

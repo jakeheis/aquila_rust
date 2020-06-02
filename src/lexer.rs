@@ -16,6 +16,12 @@ pub enum TokenKind {
     AmpersandAmpersand,
     Bar,
     BarBar,
+    Equal,
+    EqualEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
 
     // Keywords
     True,
@@ -104,20 +110,15 @@ impl Lexer {
             '-' => self.make_token(TokenKind::Minus),
             '*' => self.make_token(TokenKind::Star),
             '/' => self.make_token(TokenKind::Slash),
-            '&' => {
-                if self.consume('&') {
-                    self.make_token(TokenKind::AmpersandAmpersand)
-                } else {
-                    self.make_token(TokenKind::Ampersand)
-                }
-            }
-            '|' => {
-                if self.consume('|') {
-                    self.make_token(TokenKind::BarBar)
-                } else {
-                    self.make_token(TokenKind::Bar)
-                }
-            }
+            '&' => self.conditional_make_token(
+                '&',
+                TokenKind::AmpersandAmpersand,
+                TokenKind::Ampersand,
+            ),
+            '|' => self.conditional_make_token('|', TokenKind::BarBar, TokenKind::Bar),
+            '=' => self.conditional_make_token('=', TokenKind::EqualEqual, TokenKind::Equal),
+            '>' => self.conditional_make_token('=', TokenKind::GreaterEqual, TokenKind::Greater),
+            '<' => self.conditional_make_token('=', TokenKind::LessEqual, TokenKind::Less),
             '0'..='9' => self.number(),
             'a'..='z' | 'A'..='Z' => self.identifier(),
             _ => None,
@@ -149,6 +150,19 @@ impl Lexer {
             "true" => self.make_token(TokenKind::True),
             "false" => self.make_token(TokenKind::False),
             _ => Some(token),
+        }
+    }
+
+    fn conditional_make_token(
+        &mut self,
+        character: char,
+        kind1: TokenKind,
+        kind2: TokenKind,
+    ) -> Option<Token> {
+        if self.consume(character) {
+            self.make_token(kind1)
+        } else {
+            self.make_token(kind2)
         }
     }
 
