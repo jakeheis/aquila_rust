@@ -1,5 +1,5 @@
-use std::{fmt};
 use crate::source::*;
+use std::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenKind {

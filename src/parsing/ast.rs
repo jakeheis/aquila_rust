@@ -17,7 +17,7 @@ impl Expr {
     pub fn literal(token: &Token) -> Self {
         Expr {
             kind: ExprKind::Literal(token.clone()),
-            span: token.span.clone()
+            span: token.span.clone(),
         }
     }
 
@@ -25,7 +25,7 @@ impl Expr {
         let span = Span::span(&lhs.span, &rhs.span);
         Expr {
             kind: ExprKind::Binary(Box::new(lhs), operator, Box::new(rhs)),
-            span
+            span,
         }
     }
 
@@ -61,6 +61,17 @@ impl ExprPrinter {
     }
 }
 
+impl ExprPrinter {
+    fn indent<T>(&mut self, block: T)
+    where
+        T: Fn(&mut ExprPrinter) -> (),
+    {
+        self.indent += 1;
+        block(self);
+        self.indent -= 1;
+    }
+}
+
 impl ExprVisitor for ExprPrinter {
     type Result = ();
 
@@ -70,9 +81,9 @@ impl ExprVisitor for ExprPrinter {
 
     fn visit_binary_expr(&mut self, lhs: &Expr, op: &Token, rhs: &Expr) {
         self.write(op);
-        self.indent += 1;
-        lhs.accept(self);
-        rhs.accept(self);
-        self.indent -= 1;
+        self.indent(|visitor| {
+            lhs.accept(visitor);
+            rhs.accept(visitor);
+        })
     }
 }

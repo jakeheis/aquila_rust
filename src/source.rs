@@ -43,7 +43,7 @@ impl Span {
         Span {
             source: Rc::clone(source),
             index,
-            length
+            length,
         }
     }
 
@@ -51,7 +51,7 @@ impl Span {
         Span {
             source: Rc::clone(&lhs.source),
             index: lhs.index,
-            length: rhs.length + rhs.index - lhs.index
+            length: rhs.length + rhs.index - lhs.index,
         }
     }
 

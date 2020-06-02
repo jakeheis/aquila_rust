@@ -2,9 +2,9 @@ pub mod lexing;
 pub mod parsing;
 pub mod source;
 
-pub use source::*;
-use parsing::*;
 use lexing::*;
+use parsing::*;
+pub use source::*;
 use std::rc::Rc;
 
 pub fn run(source: Rc<Source>) {

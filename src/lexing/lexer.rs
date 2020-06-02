@@ -1,6 +1,6 @@
+use super::token::*;
 use crate::source::*;
 use std::rc::Rc;
-use super::token::*;
 
 pub struct Lexer {
     source: Rc<Source>,
@@ -102,10 +102,7 @@ impl Lexer {
 
     fn make_token(&self, kind: TokenKind) -> Option<Token> {
         let span = Span::new(&self.source, self.start, self.current - self.start);
-        Some(Token {
-            kind,
-            span
-        })
+        Some(Token { kind, span })
     }
 
     fn consume(&mut self, character: char) -> bool {
