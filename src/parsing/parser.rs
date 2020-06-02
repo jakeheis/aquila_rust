@@ -151,13 +151,13 @@ const PARSE_TABLE: ParseTable = ParseTable {
         ParseTableEntry {
             kind: TokenKind::True,
             prefix: Some(Parser::literal),
-            infix: None
+            infix: None,
         },
         ParseTableEntry {
             kind: TokenKind::False,
             prefix: Some(Parser::literal),
-            infix: None
-        }
+            infix: None,
+        },
     ],
 };
 

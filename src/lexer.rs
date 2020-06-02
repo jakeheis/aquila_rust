@@ -1,6 +1,6 @@
+use crate::source::Source;
 use std::fmt;
 use std::rc::Rc;
-use crate::source::Source;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenKind {
@@ -18,7 +18,6 @@ pub enum TokenKind {
     BarBar,
 
     // Keywords
-
     True,
     False,
 }
@@ -55,7 +54,10 @@ pub trait TokenString {
 impl TokenString for Vec<Token> {
     fn token_string(&self) -> String {
         let start = self[0].to_string();
-        let toks = self.iter().skip(1).fold(start, |c, t| c + ", " + &t.to_string());
+        let toks = self
+            .iter()
+            .skip(1)
+            .fold(start, |c, t| c + ", " + &t.to_string());
         String::from("Vec(") + &toks + ")"
     }
 }
@@ -102,16 +104,20 @@ impl Lexer {
             '-' => self.make_token(TokenKind::Minus),
             '*' => self.make_token(TokenKind::Star),
             '/' => self.make_token(TokenKind::Slash),
-            '&' => if self.consume('&') {
-                self.make_token(TokenKind::AmpersandAmpersand) 
-            } else { 
-                self.make_token(TokenKind::Ampersand) 
-            },
-            '|' => if self.consume('|') {
-                self.make_token(TokenKind::BarBar) 
-            } else { 
-                self.make_token(TokenKind::Bar)
-            },
+            '&' => {
+                if self.consume('&') {
+                    self.make_token(TokenKind::AmpersandAmpersand)
+                } else {
+                    self.make_token(TokenKind::Ampersand)
+                }
+            }
+            '|' => {
+                if self.consume('|') {
+                    self.make_token(TokenKind::BarBar)
+                } else {
+                    self.make_token(TokenKind::Bar)
+                }
+            }
             '0'..='9' => self.number(),
             'a'..='z' | 'A'..='Z' => self.identifier(),
             _ => None,
@@ -137,12 +143,12 @@ impl Lexer {
                 break;
             }
         }
-        
+
         let token = self.make_token(TokenKind::Identifier).unwrap();
         match token.lexeme() {
             "true" => self.make_token(TokenKind::True),
             "false" => self.make_token(TokenKind::False),
-            _ => Some(token)
+            _ => Some(token),
         }
     }
 
