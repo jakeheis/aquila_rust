@@ -53,7 +53,7 @@ impl Parser {
             Diagnostic::error_token(self.previous(), "Expected atom")
         })?;
 
-        let mut lhs = prefix(self);
+        let mut lhs = prefix(self)?;
 
         while !self.is_at_end() && self.peek() != TokenKind::Semicolon {
             let next = self.peek();
@@ -79,8 +79,14 @@ impl Parser {
         Ok(Expr::binary(lhs, operator, rhs))
     }
 
-    fn literal(&mut self) -> Expr {
-        Expr::literal(self.previous())
+    fn unary(&mut self) -> Result<Expr> {
+        let operator = self.previous().clone();
+        let expr = self.parse_precedence(Precedence::Unary.next())?;
+        Ok(Expr::unary(operator, expr))
+    }
+
+    fn literal(&mut self) -> Result<Expr> {
+        Ok(Expr::literal(self.previous()))
     }
 
     fn peek(&self) -> TokenKind {
@@ -120,11 +126,11 @@ impl Parser {
 
 // ParseTable
 
-type PrefixFn = fn(&mut Parser) -> Expr;
+type PrefixFn = fn(&mut Parser) -> Result<Expr>;
 type InfixFn = fn(&mut Parser, lhs: Expr) -> Result<Expr>;
 
 struct ParseTable {
-    entries: [ParseTableEntry; 14],
+    entries: [ParseTableEntry; 16],
 }
 
 impl ParseTable {
@@ -165,7 +171,7 @@ const PARSE_TABLE: ParseTable = ParseTable {
         },
         ParseTableEntry {
             kind: TokenKind::Minus,
-            prefix: None,
+            prefix: Some(Parser::unary),
             infix: Some((Parser::binary, Precedence::Term)),
         },
         ParseTableEntry {
@@ -179,6 +185,11 @@ const PARSE_TABLE: ParseTable = ParseTable {
             infix: Some((Parser::binary, Precedence::Factor)),
         },
         ParseTableEntry {
+            kind: TokenKind::Bang,
+            prefix: Some(Parser::unary),
+            infix: None,
+        },
+        ParseTableEntry {
             kind: TokenKind::AmpersandAmpersand,
             prefix: None,
             infix: Some((Parser::binary, Precedence::Logic)),
@@ -190,6 +201,11 @@ const PARSE_TABLE: ParseTable = ParseTable {
         },
         ParseTableEntry {
             kind: TokenKind::EqualEqual,
+            prefix: None,
+            infix: Some((Parser::binary, Precedence::Equality)),
+        },
+        ParseTableEntry {
+            kind: TokenKind::BangEqual,
             prefix: None,
             infix: Some((Parser::binary, Precedence::Equality)),
         },
@@ -233,6 +249,7 @@ enum Precedence {
     Comparison,
     Term,
     Factor,
+    Unary,
     Atom,
 }
 
@@ -243,7 +260,8 @@ impl Precedence {
             Precedence::Equality => Precedence::Comparison,
             Precedence::Comparison => Precedence::Term,
             Precedence::Term => Precedence::Factor,
-            Precedence::Factor => Precedence::Atom,
+            Precedence::Factor => Precedence::Unary,
+            Precedence::Unary => Precedence::Atom,
             Precedence::Atom => panic!(),
         }
     }

@@ -37,8 +37,25 @@ pub struct Expr {
 impl Expr {
     pub fn accept<V: ExprVisitor>(&self, visitor: &mut V) -> V::ExprResult {
         match &self.kind {
-            ExprKind::Literal(token) => visitor.visit_literal_expr(&token),
             ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&lhs, &op, &rhs),
+            ExprKind::Unary(op, expr) => visitor.visit_unary_expr(&op, &expr),
+            ExprKind::Literal(token) => visitor.visit_literal_expr(&token),
+        }
+    }
+
+    pub fn binary(lhs: Expr, operator: Token, rhs: Expr) -> Self {
+        let span = Span::join(&lhs.span, &rhs.span);
+        Expr {
+            kind: ExprKind::Binary(Box::new(lhs), operator, Box::new(rhs)),
+            span,
+        }
+    }
+
+    pub fn unary(op: Token, expr: Expr) -> Self {
+        let span = Span::join(&op.span, &expr.span);
+        Expr {
+            kind: ExprKind::Unary(op, Box::new(expr)),
+            span,
         }
     }
 
@@ -49,29 +66,23 @@ impl Expr {
         }
     }
 
-    pub fn binary(lhs: Expr, operator: Token, rhs: Expr) -> Self {
-        let span = Span::span(&lhs.span, &rhs.span);
-        Expr {
-            kind: ExprKind::Binary(Box::new(lhs), operator, Box::new(rhs)),
-            span,
-        }
-    }
-
     pub fn lexeme(&self) -> &str {
         self.span.lexeme()
     }
 }
 
 pub enum ExprKind {
-    Literal(Token),
     Binary(Box<Expr>, Token, Box<Expr>),
+    Unary(Token, Box<Expr>),
+    Literal(Token),
 }
 
 pub trait ExprVisitor {
     type ExprResult;
 
-    fn visit_literal_expr(&mut self, token: &Token) -> Self::ExprResult;
     fn visit_binary_expr(&mut self, lhs: &Expr, op: &Token, rhs: &Expr) -> Self::ExprResult;
+    fn visit_unary_expr(&mut self, op: &Token, expr: &Expr) -> Self::ExprResult;
+    fn visit_literal_expr(&mut self, token: &Token) -> Self::ExprResult;
 }
 
 pub struct ASTPrinter {
@@ -109,10 +120,6 @@ impl StmtVisitor for ASTPrinter {
 impl ExprVisitor for ASTPrinter {
     type ExprResult = ();
 
-    fn visit_literal_expr(&mut self, token: &Token) {
-        self.write(token);
-    }
-
     fn visit_binary_expr(&mut self, lhs: &Expr, op: &Token, rhs: &Expr) {
         self.write(op);
         self.indent(|visitor| {
@@ -120,4 +127,16 @@ impl ExprVisitor for ASTPrinter {
             rhs.accept(visitor);
         })
     }
+
+    fn visit_unary_expr(&mut self, op: &Token, expr: &Expr) {
+        self.write(op);
+        self.indent(|visitor| {
+            expr.accept(visitor);
+        })
+    }
+
+    fn visit_literal_expr(&mut self, token: &Token) {
+        self.write(token);
+    }
+
 }

@@ -60,7 +60,7 @@ impl Span {
         }
     }
 
-    pub fn span(lhs: &Span, rhs: &Span) -> Span {
+    pub fn join(lhs: &Span, rhs: &Span) -> Span {
         Span {
             source: Rc::clone(&lhs.source),
             index: lhs.index,

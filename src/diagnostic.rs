@@ -7,7 +7,7 @@ use std::rc::Rc;
 #[derive(PartialEq)]
 enum Severity {
     Error,
-    Warning,
+    // Warning,
 }
 
 pub struct Diagnostic {

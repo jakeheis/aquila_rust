@@ -21,6 +21,8 @@ pub enum TokenKind {
     GreaterEqual,
     Less,
     LessEqual,
+    Bang,
+    BangEqual,
 
     // Keywords
     True,
