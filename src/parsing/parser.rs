@@ -1,14 +1,20 @@
 use super::ast::*;
 use crate::lexing::*;
+use crate::diagnostic::*;
+use std::rc::Rc;
+
+type Result<T> = std::result::Result<T, Diagnostic>;
 
 pub struct Parser {
     tokens: Vec<Token>,
     index: usize,
+    reporter: Rc<dyn Reporter>,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens, index: 0 }
+
+    pub fn new(tokens: Vec<Token>, reporter: Rc<dyn Reporter>) -> Self {
+        Parser { tokens, index: 0, reporter }
     }
 
     pub fn parse(&mut self) {
@@ -21,51 +27,56 @@ impl Parser {
     }
 
     fn program(&mut self) -> Vec<Stmt> {
-        let mut stmts = Vec::new();
+        let mut stmts: Vec<Stmt> = Vec::new();
         while !self.is_at_end() {
-            stmts.push(self.statement());
+            match self.statement() {
+                Ok(stmt) => stmts.push(stmt),
+                Err(diagnostic) => self.reporter.report(diagnostic)
+            }
         }
-        self.consume(TokenKind::EOF, "Expect EOF");
         stmts
     }
 
-    fn statement(&mut self) -> Stmt {
-        let expr = self.expression();
-        self.consume(TokenKind::Semicolon, "Expect semicolon after statement");
+    fn statement(&mut self) -> Result<Stmt> {
+        let expr = self.expression()?;
+        self.consume(TokenKind::Semicolon, "Expect semicolon after statement")?;
 
-        Stmt::expression(expr)
+        Ok(Stmt::expression(expr))
     }
 
-    fn expression(&mut self) -> Expr {
+    fn expression(&mut self) -> Result<Expr> {
         self.parse_precedence(Precedence::Logic)
     }
 
-    fn parse_precedence(&mut self, prec: Precedence) -> Expr {
-        let prefix = PARSE_TABLE.prefix(self.advance().kind).unwrap();
+    fn parse_precedence(&mut self, prec: Precedence) -> Result<Expr> {
+        let prefix = PARSE_TABLE.prefix(self.advance().kind).ok_or_else(|| {
+            Diagnostic::error_token(self.previous(), "Expected atom")
+        })?;
 
         let mut lhs = prefix(self);
 
         while !self.is_at_end() && self.peek() != TokenKind::Semicolon {
             let next = self.peek();
-            let infix_entry = PARSE_TABLE
-                .infix(next)
-                .expect(&format!("Unexpected infix token {:#?}", next));
+            let infix_entry = PARSE_TABLE.infix(next).ok_or_else(|| {
+                Diagnostic::error_token(self.current(), "Expected expression")
+             })?;
+             
             if infix_entry.1 >= prec {
                 self.advance();
-                lhs = infix_entry.0(self, lhs);
+                lhs = infix_entry.0(self, lhs)?;
             } else {
                 break;
             }
         }
 
-        lhs
+        Ok(lhs)
     }
 
-    fn binary(&mut self, lhs: Expr) -> Expr {
+    fn binary(&mut self, lhs: Expr) -> Result<Expr> {
         let operator = self.previous().clone();
         let next_prec = PARSE_TABLE.precedence_for(operator.kind).next();
-        let rhs = self.parse_precedence(next_prec);
-        Expr::binary(lhs, operator, rhs)
+        let rhs = self.parse_precedence(next_prec)?;
+        Ok(Expr::binary(lhs, operator, rhs))
     }
 
     fn literal(&mut self) -> Expr {
@@ -76,12 +87,16 @@ impl Parser {
         self.tokens[self.index].kind
     }
 
-    fn consume(&mut self, kind: TokenKind, message: &str) -> &Token {
-        let first = self.advance();
-        if first.kind == kind {
-            first
+    fn consume(&mut self, kind: TokenKind, message: &str) -> Result<&Token> {
+        if self.is_at_end() {
+            return Err(Diagnostic::error_token(self.previous(), message));
+        }
+
+        let consumed = self.advance();
+        if consumed.kind == kind {
+            Ok(consumed)
         } else {
-            panic!();
+            Err(Diagnostic::error_token(consumed, message))
         }
     }
 
@@ -94,8 +109,8 @@ impl Parser {
         &self.tokens[self.index - 1]
     }
 
-    fn current(&self) -> Token {
-        self.tokens[self.index].clone()
+    fn current(&self) -> &Token {
+        &self.tokens[self.index]
     }
 
     fn is_at_end(&self) -> bool {
@@ -106,7 +121,7 @@ impl Parser {
 // ParseTable
 
 type PrefixFn = fn(&mut Parser) -> Expr;
-type InfixFn = fn(&mut Parser, lhs: Expr) -> Expr;
+type InfixFn = fn(&mut Parser, lhs: Expr) -> Result<Expr>;
 
 struct ParseTable {
     entries: [ParseTableEntry; 14],

@@ -4,21 +4,21 @@ use crate::source::*;
 use std::rc::Rc;
 
 pub struct Lexer {
-    reporter: Rc<dyn diagnostic::Reporter>,
     source: Source,
     start: usize,
     current: usize,
     line: usize,
+    reporter: Rc<dyn diagnostic::Reporter>,
 }
 
 impl Lexer {
     pub fn new(source: Source, reporter: Rc<dyn diagnostic::Reporter>) -> Self {
         Lexer {
-            reporter,
             source,
             start: 0,
             current: 0,
             line: 1,
+            reporter,
         }
     }
 
