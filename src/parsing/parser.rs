@@ -47,7 +47,9 @@ impl Parser {
 
         while !self.is_at_end() && self.peek() != TokenKind::Semicolon {
             let next = self.peek();
-            let infix_entry = PARSE_TABLE.infix(next).expect(&format!("Unexpected infix token {:#?}", next));
+            let infix_entry = PARSE_TABLE
+                .infix(next)
+                .expect(&format!("Unexpected infix token {:#?}", next));
             if infix_entry.1 >= prec {
                 self.advance();
                 lhs = infix_entry.0(self, lhs);
@@ -79,7 +81,6 @@ impl Parser {
         if first.kind == kind {
             first
         } else {
-
             panic!();
         }
     }
@@ -100,7 +101,6 @@ impl Parser {
     fn is_at_end(&self) -> bool {
         self.peek() == TokenKind::EOF
     }
-
 }
 
 // ParseTable

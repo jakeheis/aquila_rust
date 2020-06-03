@@ -5,7 +5,7 @@ pub type Source = Rc<SourceImpl>;
 
 pub fn file(file: &str) -> Source {
     let content = fs::read_to_string(file).unwrap();
-    Rc::new(SourceImpl { 
+    Rc::new(SourceImpl {
         name: String::from(fs::canonicalize(file).unwrap().to_str().unwrap()),
         content,
     })
@@ -47,7 +47,7 @@ pub struct Span {
     source: Source,
     index: usize,
     pub length: usize,
-    line: usize
+    line: usize,
 }
 
 impl Span {
@@ -56,7 +56,7 @@ impl Span {
             source: Rc::clone(source),
             index,
             length,
-            line
+            line,
         }
     }
 
@@ -65,7 +65,7 @@ impl Span {
             source: Rc::clone(&lhs.source),
             index: lhs.index,
             length: rhs.length + rhs.index - lhs.index,
-            line: lhs.line
+            line: lhs.line,
         }
     }
 

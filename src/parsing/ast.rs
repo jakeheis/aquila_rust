@@ -2,7 +2,7 @@ use crate::lexing::*;
 use crate::source::*;
 
 pub struct Stmt {
-    pub kind: StmtKind
+    pub kind: StmtKind,
 }
 
 impl Stmt {
@@ -14,13 +14,13 @@ impl Stmt {
 
     pub fn expression(expr: Expr) -> Self {
         Stmt {
-            kind: StmtKind::Expression(expr)
+            kind: StmtKind::Expression(expr),
         }
     }
 }
 
 pub enum StmtKind {
-    Expression(Expr)
+    Expression(Expr),
 }
 
 pub trait StmtVisitor {

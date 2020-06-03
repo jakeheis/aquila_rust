@@ -1,6 +1,6 @@
 use super::token::*;
-use crate::source::*;
 use crate::diagnostic;
+use crate::source::*;
 use std::rc::Rc;
 
 pub struct Lexer {
@@ -8,11 +8,10 @@ pub struct Lexer {
     source: Source,
     start: usize,
     current: usize,
-    line: usize
+    line: usize,
 }
 
 impl Lexer {
-
     pub fn new(source: Source, reporter: Rc<dyn diagnostic::Reporter>) -> Self {
         Lexer {
             reporter,
@@ -52,7 +51,7 @@ impl Lexer {
                 } else {
                     self.make_token(TokenKind::Slash)
                 }
-             }
+            }
             '&' => self.conditional_make_token(
                 '&',
                 TokenKind::AmpersandAmpersand,
@@ -73,7 +72,7 @@ impl Lexer {
             _ => {
                 self.error(&format!("unrecognized character '{}'", character));
                 None
-            },
+            }
         }
     }
 
@@ -129,13 +128,21 @@ impl Lexer {
         let span = self.current_span();
         Some(Token { kind, span })
     }
-    
+
     fn error(&self, message: &str) {
-        self.reporter.report(diagnostic::Diagnostic::error_span(self.current_span(), message));
+        self.reporter.report(diagnostic::Diagnostic::error_span(
+            self.current_span(),
+            message,
+        ));
     }
 
     fn current_span(&self) -> Span {
-        Span::new(&self.source, self.start, self.current - self.start, self.line)
+        Span::new(
+            &self.source,
+            self.start,
+            self.current - self.start,
+            self.line,
+        )
     }
 
     fn consume(&mut self, character: char) -> bool {

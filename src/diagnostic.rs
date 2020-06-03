@@ -1,23 +1,22 @@
-use crate::source::Span;
 use crate::lexing::token::*;
 use crate::parsing::*;
+use crate::source::Span;
 use colored::*;
 use std::rc::Rc;
 
 #[derive(PartialEq)]
 enum Severity {
     Error,
-    Warning
+    Warning,
 }
 
 pub struct Diagnostic {
     severity: Severity,
     span: Span,
-    message: String
+    message: String,
 }
 
 impl Diagnostic {
-
     pub fn error_span(span: Span, message: &str) -> Self {
         Diagnostic {
             severity: Severity::Error,
@@ -33,7 +32,6 @@ impl Diagnostic {
     pub fn error_expr(expr: &Expr, message: &str) -> Self {
         Diagnostic::error_span(expr.span.clone(), message)
     }
-
 }
 
 pub trait Reporter {
