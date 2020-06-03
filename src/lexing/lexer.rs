@@ -1,18 +1,25 @@
 use super::token::*;
 use crate::source::*;
+use crate::diagnostic;
+use std::rc::Rc;
 
 pub struct Lexer {
+    reporter: Rc<dyn diagnostic::Reporter>,
     source: Source,
     start: usize,
     current: usize,
+    line: usize
 }
 
 impl Lexer {
-    pub fn new(source: Source) -> Self {
+
+    pub fn new(source: Source, reporter: Rc<dyn diagnostic::Reporter>) -> Self {
         Lexer {
+            reporter,
             source,
             start: 0,
             current: 0,
+            line: 1,
         }
     }
 
@@ -20,18 +27,15 @@ impl Lexer {
         let mut tokens = Vec::new();
 
         while !self.is_at_end() {
-            while ' ' == self.peek() {
-                self.advance();
-            }
-
             self.start = self.current;
             let new_token = self.token();
             if let Some(new) = new_token {
                 tokens.push(new);
-            } else {
-                break;
             }
         }
+
+        self.start = self.current;
+        tokens.push(self.make_token(TokenKind::EOF).unwrap());
 
         tokens
     }
@@ -42,7 +46,13 @@ impl Lexer {
             '+' => self.make_token(TokenKind::Plus),
             '-' => self.make_token(TokenKind::Minus),
             '*' => self.make_token(TokenKind::Star),
-            '/' => self.make_token(TokenKind::Slash),
+            '/' => {
+                if self.consume('/') {
+                    self.comment()
+                } else {
+                    self.make_token(TokenKind::Slash)
+                }
+             }
             '&' => self.conditional_make_token(
                 '&',
                 TokenKind::AmpersandAmpersand,
@@ -54,8 +64,24 @@ impl Lexer {
             '<' => self.conditional_make_token('=', TokenKind::LessEqual, TokenKind::Less),
             '0'..='9' => self.number(),
             'a'..='z' | 'A'..='Z' => self.identifier(),
-            _ => None,
+            ';' => self.make_token(TokenKind::Semicolon),
+            ' ' => None,
+            '\n' => {
+                self.line += 1;
+                None
+            }
+            _ => {
+                self.error(&format!("unrecognized character '{}'", character));
+                None
+            },
         }
+    }
+
+    fn comment(&mut self) -> Option<Token> {
+        while !self.is_at_end() && self.peek() != '\n' {
+            self.advance();
+        }
+        None
     }
 
     fn number(&mut self) -> Option<Token> {
@@ -100,8 +126,16 @@ impl Lexer {
     }
 
     fn make_token(&self, kind: TokenKind) -> Option<Token> {
-        let span = Span::new(&self.source, self.start, self.current - self.start);
+        let span = self.current_span();
         Some(Token { kind, span })
+    }
+    
+    fn error(&self, message: &str) {
+        self.reporter.report(diagnostic::Diagnostic::error_span(self.current_span(), message));
+    }
+
+    fn current_span(&self) -> Span {
+        Span::new(&self.source, self.start, self.current - self.start, self.line)
     }
 
     fn consume(&mut self, character: char) -> bool {

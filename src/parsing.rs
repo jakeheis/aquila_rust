@@ -1,4 +1,5 @@
 mod ast;
-pub mod parser;
+mod parser;
 
 pub use parser::Parser;
+pub use ast::{Stmt, StmtKind, Expr, ExprKind};

@@ -25,6 +25,10 @@ pub enum TokenKind {
     // Keywords
     True,
     False,
+
+    // Other
+    Semicolon,
+    EOF,
 }
 
 #[derive(Clone)]

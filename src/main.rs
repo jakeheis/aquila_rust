@@ -1,6 +1,6 @@
 use aquila;
 
 fn main() {
-    let source = aquila::text("4 < 5 && 1 + 6 > 2 == true");
+    let source = aquila::file("test.aq");
     aquila::run(source);
 }

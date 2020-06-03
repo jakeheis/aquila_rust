@@ -12,9 +12,32 @@ impl Parser {
     }
 
     pub fn parse(&mut self) {
-        let expr = self.parse_precedence(Precedence::Logic);
-        let mut printer = ExprPrinter::new();
-        expr.accept(&mut printer);
+        let statements = self.program();
+
+        for stmt in statements {
+            let mut printer = ASTPrinter::new();
+            stmt.accept(&mut printer);
+        }
+    }
+
+    fn program(&mut self) -> Vec<Stmt> {
+        let mut stmts = Vec::new();
+        while !self.is_at_end() {
+            stmts.push(self.statement());
+        }
+        self.consume(TokenKind::EOF, "Expect EOF");
+        stmts
+    }
+
+    fn statement(&mut self) -> Stmt {
+        let expr = self.expression();
+        self.consume(TokenKind::Semicolon, "Expect semicolon after statement");
+
+        Stmt::expression(expr)
+    }
+
+    fn expression(&mut self) -> Expr {
+        self.parse_precedence(Precedence::Logic)
     }
 
     fn parse_precedence(&mut self, prec: Precedence) -> Expr {
@@ -22,9 +45,11 @@ impl Parser {
 
         let mut lhs = prefix(self);
 
-        while let Some(next) = self.peek() {
-            let infix_entry = PARSE_TABLE.infix(next).unwrap();
+        while !self.is_at_end() && self.peek() != TokenKind::Semicolon {
+            let next = self.peek();
+            let infix_entry = PARSE_TABLE.infix(next).expect(&format!("Unexpected infix token {:#?}", next));
             if infix_entry.1 >= prec {
+                self.advance();
                 lhs = infix_entry.0(self, lhs);
             } else {
                 break;
@@ -35,7 +60,7 @@ impl Parser {
     }
 
     fn binary(&mut self, lhs: Expr) -> Expr {
-        let operator = self.advance().clone();
+        let operator = self.previous().clone();
         let next_prec = PARSE_TABLE.precedence_for(operator.kind).next();
         let rhs = self.parse_precedence(next_prec);
         Expr::binary(lhs, operator, rhs)
@@ -45,19 +70,16 @@ impl Parser {
         Expr::literal(self.previous())
     }
 
-    fn peek(&mut self) -> Option<TokenKind> {
-        if self.index < self.tokens.len() {
-            Some(self.tokens[self.index].kind)
-        } else {
-            None
-        }
+    fn peek(&self) -> TokenKind {
+        self.tokens[self.index].kind
     }
 
-    fn consume(&mut self, kind: TokenKind) -> &Token {
+    fn consume(&mut self, kind: TokenKind, message: &str) -> &Token {
         let first = self.advance();
         if first.kind == kind {
             first
         } else {
+
             panic!();
         }
     }
@@ -74,6 +96,11 @@ impl Parser {
     fn current(&self) -> Token {
         self.tokens[self.index].clone()
     }
+
+    fn is_at_end(&self) -> bool {
+        self.peek() == TokenKind::EOF
+    }
+
 }
 
 // ParseTable

@@ -1,13 +1,41 @@
 use crate::lexing::*;
 use crate::source::*;
 
+pub struct Stmt {
+    pub kind: StmtKind
+}
+
+impl Stmt {
+    pub fn accept<V: StmtVisitor>(&self, visitor: &mut V) -> V::StmtResult {
+        match &self.kind {
+            StmtKind::Expression(expr) => visitor.visit_expression_stmt(expr),
+        }
+    }
+
+    pub fn expression(expr: Expr) -> Self {
+        Stmt {
+            kind: StmtKind::Expression(expr)
+        }
+    }
+}
+
+pub enum StmtKind {
+    Expression(Expr)
+}
+
+pub trait StmtVisitor {
+    type StmtResult;
+
+    fn visit_expression_stmt(&mut self, expr: &Expr) -> Self::StmtResult;
+}
+
 pub struct Expr {
-    kind: ExprKind,
-    span: Span,
+    pub kind: ExprKind,
+    pub span: Span,
 }
 
 impl Expr {
-    pub fn accept<V: ExprVisitor>(&self, visitor: &mut V) -> V::Result {
+    pub fn accept<V: ExprVisitor>(&self, visitor: &mut V) -> V::ExprResult {
         match &self.kind {
             ExprKind::Literal(token) => visitor.visit_literal_expr(&token),
             ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&lhs, &op, &rhs),
@@ -40,31 +68,29 @@ pub enum ExprKind {
 }
 
 pub trait ExprVisitor {
-    type Result;
+    type ExprResult;
 
-    fn visit_literal_expr(&mut self, token: &Token) -> Self::Result;
-    fn visit_binary_expr(&mut self, lhs: &Expr, op: &Token, rhs: &Expr) -> Self::Result;
+    fn visit_literal_expr(&mut self, token: &Token) -> Self::ExprResult;
+    fn visit_binary_expr(&mut self, lhs: &Expr, op: &Token, rhs: &Expr) -> Self::ExprResult;
 }
 
-pub struct ExprPrinter {
+pub struct ASTPrinter {
     indent: i32,
 }
 
-impl ExprPrinter {
-    pub fn new() -> ExprPrinter {
-        ExprPrinter { indent: 0 }
+impl ASTPrinter {
+    pub fn new() -> ASTPrinter {
+        ASTPrinter { indent: 0 }
     }
 
     pub fn write(&self, token: &Token) {
         let indent = (0..self.indent).map(|_| "|--").collect::<String>();
         println!("{}{}", indent, token)
     }
-}
 
-impl ExprPrinter {
     fn indent<T>(&mut self, block: T)
     where
-        T: Fn(&mut ExprPrinter) -> (),
+        T: Fn(&mut ASTPrinter) -> (),
     {
         self.indent += 1;
         block(self);
@@ -72,8 +98,16 @@ impl ExprPrinter {
     }
 }
 
-impl ExprVisitor for ExprPrinter {
-    type Result = ();
+impl StmtVisitor for ASTPrinter {
+    type StmtResult = ();
+
+    fn visit_expression_stmt(&mut self, expr: &Expr) {
+        expr.accept(self);
+    }
+}
+
+impl ExprVisitor for ASTPrinter {
+    type ExprResult = ();
 
     fn visit_literal_expr(&mut self, token: &Token) {
         self.write(token);
