@@ -49,9 +49,9 @@ impl DefaultReporter {
 impl Reporter for DefaultReporter {
     fn report(&self, diagnostic: Diagnostic) {
         let header = if diagnostic.severity == Severity::Error {
-            "• Error:".red()
+            "• Error:".red().bold()
         } else {
-            "• Warning:".yellow()
+            "• Warning:".yellow().bold()
         };
         println!("\n{} {}\n", header, diagnostic.message);
         let (line, offset) = diagnostic.span.entire_line();

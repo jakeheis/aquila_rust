@@ -49,7 +49,7 @@ impl Parser {
     }
 
     fn parse_precedence(&mut self, prec: Precedence) -> Result<Expr> {
-        let prefix = PARSE_TABLE.prefix(self.advance().kind).ok_or_else(|| {
+        let prefix = self.advance().kind.prefix().ok_or_else(|| {
             Diagnostic::error_token(self.previous(), "Expected atom")
         })?;
 
@@ -57,7 +57,7 @@ impl Parser {
 
         while !self.is_at_end() && self.peek() != TokenKind::Semicolon {
             let next = self.peek();
-            let infix_entry = PARSE_TABLE.infix(next).ok_or_else(|| {
+            let infix_entry = next.infix().ok_or_else(|| {
                 Diagnostic::error_token(self.current(), "Expected expression")
              })?;
              
@@ -74,7 +74,7 @@ impl Parser {
 
     fn binary(&mut self, lhs: Expr) -> Result<Expr> {
         let operator = self.previous().clone();
-        let next_prec = PARSE_TABLE.precedence_for(operator.kind).next();
+        let next_prec = Precedence::for_kind(operator.kind).next();
         let rhs = self.parse_precedence(next_prec)?;
         Ok(Expr::binary(lhs, operator, rhs))
     }
@@ -129,118 +129,26 @@ impl Parser {
 type PrefixFn = fn(&mut Parser) -> Result<Expr>;
 type InfixFn = fn(&mut Parser, lhs: Expr) -> Result<Expr>;
 
-struct ParseTable {
-    entries: [ParseTableEntry; 16],
+impl TokenKind {
+    fn prefix(&self) -> Option<PrefixFn> {
+        match self {
+            TokenKind::Minus | TokenKind::Bang => Some(Parser::unary),
+            TokenKind::True | TokenKind::False | TokenKind::Number => Some(Parser::literal),
+            _ => None
+        }
+    }
+
+    fn infix(&self) -> Option<(InfixFn, Precedence)> {
+        match self {
+            TokenKind::Plus | TokenKind::Minus => Some((Parser::binary, Precedence::Term)),
+            TokenKind::Star | TokenKind::Slash => Some((Parser::binary, Precedence::Factor)),
+            TokenKind::AmpersandAmpersand | TokenKind::BarBar => Some((Parser::binary, Precedence::Logic)),
+            TokenKind::EqualEqual | TokenKind::BangEqual => Some((Parser::binary, Precedence::Equality)),
+            TokenKind::Greater | TokenKind::GreaterEqual | TokenKind::Less | TokenKind::LessEqual => Some((Parser::binary, Precedence::Comparison)),
+            _ => None,
+        }
+    }
 }
-
-impl ParseTable {
-    fn entry(&self, kind: TokenKind) -> Option<&ParseTableEntry> {
-        self.entries.iter().find(|t| t.kind == kind)
-    }
-
-    fn prefix(&self, kind: TokenKind) -> Option<&PrefixFn> {
-        self.entry(kind).and_then(|e| e.prefix.as_ref())
-    }
-
-    fn infix(&self, kind: TokenKind) -> Option<&(InfixFn, Precedence)> {
-        self.entry(kind).and_then(|e| e.infix.as_ref())
-    }
-
-    fn precedence_for(&self, kind: TokenKind) -> Precedence {
-        self.infix(kind).unwrap().1
-    }
-}
-
-struct ParseTableEntry {
-    kind: TokenKind,
-    prefix: Option<PrefixFn>,
-    infix: Option<(InfixFn, Precedence)>,
-}
-
-const PARSE_TABLE: ParseTable = ParseTable {
-    entries: [
-        ParseTableEntry {
-            kind: TokenKind::Number,
-            prefix: Some(Parser::literal),
-            infix: None,
-        },
-        ParseTableEntry {
-            kind: TokenKind::Plus,
-            prefix: None,
-            infix: Some((Parser::binary, Precedence::Term)),
-        },
-        ParseTableEntry {
-            kind: TokenKind::Minus,
-            prefix: Some(Parser::unary),
-            infix: Some((Parser::binary, Precedence::Term)),
-        },
-        ParseTableEntry {
-            kind: TokenKind::Star,
-            prefix: None,
-            infix: Some((Parser::binary, Precedence::Factor)),
-        },
-        ParseTableEntry {
-            kind: TokenKind::Slash,
-            prefix: None,
-            infix: Some((Parser::binary, Precedence::Factor)),
-        },
-        ParseTableEntry {
-            kind: TokenKind::Bang,
-            prefix: Some(Parser::unary),
-            infix: None,
-        },
-        ParseTableEntry {
-            kind: TokenKind::AmpersandAmpersand,
-            prefix: None,
-            infix: Some((Parser::binary, Precedence::Logic)),
-        },
-        ParseTableEntry {
-            kind: TokenKind::BarBar,
-            prefix: None,
-            infix: Some((Parser::binary, Precedence::Logic)),
-        },
-        ParseTableEntry {
-            kind: TokenKind::EqualEqual,
-            prefix: None,
-            infix: Some((Parser::binary, Precedence::Equality)),
-        },
-        ParseTableEntry {
-            kind: TokenKind::BangEqual,
-            prefix: None,
-            infix: Some((Parser::binary, Precedence::Equality)),
-        },
-        ParseTableEntry {
-            kind: TokenKind::Greater,
-            prefix: None,
-            infix: Some((Parser::binary, Precedence::Comparison)),
-        },
-        ParseTableEntry {
-            kind: TokenKind::GreaterEqual,
-            prefix: None,
-            infix: Some((Parser::binary, Precedence::Comparison)),
-        },
-        ParseTableEntry {
-            kind: TokenKind::Less,
-            prefix: None,
-            infix: Some((Parser::binary, Precedence::Comparison)),
-        },
-        ParseTableEntry {
-            kind: TokenKind::LessEqual,
-            prefix: None,
-            infix: Some((Parser::binary, Precedence::Comparison)),
-        },
-        ParseTableEntry {
-            kind: TokenKind::True,
-            prefix: Some(Parser::literal),
-            infix: None,
-        },
-        ParseTableEntry {
-            kind: TokenKind::False,
-            prefix: Some(Parser::literal),
-            infix: None,
-        },
-    ],
-};
 
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
 enum Precedence {
@@ -254,6 +162,10 @@ enum Precedence {
 }
 
 impl Precedence {
+    fn for_kind(kind: TokenKind) -> Precedence {
+        kind.infix().unwrap().1
+    }
+
     fn next(&self) -> Precedence {
         match self {
             Precedence::Logic => Precedence::Equality,
