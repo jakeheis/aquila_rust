@@ -6,8 +6,5 @@
 // alpha = 3;
 
 if true == false {
-    4 - 2;
-} else {
-    let hi = 2;
-    hi - 2;
-}
+
+} else 4 + 2

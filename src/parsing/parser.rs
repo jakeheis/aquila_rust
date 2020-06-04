@@ -1,6 +1,7 @@
 use super::ast::*;
 use crate::diagnostic::*;
 use crate::lexing::*;
+use crate::source::*;
 use std::rc::Rc;
 
 type Result<T> = std::result::Result<T, Diagnostic>;
@@ -47,7 +48,10 @@ impl Parser {
     fn statement(&mut self) -> Result<Stmt> {
         if self.matches(TokenKind::Let) {
             let decl = self.variable_decl()?;
-            self.consume(TokenKind::Semicolon, "Expected semicolon after variable declaration")?;
+            self.consume(
+                TokenKind::Semicolon,
+                "Expected semicolon after variable declaration",
+            )?;
             Ok(decl)
         } else if self.matches(TokenKind::If) {
             self.if_stmt()
@@ -75,19 +79,31 @@ impl Parser {
 
         self.consume(TokenKind::LeftBrace, "Expect '{' after condition")?;
         let body = self.block();
-        
-        let mut end_brace_span = self.consume(TokenKind::RightBrace, "Expect '}' after if body")?.span.clone();
+
+        let mut end_brace_span = self
+            .consume(TokenKind::RightBrace, "Expect '}' after if body")?
+            .span
+            .clone();
 
         let else_body = if self.matches(TokenKind::Else) {
             self.consume(TokenKind::LeftBrace, "Expect '{' after else")?;
             let block = self.block();
-            end_brace_span = self.consume(TokenKind::RightBrace, "Expect '}' after else body")?.span.clone();
+            end_brace_span = self
+                .consume(TokenKind::RightBrace, "Expect '}' after else body")?
+                .span
+                .clone();
             block
         } else {
             Vec::new()
         };
 
-        Ok(Stmt::if_stmt(if_span, condition, body, else_body, end_brace_span))
+        Ok(Stmt::if_stmt(
+            if_span,
+            condition,
+            body,
+            else_body,
+            end_brace_span,
+        ))
     }
 
     fn expression(&mut self) -> Result<Expr> {

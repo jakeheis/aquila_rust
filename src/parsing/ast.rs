@@ -10,7 +10,9 @@ impl Stmt {
     pub fn accept<V: StmtVisitor>(&self, visitor: &mut V) -> V::StmtResult {
         match &self.kind {
             StmtKind::VariableDecl(name, value) => visitor.visit_variable_decl(&name, &value),
-            StmtKind::IfStmt(condition, body, else_body) => visitor.visit_if_stmt(&condition, &body, &else_body),
+            StmtKind::IfStmt(condition, body, else_body) => {
+                visitor.visit_if_stmt(&condition, &body, &else_body)
+            }
             StmtKind::Expression(expr) => visitor.visit_expression_stmt(expr),
         }
     }
@@ -23,11 +25,17 @@ impl Stmt {
         }
     }
 
-    pub fn if_stmt(if_span: Span, condition: Expr, body: Vec<Stmt>, else_body: Vec<Stmt>, end_brace_span: Span) -> Self {
+    pub fn if_stmt(
+        if_span: Span,
+        condition: Expr,
+        body: Vec<Stmt>,
+        else_body: Vec<Stmt>,
+        end_brace_span: Span,
+    ) -> Self {
         let span = Span::join(&if_span, &end_brace_span);
         Stmt {
             kind: StmtKind::IfStmt(condition, body, else_body),
-            span
+            span,
         }
     }
 
@@ -50,7 +58,12 @@ pub trait StmtVisitor {
     type StmtResult;
 
     fn visit_variable_decl(&mut self, name: &Token, value: &Expr) -> Self::StmtResult;
-    fn visit_if_stmt(&mut self, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) -> Self::StmtResult;
+    fn visit_if_stmt(
+        &mut self,
+        condition: &Expr,
+        body: &[Stmt],
+        else_body: &[Stmt],
+    ) -> Self::StmtResult;
     fn visit_expression_stmt(&mut self, expr: &Expr) -> Self::StmtResult;
 }
 
@@ -197,7 +210,6 @@ impl StmtVisitor for ASTPrinter {
             expr.accept(visitor);
         })
     }
-
 }
 
 impl ExprVisitor for ASTPrinter {

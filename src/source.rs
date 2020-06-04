@@ -1,3 +1,5 @@
+use crate::lexing::Token;
+use crate::parsing::{Expr, Stmt};
 use std::fs;
 use std::rc::Rc;
 
@@ -60,12 +62,30 @@ impl Span {
         }
     }
 
-    pub fn join(lhs: &Span, rhs: &Span) -> Span {
+    pub fn join<T, U>(lhs: &T, rhs: &U) -> Span
+    where
+        T: ContainsSpan,
+        U: ContainsSpan,
+    {
+        let lhs = lhs.span();
+        let rhs = rhs.span();
         Span {
             source: Rc::clone(&lhs.source),
             index: lhs.index,
             length: rhs.length + rhs.index - lhs.index,
             line: lhs.line,
+        }
+    }
+
+    pub fn join_opt<T, U>(lhs: &T, rhs: Option<U>) -> Span
+    where
+        T: ContainsSpan,
+        U: ContainsSpan,
+    {
+        if let Some(rhs) = rhs {
+            Span::join(lhs, &rhs)
+        } else {
+            lhs.span().clone()
         }
     }
 
@@ -89,4 +109,50 @@ impl Span {
         }
         (&self.source.content[start..end], self.index - start)
     }
+}
+
+pub trait ContainsSpan {
+    fn span(&self) -> &Span;
+}
+
+impl ContainsSpan for Span {
+    fn span(&self) -> &Span {
+        self
+    }
+}
+
+impl ContainsSpan for Token {
+    fn span(&self) -> &Span {
+        &self.span
+    }
+}
+
+impl ContainsSpan for Expr {
+    fn span(&self) -> &Span {
+        &self.span
+    }
+}
+
+impl ContainsSpan for Stmt {
+    fn span(&self) -> &Span {
+        &self.span
+    }
+}
+
+pub trait ComputesSpan {
+    fn compute_span(&self) -> Option<Span>;
+}
+
+impl<T: ContainsSpan> ComputesSpan for Vec<T> {
+    fn compute_span(&self) -> Option<Span> {
+        if self.len() > 0 {
+            Some(Span::join(self[0].span(), self.last().unwrap().span()))
+        } else {
+            None
+        }
+    }
+}
+
+pub trait ReplaceableSpan {
+    fn replace_span(self, new_span: &Span) -> Self;
 }

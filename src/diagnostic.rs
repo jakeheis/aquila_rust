@@ -1,6 +1,6 @@
 use crate::lexing::token::*;
 use crate::parsing::*;
-use crate::source::Span;
+use crate::source::*;
 use colored::*;
 use std::rc::Rc;
 
@@ -9,6 +9,8 @@ enum Severity {
     Error,
     // Warning,
 }
+
+type DiagnosticResult<T> = Result<T, Diagnostic>;
 
 pub struct Diagnostic {
     severity: Severity,
@@ -31,6 +33,22 @@ impl Diagnostic {
 
     pub fn error_expr(expr: &Expr, message: &str) -> Self {
         Diagnostic::error_span(expr.span.clone(), message)
+    }
+}
+
+impl ReplaceableSpan for Diagnostic {
+    fn replace_span(self, new_span: &Span) -> Diagnostic {
+        Diagnostic {
+            severity: self.severity,
+            span: new_span.clone(),
+            message: self.message,
+        }
+    }
+}
+
+impl<T> ReplaceableSpan for DiagnosticResult<T> {
+    fn replace_span(self, new_span: &Span) -> DiagnosticResult<T> {
+        self.map_err(|e| e.replace_span(new_span))
     }
 }
 
