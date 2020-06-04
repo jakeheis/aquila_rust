@@ -1,6 +1,6 @@
 use super::ast::*;
-use crate::lexing::*;
 use crate::diagnostic::*;
+use crate::lexing::*;
 use std::rc::Rc;
 
 type Result<T> = std::result::Result<T, Diagnostic>;
@@ -12,9 +12,12 @@ pub struct Parser {
 }
 
 impl Parser {
-
     pub fn new(tokens: Vec<Token>, reporter: Rc<dyn Reporter>) -> Self {
-        Parser { tokens, index: 0, reporter }
+        Parser {
+            tokens,
+            index: 0,
+            reporter,
+        }
     }
 
     pub fn parse(&mut self) {
@@ -31,17 +34,32 @@ impl Parser {
         while !self.is_at_end() {
             match self.statement() {
                 Ok(stmt) => stmts.push(stmt),
-                Err(diagnostic) => self.reporter.report(diagnostic)
+                Err(diagnostic) => self.reporter.report(diagnostic),
             }
         }
         stmts
     }
 
     fn statement(&mut self) -> Result<Stmt> {
-        let expr = self.expression()?;
-        self.consume(TokenKind::Semicolon, "Expect semicolon after statement")?;
+        let stmt = if self.matches(TokenKind::Let) {
+            self.variable_decl()?
+        } else {
+            Stmt::expression(self.parse_precedence(Precedence::Assignment)?)
+        };
 
-        Ok(Stmt::expression(expr))
+        self.consume(TokenKind::Semicolon, "Expected semicolon after statement")?;
+
+        Ok(stmt)
+    }
+
+    fn variable_decl(&mut self) -> Result<Stmt> {
+        let let_span = self.previous().span.clone();
+        let name = self
+            .consume(TokenKind::Identifier, "Expected variable name.")?
+            .clone();
+        self.consume(TokenKind::Equal, "Expect '=' after variable declaration")?;
+        let value = self.expression()?;
+        Ok(Stmt::variable_decl(let_span, name, value))
     }
 
     fn expression(&mut self) -> Result<Expr> {
@@ -49,44 +67,71 @@ impl Parser {
     }
 
     fn parse_precedence(&mut self, prec: Precedence) -> Result<Expr> {
-        let prefix = self.advance().kind.prefix().ok_or_else(|| {
-            Diagnostic::error_token(self.previous(), "Expected atom")
-        })?;
+        if self.is_at_end() {
+            return Err(Diagnostic::error_token(
+                self.previous(),
+                "Expected expression",
+            ));
+        }
 
-        let mut lhs = prefix(self)?;
+        let prefix = self
+            .advance()
+            .kind
+            .prefix()
+            .ok_or_else(|| Diagnostic::error_token(self.previous(), "Expected expression"))?;
 
-        while !self.is_at_end() && self.peek() != TokenKind::Semicolon {
-            let next = self.peek();
-            let infix_entry = next.infix().ok_or_else(|| {
-                Diagnostic::error_token(self.current(), "Expected expression")
-             })?;
-             
-            if infix_entry.1 >= prec {
-                self.advance();
-                lhs = infix_entry.0(self, lhs)?;
-            } else {
-                break;
+        let can_assign = prec <= Precedence::Assignment;
+
+        let mut lhs = prefix(self, can_assign)?;
+
+        while !self.is_at_end() {
+            if let Some(infix_entry) = self.peek().infix_entry() {
+                if infix_entry.1 >= prec {
+                    self.advance();
+                    lhs = infix_entry.0(self, lhs, can_assign)?;
+                    continue;
+                }
             }
+
+            break;
+        }
+
+        if can_assign && self.matches(TokenKind::Equal) {
+            return Err(Diagnostic::error_expr(&lhs, "Invalid assignment target"));
         }
 
         Ok(lhs)
     }
 
-    fn binary(&mut self, lhs: Expr) -> Result<Expr> {
+    fn assignment(&mut self, lhs: Expr) -> Result<Expr> {
+        let value = self.parse_precedence(Precedence::Equality.next())?;
+        Ok(Expr::assignment(lhs, value))
+    }
+
+    fn binary(&mut self, lhs: Expr, _can_assign: bool) -> Result<Expr> {
         let operator = self.previous().clone();
         let next_prec = Precedence::for_kind(operator.kind).next();
         let rhs = self.parse_precedence(next_prec)?;
         Ok(Expr::binary(lhs, operator, rhs))
     }
 
-    fn unary(&mut self) -> Result<Expr> {
+    fn unary(&mut self, _can_assign: bool) -> Result<Expr> {
         let operator = self.previous().clone();
         let expr = self.parse_precedence(Precedence::Unary.next())?;
         Ok(Expr::unary(operator, expr))
     }
 
-    fn literal(&mut self) -> Result<Expr> {
+    fn literal(&mut self, _can_assign: bool) -> Result<Expr> {
         Ok(Expr::literal(self.previous()))
+    }
+
+    fn variable(&mut self, can_assign: bool) -> Result<Expr> {
+        let variable = Expr::variable(self.previous());
+        if can_assign && self.matches(TokenKind::Equal) {
+            self.assignment(variable)
+        } else {
+            Ok(variable)
+        }
     }
 
     fn peek(&self) -> TokenKind {
@@ -103,6 +148,18 @@ impl Parser {
             Ok(consumed)
         } else {
             Err(Diagnostic::error_token(consumed, message))
+        }
+    }
+
+    fn matches(&mut self, kind: TokenKind) -> bool {
+        if self.is_at_end() {
+            return false;
+        }
+        if self.peek() == kind {
+            self.advance();
+            true
+        } else {
+            false
         }
     }
 
@@ -126,25 +183,34 @@ impl Parser {
 
 // ParseTable
 
-type PrefixFn = fn(&mut Parser) -> Result<Expr>;
-type InfixFn = fn(&mut Parser, lhs: Expr) -> Result<Expr>;
+type PrefixFn = fn(&mut Parser, can_assign: bool) -> Result<Expr>;
+type InfixFn = fn(&mut Parser, lhs: Expr, can_assign: bool) -> Result<Expr>;
 
 impl TokenKind {
     fn prefix(&self) -> Option<PrefixFn> {
         match self {
             TokenKind::Minus | TokenKind::Bang => Some(Parser::unary),
             TokenKind::True | TokenKind::False | TokenKind::Number => Some(Parser::literal),
-            _ => None
+            TokenKind::Identifier => Some(Parser::variable),
+            _ => None,
         }
     }
 
-    fn infix(&self) -> Option<(InfixFn, Precedence)> {
+    fn infix_entry(&self) -> Option<(InfixFn, Precedence)> {
         match self {
             TokenKind::Plus | TokenKind::Minus => Some((Parser::binary, Precedence::Term)),
             TokenKind::Star | TokenKind::Slash => Some((Parser::binary, Precedence::Factor)),
-            TokenKind::AmpersandAmpersand | TokenKind::BarBar => Some((Parser::binary, Precedence::Logic)),
-            TokenKind::EqualEqual | TokenKind::BangEqual => Some((Parser::binary, Precedence::Equality)),
-            TokenKind::Greater | TokenKind::GreaterEqual | TokenKind::Less | TokenKind::LessEqual => Some((Parser::binary, Precedence::Comparison)),
+            TokenKind::AmpersandAmpersand | TokenKind::BarBar => {
+                Some((Parser::binary, Precedence::Logic))
+            }
+            TokenKind::EqualEqual | TokenKind::BangEqual => {
+                Some((Parser::binary, Precedence::Equality))
+            }
+            TokenKind::Greater
+            | TokenKind::GreaterEqual
+            | TokenKind::Less
+            | TokenKind::LessEqual => Some((Parser::binary, Precedence::Comparison)),
+            // TokenKind::Equal => Some((Parser::assignment, Precedence::Assignment)),
             _ => None,
         }
     }
@@ -152,6 +218,7 @@ impl TokenKind {
 
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
 enum Precedence {
+    Assignment,
     Logic,
     Equality,
     Comparison,
@@ -163,11 +230,12 @@ enum Precedence {
 
 impl Precedence {
     fn for_kind(kind: TokenKind) -> Precedence {
-        kind.infix().unwrap().1
+        kind.infix_entry().unwrap().1
     }
 
     fn next(&self) -> Precedence {
         match self {
+            Precedence::Assignment => Precedence::Logic,
             Precedence::Logic => Precedence::Equality,
             Precedence::Equality => Precedence::Comparison,
             Precedence::Comparison => Precedence::Term,

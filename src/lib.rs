@@ -3,11 +3,11 @@ pub mod lexing;
 pub mod parsing;
 pub mod source;
 
+use diagnostic::*;
 use lexing::*;
 use parsing::*;
 pub use source::*;
 use std::rc::Rc;
-use diagnostic::*;
 
 pub fn run(source: Source) {
     let reporter: Rc<dyn Reporter> = diagnostic::DefaultReporter::new();

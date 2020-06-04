@@ -27,6 +27,7 @@ pub enum TokenKind {
     // Keywords
     True,
     False,
+    Let,
 
     // Other
     Semicolon,
