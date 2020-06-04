@@ -2,5 +2,12 @@
 // 4 < 3 * 1;
 // 4 + * 2
 
-let alpha = true && 3 == 4;
-alpha = 3;
+// let alpha = true && 3 == 4;
+// alpha = 3;
+
+if true == false {
+    4 - 2;
+} else {
+    let hi = 2;
+    hi - 2;
+}

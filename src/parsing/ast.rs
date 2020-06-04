@@ -10,15 +10,24 @@ impl Stmt {
     pub fn accept<V: StmtVisitor>(&self, visitor: &mut V) -> V::StmtResult {
         match &self.kind {
             StmtKind::VariableDecl(name, value) => visitor.visit_variable_decl(&name, &value),
+            StmtKind::IfStmt(condition, body, else_body) => visitor.visit_if_stmt(&condition, &body, &else_body),
             StmtKind::Expression(expr) => visitor.visit_expression_stmt(expr),
         }
     }
 
-    pub fn variable_decl(let_span: Span, name: Token, value: Expr) -> Stmt {
+    pub fn variable_decl(let_span: Span, name: Token, value: Expr) -> Self {
         let span = Span::join(&let_span, &value.span);
         Stmt {
             kind: StmtKind::VariableDecl(name, value),
             span,
+        }
+    }
+
+    pub fn if_stmt(if_span: Span, condition: Expr, body: Vec<Stmt>, else_body: Vec<Stmt>, end_brace_span: Span) -> Self {
+        let span = Span::join(&if_span, &end_brace_span);
+        Stmt {
+            kind: StmtKind::IfStmt(condition, body, else_body),
+            span
         }
     }
 
@@ -33,6 +42,7 @@ impl Stmt {
 
 pub enum StmtKind {
     VariableDecl(Token, Expr),
+    IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     Expression(Expr),
 }
 
@@ -40,6 +50,7 @@ pub trait StmtVisitor {
     type StmtResult;
 
     fn visit_variable_decl(&mut self, name: &Token, value: &Expr) -> Self::StmtResult;
+    fn visit_if_stmt(&mut self, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) -> Self::StmtResult;
     fn visit_expression_stmt(&mut self, expr: &Expr) -> Self::StmtResult;
 }
 
@@ -134,7 +145,11 @@ impl ASTPrinter {
     }
 
     pub fn write_ln(&self, token: &str) {
-        let indent = (0..self.indent).map(|_| "|  ").collect::<String>();
+        let indent = if self.indent > 0 {
+            (1..self.indent).map(|_| "|  ").collect::<String>() + "|--"
+        } else {
+            String::new()
+        };
         println!("{}{}", indent, token)
     }
 
@@ -158,12 +173,31 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
+    fn visit_if_stmt(&mut self, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) {
+        self.write_ln("If");
+        self.indent(|visitor| {
+            visitor.write_ln("Condition");
+            visitor.indent(|visitor| {
+                condition.accept(visitor);
+            });
+            visitor.write_ln("Body");
+            visitor.indent(|visitor| {
+                body.iter().for_each(|s| s.accept(visitor));
+            });
+            visitor.write_ln("ElseBody");
+            visitor.indent(|visitor| {
+                else_body.iter().for_each(|s| s.accept(visitor));
+            });
+        })
+    }
+
     fn visit_expression_stmt(&mut self, expr: &Expr) {
         self.write_ln("ExpressionStmt");
         self.indent(|visitor| {
             expr.accept(visitor);
         })
     }
+
 }
 
 impl ExprVisitor for ASTPrinter {
@@ -193,7 +227,7 @@ impl ExprVisitor for ASTPrinter {
     }
 
     fn visit_literal_expr(&mut self, token: &Token) {
-        self.write_ln(&format!("Literal({})", token.lexeme()));
+        self.write_ln(&format!("Literal({})", token.lexeme()))
     }
 
     fn visit_variable_expr(&mut self, token: &Token) {

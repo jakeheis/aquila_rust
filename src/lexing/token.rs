@@ -24,10 +24,16 @@ pub enum TokenKind {
     Bang,
     BangEqual,
 
+    // Groupings
+    LeftBrace,
+    RightBrace,
+
     // Keywords
     True,
     False,
     Let,
+    If,
+    Else,
 
     // Other
     Semicolon,

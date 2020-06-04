@@ -21,7 +21,7 @@ impl Parser {
     }
 
     pub fn parse(&mut self) {
-        let statements = self.program();
+        let statements = self.stmt_list(None);
 
         for stmt in statements {
             let mut printer = ASTPrinter::new();
@@ -29,9 +29,9 @@ impl Parser {
         }
     }
 
-    fn program(&mut self) -> Vec<Stmt> {
+    fn stmt_list(&mut self, end: Option<TokenKind>) -> Vec<Stmt> {
         let mut stmts: Vec<Stmt> = Vec::new();
-        while !self.is_at_end() {
+        while !self.is_at_end() && Some(self.peek()) != end {
             match self.statement() {
                 Ok(stmt) => stmts.push(stmt),
                 Err(diagnostic) => self.reporter.report(diagnostic),
@@ -40,16 +40,22 @@ impl Parser {
         stmts
     }
 
+    fn block(&mut self) -> Vec<Stmt> {
+        self.stmt_list(Some(TokenKind::RightBrace))
+    }
+
     fn statement(&mut self) -> Result<Stmt> {
-        let stmt = if self.matches(TokenKind::Let) {
-            self.variable_decl()?
+        if self.matches(TokenKind::Let) {
+            let decl = self.variable_decl()?;
+            self.consume(TokenKind::Semicolon, "Expected semicolon after variable declaration")?;
+            Ok(decl)
+        } else if self.matches(TokenKind::If) {
+            self.if_stmt()
         } else {
-            Stmt::expression(self.parse_precedence(Precedence::Assignment)?)
-        };
-
-        self.consume(TokenKind::Semicolon, "Expected semicolon after statement")?;
-
-        Ok(stmt)
+            let stmt = Stmt::expression(self.parse_precedence(Precedence::Assignment)?);
+            self.consume(TokenKind::Semicolon, "Expected semicolon after expression")?;
+            Ok(stmt)
+        }
     }
 
     fn variable_decl(&mut self) -> Result<Stmt> {
@@ -60,6 +66,28 @@ impl Parser {
         self.consume(TokenKind::Equal, "Expect '=' after variable declaration")?;
         let value = self.expression()?;
         Ok(Stmt::variable_decl(let_span, name, value))
+    }
+
+    fn if_stmt(&mut self) -> Result<Stmt> {
+        let if_span = self.previous().span.clone();
+
+        let condition = self.expression()?;
+
+        self.consume(TokenKind::LeftBrace, "Expect '{' after condition")?;
+        let body = self.block();
+        
+        let mut end_brace_span = self.consume(TokenKind::RightBrace, "Expect '}' after if body")?.span.clone();
+
+        let else_body = if self.matches(TokenKind::Else) {
+            self.consume(TokenKind::LeftBrace, "Expect '{' after else")?;
+            let block = self.block();
+            end_brace_span = self.consume(TokenKind::RightBrace, "Expect '}' after else body")?.span.clone();
+            block
+        } else {
+            Vec::new()
+        };
+
+        Ok(Stmt::if_stmt(if_span, condition, body, else_body, end_brace_span))
     }
 
     fn expression(&mut self) -> Result<Expr> {
