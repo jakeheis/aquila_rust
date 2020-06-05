@@ -2,14 +2,18 @@
 // 4 < 3 * 1;
 // 4 + * 2
 
-let alpha = true && 3 == 4;
+// let alpha = true && 3 == 4;
 
-alpha: int + 2
+// alpha: int + 2
 
 // alpha = 3;
 
-if true == false {
+// if true == false {
 
-} else 4 + 2
+// } else 4 + 2
 
-let a = 4 + 1 + +;
+// let a = 4 + 1 + +;
+
+def add(lhs: int, rhs: int): int {
+    lhs + rhs;
+}

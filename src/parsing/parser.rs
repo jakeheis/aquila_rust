@@ -49,7 +49,9 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Stmt> {
-        if self.matches(TokenKind::Let) {
+        if self.matches(TokenKind::Def) {
+            self.function_decl()
+        } else if self.matches(TokenKind::Let) {
             let decl = self.variable_decl()?;
             self.consume(
                 TokenKind::Semicolon,
@@ -84,9 +86,38 @@ impl Parser {
         }
     }
 
+    fn function_decl(&mut self) -> Result<Stmt> {
+        let def_span = self.previous().span.clone();
+        let name = self.consume(TokenKind::Identifier, "Expect function name")?.clone();
+
+        let mut params: Vec<Expr> = Vec::new();
+        self.consume(TokenKind::LeftParen, "Expect '(' after function name")?;
+        while !self.is_at_end() && self.peek() != TokenKind::RightParen {
+            self.consume(TokenKind::Identifier, "Expect parameter name")?;
+            let (name, kind) = self.parse_var(true, true)?;
+            params.push(Expr::variable(name, kind));
+            if self.peek() != TokenKind::RightParen {
+                self.consume(TokenKind::Comma, "Expect ',' separating parameters")?;
+            }
+        }
+        self.consume(TokenKind::RightParen, "Expect closing ')'")?;
+
+        let return_type = if self.matches(TokenKind::Colon) {
+            Some(self.consume(TokenKind::Identifier, "Expect return type after ':'")?.clone())
+        } else {
+            None
+        };
+
+        self.consume(TokenKind::LeftBrace, "Expect '{' after function declaration")?;
+        let body = self.block();
+        let right_brace = self.consume(TokenKind::RightBrace, "Expect '}' after function body")?;
+
+        Ok(Stmt::function_decl(def_span, name, params, return_type, body, right_brace.span().clone()))
+    }
+
     fn variable_decl(&mut self) -> Result<Stmt> {
         let let_span = self.previous().span.clone();
-        self.advance();
+        self.consume(TokenKind::Identifier, "Expected variable name")?;
         let (name, kind) = self.parse_var(true, false)?;
         self.consume(TokenKind::Equal, "Expect '=' after variable declaration")?;
         let value = self.expression()?;
@@ -211,7 +242,7 @@ impl Parser {
         if self.matches(TokenKind::Colon) {
             if allow_type {
                 var_type = Some(
-                    self.consume(TokenKind::Identifier, "Expect variable type")?
+                    self.consume(TokenKind::Identifier, "Expected variable type")?
                         .clone(),
                 );
             } else {

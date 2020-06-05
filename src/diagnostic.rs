@@ -77,7 +77,12 @@ impl Reporter for DefaultReporter {
 
         let offset = (0..offset).map(|_| " ").collect::<String>();
         let underline = (0..diagnostic.span.length).map(|_| "^").collect::<String>();
-        println!("  {}{}", offset, underline);
+        let colored_outline = if diagnostic.severity == Severity::Error {
+            underline.red()
+        } else {
+            underline.yellow()
+        };
+        println!("  {}{}", offset, colored_outline);
         println!("  {}\n", diagnostic.span.location());
     }
 }

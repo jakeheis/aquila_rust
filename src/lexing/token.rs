@@ -27,15 +27,19 @@ pub enum TokenKind {
     // Groupings
     LeftBrace,
     RightBrace,
+    LeftParen,
+    RightParen,
 
     // Keywords
     True,
     False,
+    Def,
     Let,
     If,
     Else,
 
     // Other
+    Comma,
     Semicolon,
     Colon,
     EOF,

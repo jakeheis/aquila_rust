@@ -64,8 +64,11 @@ impl Lexer {
             '!' => self.conditional_make_token('=', TokenKind::BangEqual, TokenKind::Bang),
             '{' => self.make_token(TokenKind::LeftBrace),
             '}' => self.make_token(TokenKind::RightBrace),
+            '(' => self.make_token(TokenKind::LeftParen),
+            ')' => self.make_token(TokenKind::RightParen),
             '0'..='9' => self.number(),
             'a'..='z' | 'A'..='Z' => self.identifier(),
+            ',' => self.make_token(TokenKind::Comma),
             ';' => self.make_token(TokenKind::Semicolon),
             ':' => self.make_token(TokenKind::Colon),
             ' ' => None,
@@ -114,6 +117,7 @@ impl Lexer {
             "let" => self.make_token(TokenKind::Let),
             "if" => self.make_token(TokenKind::If),
             "else" => self.make_token(TokenKind::Else),
+            "def" => self.make_token(TokenKind::Def),
             _ => Some(token),
         }
     }
