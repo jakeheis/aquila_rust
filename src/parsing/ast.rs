@@ -115,6 +115,7 @@ pub enum ExprKind {
     Binary(Box<Expr>, Token, Box<Expr>),
     Unary(Token, Box<Expr>),
     Call(Box<Expr>, Vec<Expr>),
+    Field(Box<Expr>, Token),
     Literal(Token),
     Variable(Token, Option<Token>),
 }
@@ -131,6 +132,7 @@ impl Expr {
             ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&lhs, &op, &rhs),
             ExprKind::Unary(op, expr) => visitor.visit_unary_expr(&op, &expr),
             ExprKind::Call(target, args) => visitor.visit_call_expr(&target, &args),
+            ExprKind::Field(target, field) => visitor.visit_field_expr(&target, &field),
             ExprKind::Literal(token) => visitor.visit_literal_expr(&token),
             ExprKind::Variable(name, var_type) => visitor.visit_variable_expr(&name, &var_type),
         }
@@ -168,6 +170,14 @@ impl Expr {
         }
     }
 
+    pub fn field(target: Expr, name: &Token) -> Self {
+        let span = Span::join(&target, name);
+        Expr {
+            kind: ExprKind::Field(Box::new(target), name.clone()),
+            span
+        }
+    }
+
     pub fn literal(token: &Token) -> Self {
         Expr {
             kind: ExprKind::Literal(token.clone()),
@@ -195,6 +205,7 @@ pub trait ExprVisitor {
     fn visit_binary_expr(&mut self, lhs: &Expr, op: &Token, rhs: &Expr) -> Self::ExprResult;
     fn visit_unary_expr(&mut self, op: &Token, expr: &Expr) -> Self::ExprResult;
     fn visit_call_expr(&mut self, target: &Expr, args: &[Expr]) -> Self::ExprResult;
+    fn visit_field_expr(&mut self, target: &Expr, field: &Token) -> Self::ExprResult;
     fn visit_literal_expr(&mut self, token: &Token) -> Self::ExprResult;
     fn visit_variable_expr(&mut self, name: &Token, var_type: &Option<Token>) -> Self::ExprResult;
 }
@@ -331,6 +342,13 @@ impl ExprVisitor for ASTPrinter {
             visitor.indent(|visitor| {
                 args.iter().for_each(|a| a.accept(visitor));
             });
+        })
+    }
+
+    fn visit_field_expr(&mut self, target: &Expr, field: &Token) {
+        self.write_ln(&format!("Field({})", field.lexeme()));
+        self.indent(|visitor| {
+            target.accept(visitor);
         })
     }
 

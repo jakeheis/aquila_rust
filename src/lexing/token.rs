@@ -40,6 +40,7 @@ pub enum TokenKind {
 
     // Other
     Comma,
+    Period,
     Semicolon,
     Colon,
     EOF,

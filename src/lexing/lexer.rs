@@ -69,6 +69,7 @@ impl Lexer {
             '0'..='9' => self.number(),
             'a'..='z' | 'A'..='Z' => self.identifier(),
             ',' => self.make_token(TokenKind::Comma),
+            '.' => self.make_token(TokenKind::Period),
             ';' => self.make_token(TokenKind::Semicolon),
             ':' => self.make_token(TokenKind::Colon),
             ' ' => None,

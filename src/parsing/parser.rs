@@ -227,7 +227,12 @@ impl Parser {
             }
         }
         let right_paren = self.consume(TokenKind::RightParen, "Expect ')' after arguments")?;
-        Ok(Expr::call(lhs, args, &right_paren))
+        Ok(Expr::call(lhs, args, right_paren))
+    }
+
+    fn field(&mut self, lhs: Expr, _can_assign: bool) -> Result<Expr> {
+        let field = self.consume(TokenKind::Identifier, "Expect field name after '.'")?;
+        Ok(Expr::field(lhs, field))
     }
 
     fn literal(&mut self, _can_assign: bool) -> Result<Expr> {
@@ -353,6 +358,7 @@ impl TokenKind {
             | TokenKind::Less
             | TokenKind::LessEqual => Some((Parser::binary, Precedence::Comparison)),
             TokenKind::LeftParen => Some((Parser::call, Precedence::Call)),
+            TokenKind::Period => Some((Parser::field, Precedence::Call)),
             _ => None,
         }
     }

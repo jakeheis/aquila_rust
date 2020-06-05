@@ -19,3 +19,5 @@ def add(lhs: int, rhs: int): int {
 }
 
 add(4, rhs * 3);
+lhs.rhs;
+lhs.add(4, rhs * 3).smt;
