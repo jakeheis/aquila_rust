@@ -46,7 +46,7 @@ impl Lexer {
             '-' => self.make_token(TokenKind::Minus),
             '*' => self.make_token(TokenKind::Star),
             '/' => {
-                if self.consume('/') {
+                if self.matches('/') {
                     self.comment()
                 } else {
                     self.make_token(TokenKind::Slash)
@@ -67,6 +67,7 @@ impl Lexer {
             '0'..='9' => self.number(),
             'a'..='z' | 'A'..='Z' => self.identifier(),
             ';' => self.make_token(TokenKind::Semicolon),
+            ':' => self.make_token(TokenKind::Colon),
             ' ' => None,
             '\n' => {
                 self.line += 1;
@@ -123,7 +124,7 @@ impl Lexer {
         kind1: TokenKind,
         kind2: TokenKind,
     ) -> Option<Token> {
-        if self.consume(character) {
+        if self.matches(character) {
             self.make_token(kind1)
         } else {
             self.make_token(kind2)
@@ -151,7 +152,7 @@ impl Lexer {
         )
     }
 
-    fn consume(&mut self, character: char) -> bool {
+    fn matches(&mut self, character: char) -> bool {
         if self.peek() == character {
             self.advance();
             true

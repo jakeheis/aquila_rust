@@ -77,13 +77,13 @@ impl Span {
         }
     }
 
-    pub fn join_opt<T, U>(lhs: &T, rhs: Option<U>) -> Span
+    pub fn join_opt<T, U>(lhs: &T, rhs: &Option<U>) -> Span
     where
         T: ContainsSpan,
         U: ContainsSpan,
     {
         if let Some(rhs) = rhs {
-            Span::join(lhs, &rhs)
+            Span::join(lhs, rhs)
         } else {
             lhs.span().clone()
         }

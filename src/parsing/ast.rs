@@ -9,7 +9,9 @@ pub struct Stmt {
 impl Stmt {
     pub fn accept<V: StmtVisitor>(&self, visitor: &mut V) -> V::StmtResult {
         match &self.kind {
-            StmtKind::VariableDecl(name, value) => visitor.visit_variable_decl(&name, &value),
+            StmtKind::VariableDecl(name, kind, value) => {
+                visitor.visit_variable_decl(&name, &kind, &value)
+            }
             StmtKind::IfStmt(condition, body, else_body) => {
                 visitor.visit_if_stmt(&condition, &body, &else_body)
             }
@@ -17,10 +19,15 @@ impl Stmt {
         }
     }
 
-    pub fn variable_decl(let_span: Span, name: Token, value: Expr) -> Self {
+    pub fn variable_decl(
+        let_span: Span,
+        name: Token,
+        var_type: Option<Token>,
+        value: Expr,
+    ) -> Self {
         let span = Span::join(&let_span, &value.span);
         Stmt {
-            kind: StmtKind::VariableDecl(name, value),
+            kind: StmtKind::VariableDecl(name, var_type, value),
             span,
         }
     }
@@ -49,7 +56,7 @@ impl Stmt {
 }
 
 pub enum StmtKind {
-    VariableDecl(Token, Expr),
+    VariableDecl(Token, Option<Token>, Expr),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     Expression(Expr),
 }
@@ -57,7 +64,12 @@ pub enum StmtKind {
 pub trait StmtVisitor {
     type StmtResult;
 
-    fn visit_variable_decl(&mut self, name: &Token, value: &Expr) -> Self::StmtResult;
+    fn visit_variable_decl(
+        &mut self,
+        name: &Token,
+        kind: &Option<Token>,
+        value: &Expr,
+    ) -> Self::StmtResult;
     fn visit_if_stmt(
         &mut self,
         condition: &Expr,
@@ -68,6 +80,14 @@ pub trait StmtVisitor {
 }
 
 // Expr
+
+pub enum ExprKind {
+    Assignment(Box<Expr>, Box<Expr>),
+    Binary(Box<Expr>, Token, Box<Expr>),
+    Unary(Token, Box<Expr>),
+    Literal(Token),
+    Variable(Token, Option<Token>),
+}
 
 pub struct Expr {
     pub kind: ExprKind,
@@ -81,7 +101,7 @@ impl Expr {
             ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&lhs, &op, &rhs),
             ExprKind::Unary(op, expr) => visitor.visit_unary_expr(&op, &expr),
             ExprKind::Literal(token) => visitor.visit_literal_expr(&token),
-            ExprKind::Variable(token) => visitor.visit_variable_expr(&token),
+            ExprKind::Variable(name, var_type) => visitor.visit_variable_expr(&name, &var_type),
         }
     }
 
@@ -116,24 +136,17 @@ impl Expr {
         }
     }
 
-    pub fn variable(token: &Token) -> Self {
+    pub fn variable(name: Token, var_type: Option<Token>) -> Self {
+        let span = Span::join_opt(&name, &var_type);
         Expr {
-            kind: ExprKind::Variable(token.clone()),
-            span: token.span.clone(),
+            kind: ExprKind::Variable(name, var_type),
+            span,
         }
     }
 
     pub fn lexeme(&self) -> &str {
         self.span.lexeme()
     }
-}
-
-pub enum ExprKind {
-    Assignment(Box<Expr>, Box<Expr>),
-    Binary(Box<Expr>, Token, Box<Expr>),
-    Unary(Token, Box<Expr>),
-    Literal(Token),
-    Variable(Token),
 }
 
 pub trait ExprVisitor {
@@ -143,7 +156,7 @@ pub trait ExprVisitor {
     fn visit_binary_expr(&mut self, lhs: &Expr, op: &Token, rhs: &Expr) -> Self::ExprResult;
     fn visit_unary_expr(&mut self, op: &Token, expr: &Expr) -> Self::ExprResult;
     fn visit_literal_expr(&mut self, token: &Token) -> Self::ExprResult;
-    fn visit_variable_expr(&mut self, token: &Token) -> Self::ExprResult;
+    fn visit_variable_expr(&mut self, name: &Token, var_type: &Option<Token>) -> Self::ExprResult;
 }
 
 // ASTPrinter
@@ -179,8 +192,13 @@ impl ASTPrinter {
 impl StmtVisitor for ASTPrinter {
     type StmtResult = ();
 
-    fn visit_variable_decl(&mut self, name: &Token, value: &Expr) {
-        self.write_ln(&format!("VariableDecl(name: {})", name.lexeme()));
+    fn visit_variable_decl(&mut self, name: &Token, kind: &Option<Token>, value: &Expr) {
+        let var_type = kind.as_ref().map(|t| t.lexeme()).unwrap_or("<none>");
+        self.write_ln(&format!(
+            "VariableDecl(name: {}, type: {})",
+            name.lexeme(),
+            var_type
+        ));
         self.indent(|visitor| {
             value.accept(visitor);
         })
@@ -242,7 +260,12 @@ impl ExprVisitor for ASTPrinter {
         self.write_ln(&format!("Literal({})", token.lexeme()))
     }
 
-    fn visit_variable_expr(&mut self, token: &Token) {
-        self.write_ln(&format!("Variable(name: {})", token.lexeme()))
+    fn visit_variable_expr(&mut self, name: &Token, var_type: &Option<Token>) {
+        let var_type = var_type.as_ref().map(|t| t.lexeme()).unwrap_or("<none>");
+        self.write_ln(&format!(
+            "Variable(name: {}, type: {})",
+            name.lexeme(),
+            var_type
+        ))
     }
 }

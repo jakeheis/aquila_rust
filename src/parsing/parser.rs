@@ -35,7 +35,10 @@ impl Parser {
         while !self.is_at_end() && Some(self.peek()) != end {
             match self.statement() {
                 Ok(stmt) => stmts.push(stmt),
-                Err(diagnostic) => self.reporter.report(diagnostic),
+                Err(diagnostic) => {
+                    self.reporter.report(diagnostic);
+                    self.synchronize();
+                }
             }
         }
         stmts
@@ -62,14 +65,32 @@ impl Parser {
         }
     }
 
+    fn synchronize(&mut self) {
+        while !self.is_at_end() && self.previous().kind != TokenKind::Semicolon {
+            let done = match self.peek() {
+                TokenKind::Let | TokenKind::If => true,
+                TokenKind::Semicolon => {
+                    self.advance();
+                    true
+                }
+                _ => {
+                    self.advance();
+                    false
+                }
+            };
+            if done {
+                break;
+            }
+        }
+    }
+
     fn variable_decl(&mut self) -> Result<Stmt> {
         let let_span = self.previous().span.clone();
-        let name = self
-            .consume(TokenKind::Identifier, "Expected variable name.")?
-            .clone();
+        self.advance();
+        let (name, kind) = self.parse_var(true, false)?;
         self.consume(TokenKind::Equal, "Expect '=' after variable declaration")?;
         let value = self.expression()?;
-        Ok(Stmt::variable_decl(let_span, name, value))
+        Ok(Stmt::variable_decl(let_span, name, kind, value))
     }
 
     fn if_stmt(&mut self) -> Result<Stmt> {
@@ -170,7 +191,8 @@ impl Parser {
     }
 
     fn variable(&mut self, can_assign: bool) -> Result<Expr> {
-        let variable = Expr::variable(self.previous());
+        let (name, kind) = self.parse_var(false, false)?;
+        let variable = Expr::variable(name, kind);
         if can_assign && self.matches(TokenKind::Equal) {
             self.assignment(variable)
         } else {
@@ -178,8 +200,40 @@ impl Parser {
         }
     }
 
+    fn parse_var(
+        &mut self,
+        allow_type: bool,
+        require_type: bool,
+    ) -> Result<(Token, Option<Token>)> {
+        let name = self.previous().clone();
+        let mut var_type: Option<Token> = None;
+
+        if self.matches(TokenKind::Colon) {
+            if allow_type {
+                var_type = Some(
+                    self.consume(TokenKind::Identifier, "Expect variable type")?
+                        .clone(),
+                );
+            } else {
+                return Err(Diagnostic::error_token(
+                    self.previous(),
+                    "Variable type not allowed here",
+                ));
+            }
+        } else {
+            if require_type {
+                return Err(Diagnostic::error_token(
+                    self.previous(),
+                    "Variable type required here",
+                ));
+            }
+        }
+
+        Ok((name, var_type))
+    }
+
     fn peek(&self) -> TokenKind {
-        self.tokens[self.index].kind
+        self.current().kind
     }
 
     fn consume(&mut self, kind: TokenKind, message: &str) -> Result<&Token> {
