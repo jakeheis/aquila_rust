@@ -114,6 +114,7 @@ pub enum ExprKind {
     Assignment(Box<Expr>, Box<Expr>),
     Binary(Box<Expr>, Token, Box<Expr>),
     Unary(Token, Box<Expr>),
+    Call(Box<Expr>, Vec<Expr>),
     Literal(Token),
     Variable(Token, Option<Token>),
 }
@@ -129,6 +130,7 @@ impl Expr {
             ExprKind::Assignment(target, value) => visitor.visit_assignment_expr(&target, &value),
             ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&lhs, &op, &rhs),
             ExprKind::Unary(op, expr) => visitor.visit_unary_expr(&op, &expr),
+            ExprKind::Call(target, args) => visitor.visit_call_expr(&target, &args),
             ExprKind::Literal(token) => visitor.visit_literal_expr(&token),
             ExprKind::Variable(name, var_type) => visitor.visit_variable_expr(&name, &var_type),
         }
@@ -158,6 +160,14 @@ impl Expr {
         }
     }
 
+    pub fn call(target: Expr, args: Vec<Expr>, right_paren: &Token) -> Self {
+        let span = Span::join(&target, right_paren);
+        Expr {
+            kind: ExprKind::Call(Box::new(target), args),
+            span
+        }
+    }
+
     pub fn literal(token: &Token) -> Self {
         Expr {
             kind: ExprKind::Literal(token.clone()),
@@ -184,6 +194,7 @@ pub trait ExprVisitor {
     fn visit_assignment_expr(&mut self, target: &Expr, value: &Expr) -> Self::ExprResult;
     fn visit_binary_expr(&mut self, lhs: &Expr, op: &Token, rhs: &Expr) -> Self::ExprResult;
     fn visit_unary_expr(&mut self, op: &Token, expr: &Expr) -> Self::ExprResult;
+    fn visit_call_expr(&mut self, target: &Expr, args: &[Expr]) -> Self::ExprResult;
     fn visit_literal_expr(&mut self, token: &Token) -> Self::ExprResult;
     fn visit_variable_expr(&mut self, name: &Token, var_type: &Option<Token>) -> Self::ExprResult;
 }
@@ -306,6 +317,20 @@ impl ExprVisitor for ASTPrinter {
         self.write_ln(&format!("Unary({})", op.lexeme()));
         self.indent(|visitor| {
             expr.accept(visitor);
+        })
+    }
+
+    fn visit_call_expr(&mut self, target: &Expr, args: &[Expr]) {
+        self.write_ln("Call");
+        self.indent(|visitor| {
+            visitor.write_ln("Target");
+            visitor.indent(|visitor| {
+                target.accept(visitor);
+            });
+            visitor.write_ln("Arguments");
+            visitor.indent(|visitor| {
+                args.iter().for_each(|a| a.accept(visitor));
+            });
         })
     }
 

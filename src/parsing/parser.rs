@@ -217,6 +217,19 @@ impl Parser {
         Ok(Expr::unary(operator, expr))
     }
 
+    fn call(&mut self, lhs: Expr, _can_assign: bool) -> Result<Expr> {
+        let mut args: Vec<Expr> = Vec::new();
+        while !self.is_at_end() && self.peek() != TokenKind::RightParen {
+            let arg = self.expression()?;
+            args.push(arg);
+            if self.peek() != TokenKind::RightParen {
+                self.consume(TokenKind::Comma, "Expect ',' between arguments")?;
+            }
+        }
+        let right_paren = self.consume(TokenKind::RightParen, "Expect ')' after arguments")?;
+        Ok(Expr::call(lhs, args, &right_paren))
+    }
+
     fn literal(&mut self, _can_assign: bool) -> Result<Expr> {
         Ok(Expr::literal(self.previous()))
     }
@@ -339,7 +352,7 @@ impl TokenKind {
             | TokenKind::GreaterEqual
             | TokenKind::Less
             | TokenKind::LessEqual => Some((Parser::binary, Precedence::Comparison)),
-            // TokenKind::Equal => Some((Parser::assignment, Precedence::Assignment)),
+            TokenKind::LeftParen => Some((Parser::call, Precedence::Call)),
             _ => None,
         }
     }
@@ -354,6 +367,7 @@ enum Precedence {
     Term,
     Factor,
     Unary,
+    Call,
     Atom,
 }
 
@@ -370,7 +384,8 @@ impl Precedence {
             Precedence::Comparison => Precedence::Term,
             Precedence::Term => Precedence::Factor,
             Precedence::Factor => Precedence::Unary,
-            Precedence::Unary => Precedence::Atom,
+            Precedence::Unary => Precedence::Call,
+            Precedence::Call => Precedence::Atom,
             Precedence::Atom => panic!(),
         }
     }

@@ -17,3 +17,5 @@
 def add(lhs: int, rhs: int): int {
     lhs + rhs;
 }
+
+add(4, rhs * 3);
