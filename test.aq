@@ -22,15 +22,20 @@
 // lhs.rhs;
 // lhs.add(4, rhs * 3).smt;    
 
-def add(third: int): int {
-    lhs + rhs + third
-}
+// def add(third: int): int {
+   // lhs + rhs + third
+// }
 
-type Adder {
-    let lhs: int;
-   let rhs: bool
+//type Adder {
+  //  let lhs: int;
+   //let rhs: bool
 
-    def add(third: int): int {
-        lhs + rhs + third;
-    }
-}
+    //def add(third: int): int {
+      //  lhs + rhs + third;
+    //}
+//}
+
+// -1;
+// !2;
+
+4 > 2 * 1 == false;

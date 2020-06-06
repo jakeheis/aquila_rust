@@ -2,6 +2,7 @@ use super::ast::*;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::source::*;
+use crate::program::*;
 use std::rc::Rc;
 
 type Result<T> = DiagnosticResult<T>;
@@ -20,20 +21,25 @@ enum Context {
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>, reporter: Rc<dyn Reporter>) -> Self {
+    pub fn new(program: LexedProgram, reporter: Rc<dyn Reporter>) -> Self {
         Parser {
-            tokens,
+            tokens: program.tokens,
             index: 0,
             reporter,
         }
     }
 
-    pub fn parse(&mut self) {
+    pub fn parse(&mut self) -> ParsedProgram {
         let statements = self.stmt_list(Context::TopLevel, None);
 
-        for stmt in statements {
+        for stmt in &statements {
             let mut printer = ASTPrinter::new();
             stmt.accept(&mut printer);
+        }
+
+        ParsedProgram {
+            source: Rc::clone(&self.tokens[0].span().source),
+            statements
         }
     }
 
@@ -60,13 +66,19 @@ impl Parser {
             if context == Context::TopLevel {
                 self.type_decl()
             } else {
-                Err(Diagnostic::error_token(self.previous(), "Type declaration not allowed"))
+                Err(Diagnostic::error_token(
+                    self.previous(),
+                    "Type declaration not allowed",
+                ))
             }
         } else if self.matches(TokenKind::Def) {
             if context == Context::TopLevel || context == Context::InsideType {
-                self.function_decl()    
+                self.function_decl()
             } else {
-                Err(Diagnostic::error_token(self.previous(), "Function declaration not allowed"))
+                Err(Diagnostic::error_token(
+                    self.previous(),
+                    "Function declaration not allowed",
+                ))
             }
         } else if self.matches(TokenKind::Let) {
             let allow_init = context != Context::InsideType;
@@ -74,21 +86,29 @@ impl Parser {
             self.consume(
                 TokenKind::Semicolon,
                 "Expected semicolon after variable declaration",
-            ).replace_span(&decl)?;
+            )
+            .replace_span(&decl)?;
             Ok(decl)
         } else if self.matches(TokenKind::If) {
             if context == Context::InsideFunction {
                 self.if_stmt()
             } else {
-                Err(Diagnostic::error_token(self.previous(), "If statement not allowed"))
+                Err(Diagnostic::error_token(
+                    self.previous(),
+                    "If statement not allowed",
+                ))
             }
         } else {
             if context == Context::TopLevel || context == Context::InsideFunction {
                 let stmt = Stmt::expression(self.parse_precedence(Precedence::Assignment)?);
-                self.consume(TokenKind::Semicolon, "Expected semicolon after expression").replace_span(&stmt)?;
+                self.consume(TokenKind::Semicolon, "Expected semicolon after expression")
+                    .replace_span(&stmt)?;
                 Ok(stmt)
             } else {
-                Err(Diagnostic::error_token(self.previous(), "Expression not allowed"))
+                Err(Diagnostic::error_token(
+                    self.previous(),
+                    "Expression not allowed",
+                ))
             }
         }
     }
@@ -96,7 +116,11 @@ impl Parser {
     fn synchronize(&mut self) {
         while !self.is_at_end() && self.previous().kind != TokenKind::Semicolon {
             let done = match self.peek() {
-                TokenKind::Type | TokenKind::Def | TokenKind::Let | TokenKind::If | TokenKind::RightBrace => true,
+                TokenKind::Type
+                | TokenKind::Def
+                | TokenKind::Let
+                | TokenKind::If
+                | TokenKind::RightBrace => true,
                 TokenKind::Semicolon => {
                     self.advance();
                     true
@@ -193,7 +217,10 @@ impl Parser {
                 let value = self.expression()?;
                 Ok(Stmt::variable_decl(let_span, name, kind, Some(value)))
             } else {
-                Err(Diagnostic::error_token(self.previous(), "Variable cannot be initialized"))
+                Err(Diagnostic::error_token(
+                    self.previous(),
+                    "Variable cannot be initialized",
+                ))
             }
         } else {
             Ok(Stmt::variable_decl(let_span, name, kind, None))
@@ -257,10 +284,10 @@ impl Parser {
         let mut lhs = prefix(self, can_assign)?;
 
         while !self.is_at_end() {
-            if let Some(infix_entry) = self.peek().infix_entry() {
-                if infix_entry.1 >= prec {
+            if let Some((infix_func, infix_prec)) = self.peek().infix_entry() {
+                if infix_prec >= prec {
                     self.advance();
-                    lhs = infix_entry.0(self, lhs, can_assign)?;
+                    lhs = infix_func(self, lhs, can_assign)?;
                     continue;
                 }
             }

@@ -46,10 +46,10 @@ impl SourceImpl {
 
 #[derive(Clone)]
 pub struct Span {
-    source: Source,
-    index: usize,
+    pub source: Source,
+    pub index: usize,
     pub length: usize,
-    line: usize,
+    pub line: usize,
 }
 
 impl Span {
@@ -113,10 +113,15 @@ impl Span {
     }
 }
 
-
 impl std::fmt::Display for Span {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { 
-        write!(f, "Span(in: {}, index: {}, length: {})", self.source.name(), self.index, self.length)
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "Span(in: {}, index: {}, length: {})",
+            self.source.name(),
+            self.index,
+            self.length
+        )
     }
 }
 

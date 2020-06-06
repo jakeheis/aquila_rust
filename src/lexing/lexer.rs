@@ -2,6 +2,7 @@ use super::token::*;
 use crate::diagnostic;
 use crate::source::*;
 use std::rc::Rc;
+use crate::program::*;
 
 pub struct Lexer {
     source: Source,
@@ -22,7 +23,7 @@ impl Lexer {
         }
     }
 
-    pub fn lex(&mut self) -> Vec<Token> {
+    pub fn lex(mut self) -> LexedProgram {
         let mut tokens = Vec::new();
 
         while !self.is_at_end() {
@@ -36,7 +37,10 @@ impl Lexer {
         self.start = self.current;
         tokens.push(self.make_token(TokenKind::EOF).unwrap());
 
-        tokens
+        LexedProgram {
+            source: self.source,
+            tokens
+        }
     }
 
     fn token(&mut self) -> Option<Token> {

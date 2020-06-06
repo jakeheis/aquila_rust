@@ -315,7 +315,7 @@ impl StmtVisitor for ASTPrinter {
         ));
         self.indent(|visitor| {
             if let Some(v) = value {
-                v.accept(visitor);                
+                v.accept(visitor);
             }
         })
     }
