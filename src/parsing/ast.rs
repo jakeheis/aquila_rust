@@ -2,9 +2,9 @@ use crate::lexing::*;
 use crate::source::*;
 
 pub enum StmtKind {
-    TypeDecl(Token, Vec<Expr>, Vec<Stmt>),
-    FunctionDecl(Token, Vec<Expr>, Option<Token>, Vec<Stmt>),
-    VariableDecl(Token, Option<Token>, Expr),
+    TypeDecl(Token, Vec<Stmt>, Vec<Stmt>),
+    FunctionDecl(Token, Vec<Stmt>, Option<Token>, Vec<Stmt>),
+    VariableDecl(Token, Option<Token>, Option<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     Expression(Expr),
 }
@@ -36,7 +36,7 @@ impl Stmt {
     pub fn type_decl(
         type_span: Span,
         name: Token,
-        fields: Vec<Expr>,
+        fields: Vec<Stmt>,
         methods: Vec<Stmt>,
         right_brace: &Token,
     ) -> Self {
@@ -50,7 +50,7 @@ impl Stmt {
     pub fn function_decl(
         def_span: Span,
         name: Token,
-        params: Vec<Expr>,
+        params: Vec<Stmt>,
         return_type: Option<Token>,
         body: Vec<Stmt>,
         right_brace_span: Span,
@@ -66,9 +66,9 @@ impl Stmt {
         let_span: Span,
         name: Token,
         var_type: Option<Token>,
-        value: Expr,
+        value: Option<Expr>,
     ) -> Self {
-        let span = Span::join(&let_span, &value.span);
+        let span = Span::join_opt(&let_span, &value);
         Stmt {
             kind: StmtKind::VariableDecl(name, var_type, value),
             span,
@@ -104,14 +104,14 @@ pub trait StmtVisitor {
     fn visit_type_decl(
         &mut self,
         name: &Token,
-        fields: &[Expr],
+        fields: &[Stmt],
         methods: &[Stmt],
     ) -> Self::StmtResult;
 
     fn visit_function_decl(
         &mut self,
         name: &Token,
-        params: &[Expr],
+        params: &[Stmt],
         return_type: &Option<Token>,
         body: &[Stmt],
     ) -> Self::StmtResult;
@@ -120,7 +120,7 @@ pub trait StmtVisitor {
         &mut self,
         name: &Token,
         kind: &Option<Token>,
-        value: &Expr,
+        value: &Option<Expr>,
     ) -> Self::StmtResult;
 
     fn visit_if_stmt(
@@ -268,7 +268,7 @@ impl ASTPrinter {
 impl StmtVisitor for ASTPrinter {
     type StmtResult = ();
 
-    fn visit_type_decl(&mut self, name: &Token, fields: &[Expr], methods: &[Stmt]) {
+    fn visit_type_decl(&mut self, name: &Token, fields: &[Stmt], methods: &[Stmt]) {
         self.write_ln(&format!("TypeDecl(name: {})", name.lexeme()));
         self.indent(|visitor| {
             visitor.write_ln("Fields");
@@ -285,7 +285,7 @@ impl StmtVisitor for ASTPrinter {
     fn visit_function_decl(
         &mut self,
         name: &Token,
-        params: &[Expr],
+        params: &[Stmt],
         return_type: &Option<Token>,
         body: &[Stmt],
     ) {
@@ -306,7 +306,7 @@ impl StmtVisitor for ASTPrinter {
         });
     }
 
-    fn visit_variable_decl(&mut self, name: &Token, kind: &Option<Token>, value: &Expr) {
+    fn visit_variable_decl(&mut self, name: &Token, kind: &Option<Token>, value: &Option<Expr>) {
         let var_type = kind.as_ref().map(|t| t.lexeme()).unwrap_or("<none>");
         self.write_ln(&format!(
             "VariableDecl(name: {}, type: {})",
@@ -314,7 +314,9 @@ impl StmtVisitor for ASTPrinter {
             var_type
         ));
         self.indent(|visitor| {
-            value.accept(visitor);
+            if let Some(v) = value {
+                v.accept(visitor);                
+            }
         })
     }
 

@@ -27,10 +27,10 @@ def add(third: int): int {
 }
 
 type Adder {
-    let lhs: int
-   let rhs
+    let lhs: int;
+   let rhs: bool
 
     def add(third: int): int {
-        lhs + rhs + third
+        lhs + rhs + third;
     }
 }

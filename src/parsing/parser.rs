@@ -12,6 +12,13 @@ pub struct Parser {
     reporter: Rc<dyn Reporter>,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum Context {
+    TopLevel,
+    InsideType,
+    InsideFunction,
+}
+
 impl Parser {
     pub fn new(tokens: Vec<Token>, reporter: Rc<dyn Reporter>) -> Self {
         Parser {
@@ -22,7 +29,7 @@ impl Parser {
     }
 
     pub fn parse(&mut self) {
-        let statements = self.stmt_list(None);
+        let statements = self.stmt_list(Context::TopLevel, None);
 
         for stmt in statements {
             let mut printer = ASTPrinter::new();
@@ -30,10 +37,10 @@ impl Parser {
         }
     }
 
-    fn stmt_list(&mut self, end: Option<TokenKind>) -> Vec<Stmt> {
+    fn stmt_list(&mut self, context: Context, end: Option<TokenKind>) -> Vec<Stmt> {
         let mut stmts: Vec<Stmt> = Vec::new();
         while !self.is_at_end() && Some(self.peek()) != end {
-            match self.statement() {
+            match self.statement(context) {
                 Ok(stmt) => stmts.push(stmt),
                 Err(diagnostic) => {
                     self.reporter.report(diagnostic);
@@ -44,35 +51,52 @@ impl Parser {
         stmts
     }
 
-    fn block(&mut self) -> Vec<Stmt> {
-        self.stmt_list(Some(TokenKind::RightBrace))
+    fn block(&mut self, context: Context) -> Vec<Stmt> {
+        self.stmt_list(context, Some(TokenKind::RightBrace))
     }
 
-    fn statement(&mut self) -> Result<Stmt> {
+    fn statement(&mut self, context: Context) -> Result<Stmt> {
         if self.matches(TokenKind::Type) {
-            self.type_decl()
+            if context == Context::TopLevel {
+                self.type_decl()
+            } else {
+                Err(Diagnostic::error_token(self.previous(), "Type declaration not allowed"))
+            }
         } else if self.matches(TokenKind::Def) {
-            self.function_decl()
+            if context == Context::TopLevel || context == Context::InsideType {
+                self.function_decl()    
+            } else {
+                Err(Diagnostic::error_token(self.previous(), "Function declaration not allowed"))
+            }
         } else if self.matches(TokenKind::Let) {
-            let decl = self.variable_decl()?;
+            let allow_init = context != Context::InsideType;
+            let decl = self.variable_decl(allow_init)?;
             self.consume(
                 TokenKind::Semicolon,
                 "Expected semicolon after variable declaration",
             ).replace_span(&decl)?;
             Ok(decl)
         } else if self.matches(TokenKind::If) {
-            self.if_stmt()
+            if context == Context::InsideFunction {
+                self.if_stmt()
+            } else {
+                Err(Diagnostic::error_token(self.previous(), "If statement not allowed"))
+            }
         } else {
-            let stmt = Stmt::expression(self.parse_precedence(Precedence::Assignment)?);
-            self.consume(TokenKind::Semicolon, "Expected semicolon after expression").replace_span(&stmt)?;
-            Ok(stmt)
+            if context == Context::TopLevel || context == Context::InsideFunction {
+                let stmt = Stmt::expression(self.parse_precedence(Precedence::Assignment)?);
+                self.consume(TokenKind::Semicolon, "Expected semicolon after expression").replace_span(&stmt)?;
+                Ok(stmt)
+            } else {
+                Err(Diagnostic::error_token(self.previous(), "Expression not allowed"))
+            }
         }
     }
 
     fn synchronize(&mut self) {
         while !self.is_at_end() && self.previous().kind != TokenKind::Semicolon {
             let done = match self.peek() {
-                TokenKind::Let | TokenKind::If | TokenKind::RightBrace => true,
+                TokenKind::Type | TokenKind::Def | TokenKind::Let | TokenKind::If | TokenKind::RightBrace => true,
                 TokenKind::Semicolon => {
                     self.advance();
                     true
@@ -95,31 +119,14 @@ impl Parser {
             .clone();
         self.consume(TokenKind::LeftBrace, "Expect '{' after type name")?;
 
-        let mut fields: Vec<Expr> = Vec::new();
+        let mut fields: Vec<Stmt> = Vec::new();
         let mut methods: Vec<Stmt> = Vec::new();
-        while !self.is_at_end() && self.peek() != TokenKind::RightBrace {
-            if self.matches(TokenKind::Let) {
-                self.advance();
-                match self.parse_var(true, true) {
-                    Ok((name, kind)) => fields.push(Expr::variable(name, kind)),
-                    Err(diagnostic) => {
-                        self.reporter.report(diagnostic);
-                        continue
-                    }
-                }
-            } else if self.matches(TokenKind::Def) {
-                match self.function_decl() {
-                    Ok(decl) => methods.push(decl),
-                    Err(diagnostic) => {
-                        self.reporter.report(diagnostic);
-                        continue
-                    }
-                }
-            } else {
-                return Err(Diagnostic::error_token(
-                    self.current(),
-                    "Expected field or method declaration",
-                ));
+
+        for stmt in self.block(Context::InsideType) {
+            match stmt.kind {
+                StmtKind::VariableDecl(_, _, _) => fields.push(stmt),
+                StmtKind::FunctionDecl(_, _, _, _) => methods.push(stmt),
+                _ => panic!(),
             }
         }
 
@@ -140,12 +147,10 @@ impl Parser {
             .consume(TokenKind::Identifier, "Expect function name")?
             .clone();
 
-        let mut params: Vec<Expr> = Vec::new();
+        let mut params: Vec<Stmt> = Vec::new();
         self.consume(TokenKind::LeftParen, "Expect '(' after function name")?;
         while !self.is_at_end() && self.peek() != TokenKind::RightParen {
-            self.consume(TokenKind::Identifier, "Expect parameter name")?;
-            let (name, kind) = self.parse_var(true, true)?;
-            params.push(Expr::variable(name, kind));
+            params.push(self.variable_decl(false)?);
             if self.peek() != TokenKind::RightParen {
                 self.consume(TokenKind::Comma, "Expect ',' separating parameters")?;
             }
@@ -165,7 +170,7 @@ impl Parser {
             TokenKind::LeftBrace,
             "Expect '{' after function declaration",
         )?;
-        let body = self.block();
+        let body = self.block(Context::InsideFunction);
         let right_brace = self.consume(TokenKind::RightBrace, "Expect '}' after function body")?;
 
         Ok(Stmt::function_decl(
@@ -178,13 +183,21 @@ impl Parser {
         ))
     }
 
-    fn variable_decl(&mut self) -> Result<Stmt> {
+    fn variable_decl(&mut self, allow_initializer: bool) -> Result<Stmt> {
         let let_span = self.previous().span.clone();
         self.consume(TokenKind::Identifier, "Expected variable name")?;
-        let (name, kind) = self.parse_var(true, false)?;
-        self.consume(TokenKind::Equal, "Expect '=' after variable declaration")?;
-        let value = self.expression()?;
-        Ok(Stmt::variable_decl(let_span, name, kind, value))
+        let (name, kind) = self.parse_var(true, !allow_initializer)?;
+
+        if self.matches(TokenKind::Equal) {
+            if allow_initializer {
+                let value = self.expression()?;
+                Ok(Stmt::variable_decl(let_span, name, kind, Some(value)))
+            } else {
+                Err(Diagnostic::error_token(self.previous(), "Variable cannot be initialized"))
+            }
+        } else {
+            Ok(Stmt::variable_decl(let_span, name, kind, None))
+        }
     }
 
     fn if_stmt(&mut self) -> Result<Stmt> {
@@ -193,7 +206,7 @@ impl Parser {
         let condition = self.expression()?;
 
         self.consume(TokenKind::LeftBrace, "Expect '{' after condition")?;
-        let body = self.block();
+        let body = self.block(Context::InsideFunction);
 
         let mut end_brace_span = self
             .consume(TokenKind::RightBrace, "Expect '}' after if body")?
@@ -202,7 +215,7 @@ impl Parser {
 
         let else_body = if self.matches(TokenKind::Else) {
             self.consume(TokenKind::LeftBrace, "Expect '{' after else")?;
-            let block = self.block();
+            let block = self.block(Context::InsideFunction);
             end_brace_span = self
                 .consume(TokenKind::RightBrace, "Expect '}' after else body")?
                 .span
