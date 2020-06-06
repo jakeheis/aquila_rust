@@ -14,10 +14,23 @@
 
 // let a = 4 + 1 + +;
 
-def add(lhs: int, rhs: int): int {
-    lhs + rhs;
+//def add(lhs: int, rhs: int): int {
+    //lhs + rhs;
+//}
+
+// add(4, rhs * 3);
+// lhs.rhs;
+// lhs.add(4, rhs * 3).smt;    
+
+def add(third: int): int {
+    lhs + rhs + third
 }
 
-add(4, rhs * 3);
-lhs.rhs;
-lhs.add(4, rhs * 3).smt;
+type Adder {
+    let lhs: int
+   let rhs
+
+    def add(third: int): int {
+        lhs + rhs + third
+    }
+}

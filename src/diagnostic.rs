@@ -10,7 +10,7 @@ enum Severity {
     // Warning,
 }
 
-type DiagnosticResult<T> = Result<T, Diagnostic>;
+pub type DiagnosticResult<T> = Result<T, Diagnostic>;
 
 pub struct Diagnostic {
     severity: Severity,
@@ -37,17 +37,17 @@ impl Diagnostic {
 }
 
 impl ReplaceableSpan for Diagnostic {
-    fn replace_span(self, new_span: &Span) -> Diagnostic {
+    fn replace_span<U: ContainsSpan>(self, new_span: &U) -> Diagnostic {
         Diagnostic {
             severity: self.severity,
-            span: new_span.clone(),
+            span: new_span.span().clone(),
             message: self.message,
         }
     }
 }
 
 impl<T> ReplaceableSpan for DiagnosticResult<T> {
-    fn replace_span(self, new_span: &Span) -> DiagnosticResult<T> {
+    fn replace_span<U: ContainsSpan>(self, new_span: &U) -> DiagnosticResult<T> {
         self.map_err(|e| e.replace_span(new_span))
     }
 }

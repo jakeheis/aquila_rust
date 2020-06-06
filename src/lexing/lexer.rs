@@ -115,6 +115,7 @@ impl Lexer {
         match token.lexeme() {
             "true" => self.make_token(TokenKind::True),
             "false" => self.make_token(TokenKind::False),
+            "type" => self.make_token(TokenKind::Type),
             "let" => self.make_token(TokenKind::Let),
             "if" => self.make_token(TokenKind::If),
             "else" => self.make_token(TokenKind::Else),

@@ -33,6 +33,7 @@ pub enum TokenKind {
     // Keywords
     True,
     False,
+    Type,
     Def,
     Let,
     If,

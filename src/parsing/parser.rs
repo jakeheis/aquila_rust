@@ -4,7 +4,7 @@ use crate::lexing::*;
 use crate::source::*;
 use std::rc::Rc;
 
-type Result<T> = std::result::Result<T, Diagnostic>;
+type Result<T> = DiagnosticResult<T>;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -49,20 +49,22 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Stmt> {
-        if self.matches(TokenKind::Def) {
+        if self.matches(TokenKind::Type) {
+            self.type_decl()
+        } else if self.matches(TokenKind::Def) {
             self.function_decl()
         } else if self.matches(TokenKind::Let) {
             let decl = self.variable_decl()?;
             self.consume(
                 TokenKind::Semicolon,
                 "Expected semicolon after variable declaration",
-            )?;
+            ).replace_span(&decl)?;
             Ok(decl)
         } else if self.matches(TokenKind::If) {
             self.if_stmt()
         } else {
             let stmt = Stmt::expression(self.parse_precedence(Precedence::Assignment)?);
-            self.consume(TokenKind::Semicolon, "Expected semicolon after expression")?;
+            self.consume(TokenKind::Semicolon, "Expected semicolon after expression").replace_span(&stmt)?;
             Ok(stmt)
         }
     }
@@ -70,7 +72,7 @@ impl Parser {
     fn synchronize(&mut self) {
         while !self.is_at_end() && self.previous().kind != TokenKind::Semicolon {
             let done = match self.peek() {
-                TokenKind::Let | TokenKind::If => true,
+                TokenKind::Let | TokenKind::If | TokenKind::RightBrace => true,
                 TokenKind::Semicolon => {
                     self.advance();
                     true
@@ -86,9 +88,57 @@ impl Parser {
         }
     }
 
+    fn type_decl(&mut self) -> Result<Stmt> {
+        let type_span = self.previous().span.clone();
+        let name = self
+            .consume(TokenKind::Identifier, "Expect type name")?
+            .clone();
+        self.consume(TokenKind::LeftBrace, "Expect '{' after type name")?;
+
+        let mut fields: Vec<Expr> = Vec::new();
+        let mut methods: Vec<Stmt> = Vec::new();
+        while !self.is_at_end() && self.peek() != TokenKind::RightBrace {
+            if self.matches(TokenKind::Let) {
+                self.advance();
+                match self.parse_var(true, true) {
+                    Ok((name, kind)) => fields.push(Expr::variable(name, kind)),
+                    Err(diagnostic) => {
+                        self.reporter.report(diagnostic);
+                        continue
+                    }
+                }
+            } else if self.matches(TokenKind::Def) {
+                match self.function_decl() {
+                    Ok(decl) => methods.push(decl),
+                    Err(diagnostic) => {
+                        self.reporter.report(diagnostic);
+                        continue
+                    }
+                }
+            } else {
+                return Err(Diagnostic::error_token(
+                    self.current(),
+                    "Expected field or method declaration",
+                ));
+            }
+        }
+
+        let right_brace = self.consume(TokenKind::RightBrace, "Expect '}' after type body")?;
+
+        Ok(Stmt::type_decl(
+            type_span,
+            name,
+            fields,
+            methods,
+            right_brace,
+        ))
+    }
+
     fn function_decl(&mut self) -> Result<Stmt> {
         let def_span = self.previous().span.clone();
-        let name = self.consume(TokenKind::Identifier, "Expect function name")?.clone();
+        let name = self
+            .consume(TokenKind::Identifier, "Expect function name")?
+            .clone();
 
         let mut params: Vec<Expr> = Vec::new();
         self.consume(TokenKind::LeftParen, "Expect '(' after function name")?;
@@ -103,16 +153,29 @@ impl Parser {
         self.consume(TokenKind::RightParen, "Expect closing ')'")?;
 
         let return_type = if self.matches(TokenKind::Colon) {
-            Some(self.consume(TokenKind::Identifier, "Expect return type after ':'")?.clone())
+            Some(
+                self.consume(TokenKind::Identifier, "Expect return type after ':'")?
+                    .clone(),
+            )
         } else {
             None
         };
 
-        self.consume(TokenKind::LeftBrace, "Expect '{' after function declaration")?;
+        self.consume(
+            TokenKind::LeftBrace,
+            "Expect '{' after function declaration",
+        )?;
         let body = self.block();
         let right_brace = self.consume(TokenKind::RightBrace, "Expect '}' after function body")?;
 
-        Ok(Stmt::function_decl(def_span, name, params, return_type, body, right_brace.span().clone()))
+        Ok(Stmt::function_decl(
+            def_span,
+            name,
+            params,
+            return_type,
+            body,
+            right_brace.span().clone(),
+        ))
     }
 
     fn variable_decl(&mut self) -> Result<Stmt> {
@@ -266,14 +329,14 @@ impl Parser {
             } else {
                 return Err(Diagnostic::error_token(
                     self.previous(),
-                    "Variable type not allowed here",
+                    "Variable type not allowed",
                 ));
             }
         } else {
             if require_type {
                 return Err(Diagnostic::error_token(
                     self.previous(),
-                    "Variable type required here",
+                    "Variable type required",
                 ));
             }
         }
@@ -290,11 +353,10 @@ impl Parser {
             return Err(Diagnostic::error_token(self.previous(), message));
         }
 
-        let consumed = self.advance();
-        if consumed.kind == kind {
-            Ok(consumed)
+        if self.matches(kind) {
+            Ok(self.previous())
         } else {
-            Err(Diagnostic::error_token(consumed, message))
+            Err(Diagnostic::error_token(self.current(), message))
         }
     }
 
@@ -325,6 +387,10 @@ impl Parser {
 
     fn is_at_end(&self) -> bool {
         self.peek() == TokenKind::EOF
+    }
+
+    fn _print_state(&self) {
+        println!("prev {} cur {}", self.previous(), self.current());
     }
 }
 

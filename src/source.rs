@@ -104,12 +104,23 @@ impl Span {
             start -= 1;
         }
         let mut end = self.index + self.length;
-        while end + 1 < self.source.length() && self.source.character(end + 1) != '\n' {
-            end += 1;
+        if self.source.character(end) != '\n' {
+            while end + 1 < self.source.length() && self.source.character(end + 1) != '\n' {
+                end += 1;
+            }
         }
         (&self.source.content[start..end], self.index - start)
     }
 }
+
+
+impl std::fmt::Display for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { 
+        write!(f, "Span(in: {}, index: {}, length: {})", self.source.name(), self.index, self.length)
+    }
+}
+
+// Span traits
 
 pub trait ContainsSpan {
     fn span(&self) -> &Span;
@@ -154,5 +165,5 @@ impl<T: ContainsSpan> ComputesSpan for Vec<T> {
 }
 
 pub trait ReplaceableSpan {
-    fn replace_span(self, new_span: &Span) -> Self;
+    fn replace_span<T: ContainsSpan>(self, new_span: &T) -> Self;
 }
