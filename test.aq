@@ -38,6 +38,14 @@
 // -1;
 // !2;
 
-false > 2 * 1 == false;
+// false > 2 * 1 == false;
 
-4 + false;
+// 4 + false;
+
+let a: int = 1 == 2;
+
+def add(third: int, fourth: int): int {
+  lhs + rhs + third;
+}
+
+add(3, true);

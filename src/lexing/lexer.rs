@@ -1,8 +1,8 @@
 use super::token::*;
 use crate::diagnostic;
+use crate::program::*;
 use crate::source::*;
 use std::rc::Rc;
-use crate::program::*;
 
 pub struct Lexer {
     source: Source,
@@ -39,7 +39,7 @@ impl Lexer {
 
         LexedProgram {
             source: self.source,
-            tokens
+            tokens,
         }
     }
 
@@ -147,8 +147,8 @@ impl Lexer {
     }
 
     fn error(&self, message: &str) {
-        self.reporter.report(diagnostic::Diagnostic::error_span(
-            self.current_span(),
+        self.reporter.report(diagnostic::Diagnostic::error(
+            &self.current_span(),
             message,
         ));
     }

@@ -1,8 +1,8 @@
 use super::ast::*;
 use crate::diagnostic::*;
 use crate::lexing::*;
-use crate::source::*;
 use crate::program::*;
+use crate::source::*;
 use std::rc::Rc;
 
 type Result<T> = DiagnosticResult<T>;
@@ -39,7 +39,7 @@ impl Parser {
 
         ParsedProgram {
             source: Rc::clone(&self.tokens[0].span().source),
-            statements
+            statements,
         }
     }
 
@@ -66,7 +66,7 @@ impl Parser {
             if context == Context::TopLevel {
                 self.type_decl()
             } else {
-                Err(Diagnostic::error_token(
+                Err(Diagnostic::error(
                     self.previous(),
                     "Type declaration not allowed",
                 ))
@@ -75,7 +75,7 @@ impl Parser {
             if context == Context::TopLevel || context == Context::InsideType {
                 self.function_decl()
             } else {
-                Err(Diagnostic::error_token(
+                Err(Diagnostic::error(
                     self.previous(),
                     "Function declaration not allowed",
                 ))
@@ -93,7 +93,7 @@ impl Parser {
             if context == Context::InsideFunction {
                 self.if_stmt()
             } else {
-                Err(Diagnostic::error_token(
+                Err(Diagnostic::error(
                     self.previous(),
                     "If statement not allowed",
                 ))
@@ -105,7 +105,7 @@ impl Parser {
                     .replace_span(&stmt)?;
                 Ok(stmt)
             } else {
-                Err(Diagnostic::error_token(
+                Err(Diagnostic::error(
                     self.previous(),
                     "Expression not allowed",
                 ))
@@ -217,7 +217,7 @@ impl Parser {
                 let value = self.expression()?;
                 Ok(Stmt::variable_decl(let_span, name, kind, Some(value)))
             } else {
-                Err(Diagnostic::error_token(
+                Err(Diagnostic::error(
                     self.previous(),
                     "Variable cannot be initialized",
                 ))
@@ -267,7 +267,7 @@ impl Parser {
 
     fn parse_precedence(&mut self, prec: Precedence) -> Result<Expr> {
         if self.is_at_end() {
-            return Err(Diagnostic::error_token(
+            return Err(Diagnostic::error(
                 self.previous(),
                 "Expected expression",
             ));
@@ -277,7 +277,7 @@ impl Parser {
             .advance()
             .kind
             .prefix()
-            .ok_or_else(|| Diagnostic::error_token(self.previous(), "Expected expression"))?;
+            .ok_or_else(|| Diagnostic::error(self.previous(), "Expected expression"))?;
 
         let can_assign = prec <= Precedence::Assignment;
 
@@ -296,7 +296,7 @@ impl Parser {
         }
 
         if can_assign && self.matches(TokenKind::Equal) {
-            return Err(Diagnostic::error_expr(&lhs, "Invalid assignment target"));
+            return Err(Diagnostic::error(&lhs, "Invalid assignment target"));
         }
 
         Ok(lhs)
@@ -367,14 +367,14 @@ impl Parser {
                         .clone(),
                 );
             } else {
-                return Err(Diagnostic::error_token(
+                return Err(Diagnostic::error(
                     self.previous(),
                     "Variable type not allowed",
                 ));
             }
         } else {
             if require_type {
-                return Err(Diagnostic::error_token(
+                return Err(Diagnostic::error(
                     self.previous(),
                     "Variable type required",
                 ));
@@ -390,13 +390,13 @@ impl Parser {
 
     fn consume(&mut self, kind: TokenKind, message: &str) -> Result<&Token> {
         if self.is_at_end() {
-            return Err(Diagnostic::error_token(self.previous(), message));
+            return Err(Diagnostic::error(self.previous(), message));
         }
 
         if self.matches(kind) {
             Ok(self.previous())
         } else {
-            Err(Diagnostic::error_token(self.current(), message))
+            Err(Diagnostic::error(self.current(), message))
         }
     }
 

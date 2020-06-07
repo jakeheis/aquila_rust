@@ -19,20 +19,12 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn error_span(span: Span, message: &str) -> Self {
+    pub fn error<T: ContainsSpan>(span: &T, message: &str) -> Self {
         Diagnostic {
             severity: Severity::Error,
-            span: span,
+            span: span.span().clone(),
             message: String::from(message),
         }
-    }
-
-    pub fn error_token(token: &Token, message: &str) -> Self {
-        Diagnostic::error_span(token.span.clone(), message)
-    }
-
-    pub fn error_expr(expr: &Expr, message: &str) -> Self {
-        Diagnostic::error_span(expr.span.clone(), message)
     }
 }
 
