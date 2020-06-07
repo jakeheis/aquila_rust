@@ -97,73 +97,40 @@ impl ExprVisitor for TypeChecker {
         let lhs_type = lhs.accept(self)?;
         let rhs_type = rhs.accept(self)?;
 
-        match op.kind {
-            TokenKind::Plus => {
-                if !lhs_type.can_add() {
-                    self.type_mismatch(lhs, lhs_type, NodeType::Int)
-                } else if !rhs_type.can_add() {
-                    self.type_mismatch(rhs, rhs_type, NodeType::Int)
-                } else if lhs_type != rhs_type {
-                    self.type_mismatch(rhs, rhs_type, lhs_type)
-                } else {
-                    Ok(lhs_type)
-                }
-            }
-            TokenKind::Minus | TokenKind::Star | TokenKind::Slash => {
-                if !lhs_type.can_math() {
-                    self.type_mismatch(lhs, lhs_type, NodeType::Int)
-                } else if !rhs_type.can_math() {
-                    self.type_mismatch(rhs, rhs_type, NodeType::Int)
-                } else {
-                    Ok(lhs_type)
-                }
-            },
-            TokenKind::AmpersandAmpersand | TokenKind::BarBar => {
-                if !lhs_type.can_logic() {
-                    self.type_mismatch(lhs, lhs_type, NodeType::Int)
-                } else if !rhs_type.can_logic() {
-                    self.type_mismatch(rhs, rhs_type, NodeType::Int)
-                } else {
-                    Ok(NodeType::Bool)
-                }
-            },
-            TokenKind::EqualEqual | TokenKind::BangEqual => {
-                if !lhs_type.can_equal() {
-                    self.type_mismatch(lhs, lhs_type, NodeType::Int)
-                } else if !rhs_type.can_equal() {
-                    self.type_mismatch(rhs, rhs_type, NodeType::Int)
-                } else if lhs_type != rhs_type {
-                    self.type_mismatch(rhs, rhs_type, lhs_type)
-                } else {
-                    Ok(NodeType::Bool)
-                }
-            },
+        let entries: &[BinaryEntry] = match op.kind {
+            TokenKind::Plus => &ADDITION_ENTRIES,
+            TokenKind::Minus | TokenKind::Star | TokenKind::Slash => &MATH_ENTRIES,
+            TokenKind::AmpersandAmpersand | TokenKind::BarBar => &LOGIC_ENTRIES,
+            TokenKind::EqualEqual | TokenKind::BangEqual => &EQUALITY_ENTRIES,
             TokenKind::Greater
             | TokenKind::GreaterEqual
             | TokenKind::Less
-            | TokenKind::LessEqual => {
-                if !lhs_type.can_compare() {
-                    self.type_mismatch(lhs, lhs_type, NodeType::Int)
-                } else if !rhs_type.can_compare() {
-                    self.type_mismatch(rhs, rhs_type, NodeType::Int)
-                } else {
-                    Ok(NodeType::Bool)
-                }
-            }
+            | TokenKind::LessEqual => &COMPARISON_ENTRIES,
             _ => panic!()
+        };
+
+        if let Some(matching_entry) = entries.iter().find(|e| e.0 == lhs_type && e.1 == rhs_type) {
+            Ok(matching_entry.2.clone())
+        } else {
+            let message = format!("Cannot {} on {} and {}", op.lexeme(), lhs_type, rhs_type);
+            Err(Diagnostic::error_span(Span::join(lhs, rhs), &message))
         }
     }
 
     fn visit_unary_expr(&mut self, op: &Token, expr: &Expr) -> Self::ExprResult {
         let operand_type = expr.accept(self)?;
-        match op.kind {
-            TokenKind::Bang if !operand_type.can_invert() => {
-                self.type_mismatch(expr, operand_type, NodeType::Bool)
-            },
-            TokenKind::Minus if !operand_type.can_negate() => {
-                self.type_mismatch(expr, operand_type, NodeType::Int)
-            },
-            _ => Ok(operand_type)
+        
+        let entries: &[NodeType] = match op.kind {
+            TokenKind::Minus => &NEGATE_ENTRIES,
+            TokenKind::Bang => &INVERT_ENTRIES,
+            _ => panic!()
+        };
+
+        if entries.contains(&operand_type) {
+            Ok(operand_type.clone())
+        } else {
+            let message = format!("Cannot {} on {}", op.lexeme(), operand_type);
+            Err(Diagnostic::error_expr(expr, &message))
         }
     }
 
@@ -190,60 +157,62 @@ impl ExprVisitor for TypeChecker {
 
 }
 
-#[derive(Debug, PartialEq)]
+// NodeType
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum NodeType {
     Int,
     Bool,
     Function(Vec<NodeType>, Box<NodeType>),
 }
 
-impl NodeType {
-    fn can_invert(&self) -> bool {
-        match self {
-            NodeType::Bool => true,
-            _ => false,
-        }
-    }
-
-    fn can_negate(&self) -> bool {
-        match self {
-            NodeType::Int => true,
-            _ => false,
-        }
-    }
-
-    fn can_add(&self) -> bool {
-        match self {
-            NodeType::Int => true,
-            _ => false,
-        }
-    }
-
-    fn can_math(&self) -> bool {
-        match self {
-            NodeType::Int => true,
-            _ => false,
-        }
-    }
-
-    fn can_logic(&self) -> bool {
-        match self {
-            NodeType::Bool => true,
-            _ => false,
-        }
-    }
-
-    fn can_equal(&self) -> bool {
-        match self {
-            NodeType::Int | NodeType::Bool => true,
-            _ => false,
-        }
-    }
-
-    fn can_compare(&self) -> bool {
-        match self {
-            NodeType::Int => true,
-            _ => false,
-        }
-    }
+impl std::fmt::Display for NodeType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { 
+        let kind = match self {
+            NodeType::Int => String::from("int"),
+            NodeType::Bool => String::from("bool"),
+            NodeType::Function(params, ret) => {
+                let mut string = String::from("(");
+                if let Some(first) = params.first() {
+                    string += &first.to_string()
+                }
+                params.iter().skip(1).for_each(|p| {
+                    string += &format!(", {}", p)
+                });
+                string
+            }
+        };
+        write!(f, "{}", kind)
+     }
 }
+
+const NEGATE_ENTRIES: [NodeType; 1] = [
+    NodeType::Int
+];
+
+const INVERT_ENTRIES: [NodeType; 1] = [
+    NodeType::Bool
+];
+
+type BinaryEntry = (NodeType, NodeType, NodeType);
+
+const ADDITION_ENTRIES: [BinaryEntry; 1] = [
+    (NodeType::Int, NodeType::Int, NodeType::Int)
+];
+
+const MATH_ENTRIES: [BinaryEntry; 1] = [
+    (NodeType::Int, NodeType::Int, NodeType::Int)
+];
+
+const LOGIC_ENTRIES: [BinaryEntry; 1] = [
+    (NodeType::Bool, NodeType::Bool, NodeType::Bool)
+];
+
+const EQUALITY_ENTRIES: [BinaryEntry; 2] = [
+    (NodeType::Int, NodeType::Int, NodeType::Bool),
+    (NodeType::Bool, NodeType::Bool, NodeType::Bool)
+];
+
+const COMPARISON_ENTRIES: [BinaryEntry; 1] = [
+    (NodeType::Int, NodeType::Int, NodeType::Bool),
+];
