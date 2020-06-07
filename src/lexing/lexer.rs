@@ -1,5 +1,5 @@
 use super::token::*;
-use crate::diagnostic;
+use crate::diagnostic::*;
 use crate::program::*;
 use crate::source::*;
 use std::rc::Rc;
@@ -9,11 +9,11 @@ pub struct Lexer {
     start: usize,
     current: usize,
     line: usize,
-    reporter: Rc<dyn diagnostic::Reporter>,
+    reporter: Rc<dyn Reporter>,
 }
 
 impl Lexer {
-    pub fn new(source: Source, reporter: Rc<dyn diagnostic::Reporter>) -> Self {
+    pub fn new(source: Source, reporter: Rc<dyn Reporter>) -> Self {
         Lexer {
             source,
             start: 0,
@@ -103,6 +103,15 @@ impl Lexer {
                 break;
             }
         }
+        if self.matches('.') {
+            while !self.is_at_end() {
+                if let '0'..='9' = self.peek() {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
         self.make_token(TokenKind::Number)
     }
 
@@ -143,12 +152,12 @@ impl Lexer {
 
     fn make_token(&self, kind: TokenKind) -> Option<Token> {
         let span = self.current_span();
-        Some(Token { kind, span })
+        Some(Token::new(kind, span))
     }
 
     fn error(&self, message: &str) {
         self.reporter
-            .report(diagnostic::Diagnostic::error(&self.current_span(), message));
+            .report(Diagnostic::error(&self.current_span(), message));
     }
 
     fn current_span(&self) -> Span {
@@ -161,6 +170,9 @@ impl Lexer {
     }
 
     fn matches(&mut self, character: char) -> bool {
+        if self.is_at_end() {
+            return false;
+        }
         if self.peek() == character {
             self.advance();
             true
@@ -181,5 +193,96 @@ impl Lexer {
 
     fn is_at_end(&self) -> bool {
         self.current == self.source.length()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    type Result = std::result::Result<(), String>;
+
+    use super::*;
+    use crate::source;
+
+    #[test]
+    fn math() -> Result {
+        assert_success(
+            "4 + 5",
+            &[
+                test_token(TokenKind::Number, "4"),
+                test_token(TokenKind::Plus, "+"),
+                test_token(TokenKind::Number, "5"),
+            ],
+        )
+    }
+
+    #[test]
+    fn numbers() -> Result {
+        assert_success("4", &[test_token(TokenKind::Number, "4")])?;
+        assert_success("0.01", &[test_token(TokenKind::Number, "0.01")])
+    }
+
+    #[test]
+    fn comment() -> Result {
+        assert_success("4 // asdfa 43 if", &[test_token(TokenKind::Number, "4")])
+    }
+
+    fn assert_success(text: &str, tokens: &[Token]) -> Result {
+        let test_source = source::text(text);
+        let reporter = TestReporter::new();
+
+        let lexer = Lexer::new(test_source, Rc::new(reporter));
+        let program = lexer.lex();
+
+        assert_tokens(&program.tokens, combine_tokens(tokens))
+    }
+
+    fn assert_tokens(got: &[Token], mut expected: Vec<Token>) -> Result {
+        expected.push(test_token(TokenKind::EOF, ""));
+
+        if got.iter().count() != expected.iter().count() {
+            return Err(format!(
+                "Expected {} tokens, got {} -- {}",
+                expected.iter().count(),
+                got.iter().count(),
+                got.token_string()
+            ));
+        }
+
+        for (lhs, rhs) in got.iter().zip(expected) {
+            if lhs.lexeme() != rhs.lexeme() {
+                return Err(format!(
+                    "Expected {}, got {} -- {}",
+                    rhs,
+                    lhs,
+                    got.token_string()
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn test_token(kind: TokenKind, text: &str) -> Token {
+        let source = source::text(text);
+        let span = Span::new(&source, 0, text.chars().count(), 0);
+        Token::new(kind, span)
+    }
+
+    fn combine_tokens(tokens: &[Token]) -> Vec<Token> {
+        let combined = tokens
+            .iter()
+            .map(|t| &t.span.source.content)
+            .fold(String::new(), |acc, c| acc + c);
+        let new_source = source::text(&combined);
+        let mut index = 0;
+        tokens
+            .iter()
+            .map(|t| {
+                let new_t = Token::new(t.kind, Span::new(&new_source, index, t.span.length, 0));
+                index += t.span.length;
+                new_t
+            })
+            .collect()
     }
 }

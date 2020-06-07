@@ -21,8 +21,8 @@ pub fn text(text: &str) -> Source {
 }
 
 pub struct SourceImpl {
-    name: String,
-    content: String,
+    pub name: String,
+    pub content: String,
 }
 
 impl SourceImpl {

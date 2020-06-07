@@ -1,5 +1,6 @@
 use crate::source::*;
 use colored::*;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 #[derive(PartialEq)]
@@ -74,5 +75,23 @@ impl Reporter for DefaultReporter {
         };
         println!("  {}{}", offset, colored_outline);
         println!("  {}\n", diagnostic.span.location());
+    }
+}
+
+pub struct TestReporter {
+    diagnostics: RefCell<Vec<Diagnostic>>,
+}
+
+impl TestReporter {
+    pub fn new() -> Self {
+        TestReporter {
+            diagnostics: RefCell::new(Vec::new()),
+        }
+    }
+}
+
+impl Reporter for TestReporter {
+    fn report(&self, diagnostic: Diagnostic) {
+        self.diagnostics.borrow_mut().push(diagnostic);
     }
 }

@@ -54,6 +54,10 @@ pub struct Token {
 }
 
 impl Token {
+    pub fn new(kind: TokenKind, span: Span) -> Self {
+        Token { kind, span }
+    }
+
     pub fn lexeme(&self) -> &str {
         self.span.lexeme()
     }
@@ -74,7 +78,7 @@ pub trait TokenString {
     fn token_string(&self) -> String;
 }
 
-impl TokenString for Vec<Token> {
+impl TokenString for &[Token] {
     fn token_string(&self) -> String {
         let start = self[0].to_string();
         let toks = self
