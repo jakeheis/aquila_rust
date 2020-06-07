@@ -62,11 +62,7 @@ impl Stmt {
         }
     }
 
-    pub fn variable_decl(
-        name: Token,
-        var_type: Option<Token>,
-        value: Option<Expr>,
-    ) -> Self {
+    pub fn variable_decl(name: Token, var_type: Option<Token>, value: Option<Expr>) -> Self {
         let end_span: &Span = if let Some(value) = &value {
             value.span()
         } else if let Some(var_type) = &var_type {
@@ -294,7 +290,7 @@ impl StmtVisitor for ASTPrinter {
 
     fn visit_function_decl(
         &mut self,
-        _stmt: &Stmt, 
+        _stmt: &Stmt,
         name: &Token,
         params: &[Stmt],
         return_type: &Option<Token>,
@@ -317,7 +313,13 @@ impl StmtVisitor for ASTPrinter {
         });
     }
 
-    fn visit_variable_decl(&mut self, _stmt: &Stmt, name: &Token, kind: &Option<Token>, value: &Option<Expr>) {
+    fn visit_variable_decl(
+        &mut self,
+        _stmt: &Stmt,
+        name: &Token,
+        kind: &Option<Token>,
+        value: &Option<Expr>,
+    ) {
         let var_type = kind.as_ref().map(|t| t.lexeme()).unwrap_or("<none>");
         self.write_ln(&format!(
             "VariableDecl(name: {}, type: {})",

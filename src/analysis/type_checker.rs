@@ -4,7 +4,6 @@ use crate::lexing::*;
 use crate::parsing::*;
 use crate::program::*;
 use crate::source::*;
-use std::collections::HashMap;
 
 pub type Result = DiagnosticResult<NodeType>;
 
@@ -22,20 +21,12 @@ impl Scope {
     }
 
     fn global(symbols: SymbolTable) -> Self {
-        // let mut variables = HashMap::with_capacity(symbols.count());
-        // for (symbol, _) in &symbols.type_map {
-        //     variables.insert(symbol.id.clone(), symbol.clone());
-        // }
-        Scope {
-            id: None,
-            symbols,
-        }
+        Scope { id: None, symbols }
     }
 
     fn define_var(&mut self, name: &Token, var_type: &NodeType) {
         let new_symbol = Symbol::new((&self.id).as_ref(), name);
         self.symbols.insert(new_symbol.clone(), var_type.clone());
-        // self.variables.insert(name.lexeme().to_string(), new_symbol);
     }
 }
 
@@ -65,14 +56,13 @@ impl TypeChecker {
         }
     }
 
-
     fn check_expr(&mut self, expr: &Expr) -> Option<NodeType> {
         match expr.accept(self) {
             Ok(t) => Some(t),
             Err(diag) => {
                 DefaultReporter::new().report(diag);
                 None
-            },
+            }
         }
     }
 
@@ -85,7 +75,12 @@ impl TypeChecker {
     //     }
     // }
 
-    fn type_mismatch<T: ContainsSpan>(&self, span: &T, given: NodeType, expected: NodeType) -> Diagnostic {
+    fn type_mismatch<T: ContainsSpan>(
+        &self,
+        span: &T,
+        given: NodeType,
+        expected: NodeType,
+    ) -> Diagnostic {
         let message = format!("Expected {:#?}, got {:#?}", expected, given);
         Diagnostic::error(span, &message)
     }
@@ -115,7 +110,7 @@ impl TypeChecker {
     fn resolve_var(&self, name: &str) -> Option<(&Scope, &Symbol)> {
         for scope in self.scopes.iter().rev() {
             if let Some(symbol) = scope.symbols.symbol_named(name) {
-                return Some((scope, symbol))
+                return Some((scope, symbol));
             }
         }
         None
@@ -143,7 +138,7 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_function_decl(
         &mut self,
-        _stmt: &Stmt, 
+        _stmt: &Stmt,
         name: &Token,
         params: &[Stmt],
         return_type: &Option<Token>,
@@ -155,12 +150,19 @@ impl StmtVisitor for TypeChecker {
         self.pop_scope();
     }
 
-    fn visit_variable_decl(&mut self, _stmt: &Stmt, name: &Token, kind: &Option<Token>, value: &Option<Expr>) {
+    fn visit_variable_decl(
+        &mut self,
+        _stmt: &Stmt,
+        name: &Token,
+        kind: &Option<Token>,
+        value: &Option<Expr>,
+    ) {
         let explicit_type = kind.as_ref().map(|k| NodeType::from(k));
         if let Some(explicit_type) = explicit_type.as_ref() {
             if let NodeType::Type(compound_type) = explicit_type {
                 if let None = self.global_scope().symbols.symbol_named(&compound_type) {
-                    DefaultReporter::new().report(Diagnostic::error(kind.as_ref().unwrap(), "Undefined type"))
+                    DefaultReporter::new()
+                        .report(Diagnostic::error(kind.as_ref().unwrap(), "Undefined type"))
                 }
             }
             self.current_scope().define_var(name, explicit_type);
@@ -186,10 +188,14 @@ impl StmtVisitor for TypeChecker {
     fn visit_if_stmt(&mut self, _stmt: &Stmt, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) {
         if let Some(cond_type) = self.check_expr(condition) {
             if cond_type != NodeType::Bool {
-                DefaultReporter::new().report(self.type_mismatch(condition, cond_type, NodeType::Bool));
+                DefaultReporter::new().report(self.type_mismatch(
+                    condition,
+                    cond_type,
+                    NodeType::Bool,
+                ));
             }
         }
-       
+
         self.push_scope_named("if");
         self.check_list(body);
         self.pop_scope();
@@ -255,10 +261,14 @@ impl ExprVisitor for TypeChecker {
     fn visit_call_expr(&mut self, target: &Expr, args: &[Expr]) -> Self::ExprResult {
         let func_type = target.accept(self)?;
         if let NodeType::Function(params, ret) = func_type.clone() {
-            let arg_types: DiagnosticResult<Vec<NodeType>> = args.iter().map(|a| a.accept(self)).collect();
+            let arg_types: DiagnosticResult<Vec<NodeType>> =
+                args.iter().map(|a| a.accept(self)).collect();
             let arg_types = arg_types?;
             if params.len() != arg_types.len() {
-                return Err(Diagnostic::error(target, &format!("Cannot call type {}", func_type)));
+                return Err(Diagnostic::error(
+                    target,
+                    &format!("Cannot call type {}", func_type),
+                ));
             }
             for ((index, param), arg) in params.into_iter().enumerate().zip(arg_types) {
                 if param != arg {
@@ -267,7 +277,10 @@ impl ExprVisitor for TypeChecker {
             }
             Ok(*ret.clone())
         } else {
-            Err(Diagnostic::error(target, &format!("Cannot call type {}", func_type)))
+            Err(Diagnostic::error(
+                target,
+                &format!("Cannot call type {}", func_type),
+            ))
         }
     }
 
@@ -280,10 +293,20 @@ impl ExprVisitor for TypeChecker {
             if let Some(field_type) = self.global_scope().symbols.get_type(&field_symbol) {
                 Ok(field_type.clone())
             } else {
-                Err(Diagnostic::error(&Span::join(target, field), &format!("Type '{}' does not has field '{}'", type_name, field.lexeme())))
+                Err(Diagnostic::error(
+                    &Span::join(target, field),
+                    &format!(
+                        "Type '{}' does not has field '{}'",
+                        type_name,
+                        field.lexeme()
+                    ),
+                ))
             }
         } else {
-            Err(Diagnostic::error(target, &format!("Cannot access property of type {}", target_type)))
+            Err(Diagnostic::error(
+                target,
+                &format!("Cannot access property of type {}", target_type),
+            ))
         }
     }
 

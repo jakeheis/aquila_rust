@@ -147,10 +147,8 @@ impl Lexer {
     }
 
     fn error(&self, message: &str) {
-        self.reporter.report(diagnostic::Diagnostic::error(
-            &self.current_span(),
-            message,
-        ));
+        self.reporter
+            .report(diagnostic::Diagnostic::error(&self.current_span(), message));
     }
 
     fn current_span(&self) -> Span {

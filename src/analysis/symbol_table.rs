@@ -14,13 +14,13 @@ impl Symbol {
     pub fn new(parent: Option<&Symbol>, name: &Token) -> Self {
         Symbol::new_str(parent, name.lexeme())
     }
-    
+
     pub fn new_str(parent: Option<&Symbol>, name: &str) -> Self {
-        let id = parent
-            .map(|p| p.id.clone() + "$")
-            .unwrap_or("".to_string())
-            + name;
-        Symbol { id, user_def_name: name.to_string() }
+        let id = parent.map(|p| p.id.clone() + "$").unwrap_or("".to_string()) + name;
+        Symbol {
+            id,
+            user_def_name: name.to_string(),
+        }
     }
 }
 
@@ -50,15 +50,16 @@ impl SymbolTable {
     }
 
     pub fn symbol_named(&self, name: &str) -> Option<&Symbol> {
-        self.type_map.keys().find(|symbol| symbol.user_def_name == name)
+        self.type_map
+            .keys()
+            .find(|symbol| symbol.user_def_name == name)
     }
-
 }
 
 impl std::fmt::Display for SymbolTable {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { 
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "SymbolTable({:#?})", self.type_map)
-     }
+    }
 }
 
 pub struct SymbolTableBuilder {
@@ -88,7 +89,7 @@ impl StmtVisitor for SymbolTableBuilder {
 
     fn visit_type_decl(
         &mut self,
-        _stmt: &Stmt, 
+        _stmt: &Stmt,
         name: &Token,
         fields: &[Stmt],
         methods: &[Stmt],
@@ -107,14 +108,14 @@ impl StmtVisitor for SymbolTableBuilder {
 
     fn visit_function_decl(
         &mut self,
-        _stmt: &Stmt, 
+        _stmt: &Stmt,
         name: &Token,
         params: &[Stmt],
         return_type: &Option<Token>,
         _body: &[Stmt],
     ) -> Self::StmtResult {
         let new_symbol = Symbol::new(self.context.last(), name);
-        
+
         let mut throwaway = SymbolTable::new();
         std::mem::swap(&mut self.table, &mut throwaway);
         let param_types: Vec<NodeType> = params.iter().map(|p| p.accept(self)).collect();
@@ -130,7 +131,7 @@ impl StmtVisitor for SymbolTableBuilder {
 
     fn visit_variable_decl(
         &mut self,
-        _stmt: &Stmt, 
+        _stmt: &Stmt,
         name: &Token,
         kind: &Option<Token>,
         _value: &Option<Expr>,
@@ -147,7 +148,7 @@ impl StmtVisitor for SymbolTableBuilder {
 
     fn visit_if_stmt(
         &mut self,
-        _stmt: &Stmt, 
+        _stmt: &Stmt,
         _condition: &Expr,
         _body: &[Stmt],
         _else_body: &[Stmt],

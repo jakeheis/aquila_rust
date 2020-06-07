@@ -105,10 +105,7 @@ impl Parser {
                     .replace_span(&stmt)?;
                 Ok(stmt)
             } else {
-                Err(Diagnostic::error(
-                    self.previous(),
-                    "Expression not allowed",
-                ))
+                Err(Diagnostic::error(self.previous(), "Expression not allowed"))
             }
         }
     }
@@ -267,10 +264,7 @@ impl Parser {
 
     fn parse_precedence(&mut self, prec: Precedence) -> Result<Expr> {
         if self.is_at_end() {
-            return Err(Diagnostic::error(
-                self.previous(),
-                "Expected expression",
-            ));
+            return Err(Diagnostic::error(self.previous(), "Expected expression"));
         }
 
         let prefix = self
@@ -374,10 +368,7 @@ impl Parser {
             }
         } else {
             if require_type {
-                return Err(Diagnostic::error(
-                    self.previous(),
-                    "Variable type required",
-                ));
+                return Err(Diagnostic::error(self.previous(), "Variable type required"));
             }
         }
 
