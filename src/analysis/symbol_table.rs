@@ -24,6 +24,12 @@ impl Symbol {
     }
 }
 
+impl std::fmt::Display for Symbol {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Symbol({})", self.id)
+    }
+}
+
 pub struct SymbolTable {
     type_map: HashMap<Symbol, NodeType>,
 }
@@ -42,10 +48,6 @@ impl SymbolTable {
     pub fn get_type(&self, symbol: &Symbol) -> Option<&NodeType> {
         self.type_map.get(symbol)
     }
-
-    // pub fn count(&self) -> usize {
-    //     self.type_map.len()
-    // }
 
     pub fn symbol_named(&self, name: &str) -> Option<&Symbol> {
         self.type_map.keys().find(|symbol| symbol.user_def_name == name)
@@ -113,9 +115,10 @@ impl StmtVisitor for SymbolTableBuilder {
     ) -> Self::StmtResult {
         let new_symbol = Symbol::new(self.context.last(), name);
         
-        self.context.push(new_symbol.clone());
+        let mut throwaway = SymbolTable::new();
+        std::mem::swap(&mut self.table, &mut throwaway);
         let param_types: Vec<NodeType> = params.iter().map(|p| p.accept(self)).collect();
-        self.context.pop();
+        std::mem::swap(&mut self.table, &mut throwaway);
 
         let return_type = NodeType::from_opt(return_type);
         let new_type = NodeType::Function(param_types, Box::new(return_type));

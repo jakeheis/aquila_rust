@@ -94,6 +94,10 @@ impl TypeChecker {
         self.scopes.last_mut().unwrap()
     }
 
+    fn global_scope(&mut self) -> &mut Scope {
+        self.scopes.first_mut().unwrap()
+    }
+
     fn push_scope(&mut self, name: &Token) {
         let symbol = Symbol::new((&self.current_scope().id).as_ref(), name);
         self.scopes.push(Scope::new(symbol, SymbolTable::new()));
@@ -107,6 +111,24 @@ impl TypeChecker {
     fn pop_scope(&mut self) {
         self.scopes.pop();
     }
+
+    fn resolve_var(&self, name: &str) -> Option<(&Scope, &Symbol)> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(symbol) = scope.symbols.symbol_named(name) {
+                return Some((scope, symbol))
+            }
+        }
+        None
+    }
+
+    // fn resolve_symbol(&self, name: &Symbol) -> Option<NodeType> {
+    //     for scope in self.scopes.iter().rev() {
+    //         if let Some(symbol) = scope.symbols.get_type(name) {
+    //             return Some(symbol.clone())
+    //         }
+    //     }
+    //     None
+    // }
 }
 
 impl StmtVisitor for TypeChecker {
@@ -136,6 +158,11 @@ impl StmtVisitor for TypeChecker {
     fn visit_variable_decl(&mut self, _stmt: &Stmt, name: &Token, kind: &Option<Token>, value: &Option<Expr>) {
         let explicit_type = kind.as_ref().map(|k| NodeType::from(k));
         if let Some(explicit_type) = explicit_type.as_ref() {
+            if let NodeType::Type(compound_type) = explicit_type {
+                if let None = self.global_scope().symbols.symbol_named(&compound_type) {
+                    DefaultReporter::new().report(Diagnostic::error(kind.as_ref().unwrap(), "Undefined type"))
+                }
+            }
             self.current_scope().define_var(name, explicit_type);
         }
 
@@ -245,7 +272,19 @@ impl ExprVisitor for TypeChecker {
     }
 
     fn visit_field_expr(&mut self, target: &Expr, field: &Token) -> Self::ExprResult {
-        Ok(NodeType::Int)
+        let target_type = target.accept(self)?;
+
+        if let NodeType::Type(type_name) = target_type {
+            let type_symbol = Symbol::new_str(None, &type_name);
+            let field_symbol = Symbol::new(Some(&type_symbol), field);
+            if let Some(field_type) = self.global_scope().symbols.get_type(&field_symbol) {
+                Ok(field_type.clone())
+            } else {
+                Err(Diagnostic::error(&Span::join(target, field), &format!("Type '{}' does not has field '{}'", type_name, field.lexeme())))
+            }
+        } else {
+            Err(Diagnostic::error(target, &format!("Cannot access property of type {}", target_type)))
+        }
     }
 
     fn visit_literal_expr(&mut self, token: &Token) -> Self::ExprResult {
@@ -258,12 +297,11 @@ impl ExprVisitor for TypeChecker {
     }
 
     fn visit_variable_expr(&mut self, name: &Token, _var_type: &Option<Token>) -> Self::ExprResult {
-        for scope in self.scopes.iter().rev() {
-            if let Some(symbol) = scope.symbols.symbol_named(name.lexeme()) {
-                return Ok(scope.symbols.get_type(symbol).unwrap().clone())
-            }
+        if let Some((scope, symbol)) = self.resolve_var(name.lexeme()) {
+            Ok(scope.symbols.get_type(symbol).unwrap().clone())
+        } else {
+            Err(Diagnostic::error(name, "Undefined variable"))
         }
-        Err(Diagnostic::error(name, "Undefined variable"))
     }
 }
 

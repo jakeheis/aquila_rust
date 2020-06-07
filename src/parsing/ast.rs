@@ -63,12 +63,18 @@ impl Stmt {
     }
 
     pub fn variable_decl(
-        let_span: Span,
         name: Token,
         var_type: Option<Token>,
         value: Option<Expr>,
     ) -> Self {
-        let span = Span::join_opt(&let_span, &value);
+        let end_span: &Span = if let Some(value) = &value {
+            value.span()
+        } else if let Some(var_type) = &var_type {
+            var_type.span()
+        } else {
+            name.span()
+        };
+        let span = Span::join(&name, end_span);
         Stmt {
             kind: StmtKind::VariableDecl(name, var_type, value),
             span,

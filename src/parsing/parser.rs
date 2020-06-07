@@ -208,14 +208,14 @@ impl Parser {
     }
 
     fn variable_decl(&mut self, allow_initializer: bool) -> Result<Stmt> {
-        let let_span = self.previous().span.clone();
         self.consume(TokenKind::Identifier, "Expected variable name")?;
+
         let (name, kind) = self.parse_var(true, !allow_initializer)?;
 
         if self.matches(TokenKind::Equal) {
             if allow_initializer {
                 let value = self.expression()?;
-                Ok(Stmt::variable_decl(let_span, name, kind, Some(value)))
+                Ok(Stmt::variable_decl(name, kind, Some(value)))
             } else {
                 Err(Diagnostic::error(
                     self.previous(),
@@ -223,7 +223,7 @@ impl Parser {
                 ))
             }
         } else {
-            Ok(Stmt::variable_decl(let_span, name, kind, None))
+            Ok(Stmt::variable_decl(name, kind, None))
         }
     }
 

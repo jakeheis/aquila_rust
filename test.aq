@@ -42,10 +42,25 @@
 
 // 4 + false;
 
-let a: int = 1 == 2;
+//let a: int = 1 == 2;
 
-def add(third: int, fourth: int): int {
-  lhs + rhs + third;
+//def add(third: int, fourth: int): int {
+  //lhs + rhs + third;
+//}
+
+// add(3, true);
+
+type Hey {
+  let a: int;
+  
+  def sup(b: int): bool {
+    a == b;
+  }
 }
 
-add(3, true);
+let s: Hey;
+// let b: Yo;
+
+s.a + 3;
+
+s.sup(3) + 3;
