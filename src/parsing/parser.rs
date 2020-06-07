@@ -29,13 +29,8 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> ParsedProgram {
+    pub fn parse(mut self) -> ParsedProgram {
         let statements = self.stmt_list(Context::TopLevel, None);
-
-        for stmt in &statements {
-            let mut printer = ASTPrinter::new();
-            stmt.accept(&mut printer);
-        }
 
         ParsedProgram {
             source: Rc::clone(&self.tokens[0].span().source),
@@ -490,6 +485,72 @@ impl Precedence {
             Precedence::Unary => Precedence::Call,
             Precedence::Call => Precedence::Atom,
             Precedence::Atom => panic!(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    type Result = std::result::Result<(), String>;
+
+    use super::*;
+    use std::rc::Rc;
+
+    #[test]
+    fn precedence() -> Result {
+        let tokens = vec![
+            Token::five(),
+            Token::plus(),
+            Token::four(),
+            Token::star(),
+            Token::six(),
+        ];
+
+        assert_expr_success(
+            tokens,
+            Expr::binary(
+                Expr::literal(&Token::five()),
+                Token::plus(),
+                Expr::binary(
+                    Expr::literal(&Token::four()),
+                    Token::star(),
+                    Expr::literal(&Token::six()),
+                ),
+            ),
+        )
+    }
+
+    fn assert_expr_success(mut tokens: Vec<Token>, expr: Expr) -> Result {
+        tokens.push(Token::semicolon());
+        let (source, combined) = Token::combine_tokens(&tokens);
+        let program = LexedProgram {
+            source: source,
+            tokens: combined,
+        };
+        let reporter: Rc<dyn Reporter> = Rc::new(TestReporter::new());
+
+        let parser = Parser::new(program, Rc::clone(&reporter));
+        let parsed = parser.parse();
+
+        reporter.assert_no_diagnostics()?;
+
+        let mut got_printer = ASTPrinter::collect();
+        got_printer.print(&parsed);
+
+        let mut expected_printer = ASTPrinter::collect();
+        Stmt::expression(expr).accept(&mut expected_printer);
+
+        if got_printer.collected() == expected_printer.collected() {
+            Ok(())
+        } else {
+            println!();
+            println!("Expected:");
+            println!("{}", expected_printer.collected().join("\n"));
+            println!("Got:");
+            println!("{}", got_printer.collected().join("\n"));
+            println!();
+            Err(String::from("Parse failed"))
         }
     }
 }

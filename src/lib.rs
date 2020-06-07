@@ -18,8 +18,11 @@ pub fn run(source: Source) {
     let lexer = Lexer::new(source, Rc::clone(&reporter));
     let lexed = lexer.lex();
 
-    let mut parser = Parser::new(lexed, reporter);
+    let parser = Parser::new(lexed, reporter);
     let parsed = parser.parse();
+
+    let mut printer = ASTPrinter::new();
+    printer.print(&parsed);
 
     if TypeChecker::check(parsed) == false {
         return;

@@ -206,40 +206,33 @@ mod tests {
 
     #[test]
     fn math() -> Result {
-        assert_success(
-            "4 + 5",
-            &[
-                test_token(TokenKind::Number, "4"),
-                test_token(TokenKind::Plus, "+"),
-                test_token(TokenKind::Number, "5"),
-            ],
-        )
+        assert_success("4 + 5", &[Token::four(), Token::plus(), Token::five()])
     }
 
     #[test]
     fn numbers() -> Result {
-        assert_success("4", &[test_token(TokenKind::Number, "4")])?;
-        assert_success("0.01", &[test_token(TokenKind::Number, "0.01")])
+        assert_success("4", &[Token::four()])?;
+        assert_success("0.01", &[Token::test(TokenKind::Number, "0.01")])
     }
 
     #[test]
     fn comment() -> Result {
-        assert_success("4 // asdfa 43 if", &[test_token(TokenKind::Number, "4")])
+        assert_success("4 // asdfa 43 if", &[Token::four()])
     }
 
     fn assert_success(text: &str, tokens: &[Token]) -> Result {
         let test_source = source::text(text);
-        let reporter = TestReporter::new();
+        let reporter: Rc<dyn Reporter> = Rc::new(TestReporter::new());
 
-        let lexer = Lexer::new(test_source, Rc::new(reporter));
+        let lexer = Lexer::new(test_source, Rc::clone(&reporter));
         let program = lexer.lex();
 
-        assert_tokens(&program.tokens, combine_tokens(tokens))
+        reporter.assert_no_diagnostics()?;
+
+        assert_tokens(&program.tokens, Token::combine_tokens(tokens).1)
     }
 
-    fn assert_tokens(got: &[Token], mut expected: Vec<Token>) -> Result {
-        expected.push(test_token(TokenKind::EOF, ""));
-
+    fn assert_tokens(got: &[Token], expected: Vec<Token>) -> Result {
         if got.iter().count() != expected.iter().count() {
             return Err(format!(
                 "Expected {} tokens, got {} -- {}",
@@ -261,28 +254,5 @@ mod tests {
         }
 
         Ok(())
-    }
-
-    fn test_token(kind: TokenKind, text: &str) -> Token {
-        let source = source::text(text);
-        let span = Span::new(&source, 0, text.chars().count(), 0);
-        Token::new(kind, span)
-    }
-
-    fn combine_tokens(tokens: &[Token]) -> Vec<Token> {
-        let combined = tokens
-            .iter()
-            .map(|t| &t.span.source.content)
-            .fold(String::new(), |acc, c| acc + c);
-        let new_source = source::text(&combined);
-        let mut index = 0;
-        tokens
-            .iter()
-            .map(|t| {
-                let new_t = Token::new(t.kind, Span::new(&new_source, index, t.span.length, 0));
-                index += t.span.length;
-                new_t
-            })
-            .collect()
     }
 }

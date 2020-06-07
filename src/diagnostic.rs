@@ -27,6 +27,18 @@ impl Diagnostic {
     }
 }
 
+pub trait DiagnosticString {
+    fn diagnostic_string(&self) -> String;
+}
+
+impl DiagnosticString for &[Diagnostic] {
+    fn diagnostic_string(&self) -> String {
+        self.iter().fold(String::from("["), |acc, diag| {
+            acc + &format!("Diag({})", diag.message)
+        })
+    }
+}
+
 impl ReplaceableSpan for Diagnostic {
     fn replace_span<U: ContainsSpan>(self, new_span: &U) -> Diagnostic {
         Diagnostic {
@@ -45,6 +57,10 @@ impl<T> ReplaceableSpan for DiagnosticResult<T> {
 
 pub trait Reporter {
     fn report(&self, diagnostic: Diagnostic);
+
+    fn assert_no_diagnostics(&self) -> Result<(), String> {
+        panic!();
+    }
 }
 
 pub struct DefaultReporter {}
@@ -93,5 +109,18 @@ impl TestReporter {
 impl Reporter for TestReporter {
     fn report(&self, diagnostic: Diagnostic) {
         self.diagnostics.borrow_mut().push(diagnostic);
+    }
+
+    fn assert_no_diagnostics(&self) -> Result<(), String> {
+        if self.diagnostics.borrow().is_empty() {
+            Ok(())
+        } else {
+            let slice: &[Diagnostic] = &self.diagnostics.borrow();
+            let message = format!(
+                "Expected no diagnostics, got: {:#?}",
+                slice.diagnostic_string()
+            );
+            Err(message)
+        }
     }
 }

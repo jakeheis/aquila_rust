@@ -243,22 +243,55 @@ pub trait ExprVisitor {
 
 // ASTPrinter
 
+enum ASTPrinterMode {
+    Stdout,
+    Collect(Vec<String>),
+}
+
 pub struct ASTPrinter {
     indent: i32,
+    mode: ASTPrinterMode,
 }
 
 impl ASTPrinter {
     pub fn new() -> ASTPrinter {
-        ASTPrinter { indent: 0 }
+        ASTPrinter {
+            indent: 0,
+            mode: ASTPrinterMode::Stdout,
+        }
     }
 
-    pub fn write_ln(&self, token: &str) {
+    pub fn collect() -> ASTPrinter {
+        ASTPrinter {
+            indent: 0,
+            mode: ASTPrinterMode::Collect(Vec::new()),
+        }
+    }
+
+    pub fn print(&mut self, program: &crate::program::ParsedProgram) {
+        program.statements.iter().for_each(|s| s.accept(self));
+    }
+
+    pub fn collected(&self) -> &[String] {
+        match &self.mode {
+            ASTPrinterMode::Collect(collection) => &collection,
+            _ => &[],
+        }
+    }
+
+    fn write_ln(&mut self, token: &str) {
         let indent = if self.indent > 0 {
             (1..self.indent).map(|_| "|  ").collect::<String>() + "|--"
         } else {
             String::new()
         };
-        println!("{}{}", indent, token)
+
+        let line = format!("{}{}", indent, token);
+
+        match &mut self.mode {
+            ASTPrinterMode::Stdout => println!("{}", line),
+            ASTPrinterMode::Collect(collection) => collection.push(line),
+        }
     }
 
     fn indent<T>(&mut self, block: T)
