@@ -160,7 +160,7 @@ pub enum ExprKind {
     Call(Box<Expr>, Vec<Expr>),
     Field(Box<Expr>, Token),
     Literal(Token),
-    Variable(Token, Option<Token>),
+    Variable(Token),
 }
 
 pub struct Expr {
@@ -177,7 +177,7 @@ impl Expr {
             ExprKind::Call(target, args) => visitor.visit_call_expr(&target, &args),
             ExprKind::Field(target, field) => visitor.visit_field_expr(&target, &field),
             ExprKind::Literal(token) => visitor.visit_literal_expr(&token),
-            ExprKind::Variable(name, var_type) => visitor.visit_variable_expr(&name, &var_type),
+            ExprKind::Variable(name) => visitor.visit_variable_expr(&name),
         }
     }
 
@@ -228,10 +228,10 @@ impl Expr {
         }
     }
 
-    pub fn variable(name: Token, var_type: Option<Token>) -> Self {
-        let span = Span::join_opt(&name, &var_type);
+    pub fn variable(name: Token) -> Self {
+        let span = name.span().clone();
         Expr {
-            kind: ExprKind::Variable(name, var_type),
+            kind: ExprKind::Variable(name),
             span,
         }
     }
@@ -250,7 +250,7 @@ pub trait ExprVisitor {
     fn visit_call_expr(&mut self, target: &Expr, args: &[Expr]) -> Self::ExprResult;
     fn visit_field_expr(&mut self, target: &Expr, field: &Token) -> Self::ExprResult;
     fn visit_literal_expr(&mut self, token: &Token) -> Self::ExprResult;
-    fn visit_variable_expr(&mut self, name: &Token, var_type: &Option<Token>) -> Self::ExprResult;
+    fn visit_variable_expr(&mut self, name: &Token) -> Self::ExprResult;
 }
 
 // ASTPrinter
@@ -464,12 +464,10 @@ impl ExprVisitor for ASTPrinter {
         self.write_ln(&format!("Literal({})", token.lexeme()))
     }
 
-    fn visit_variable_expr(&mut self, name: &Token, var_type: &Option<Token>) {
-        let var_type = var_type.as_ref().map(|t| t.lexeme()).unwrap_or("<none>");
+    fn visit_variable_expr(&mut self, name: &Token) {
         self.write_ln(&format!(
-            "Variable(name: {}, type: {})",
+            "Variable({})",
             name.lexeme(),
-            var_type
         ))
     }
 }

@@ -357,8 +357,8 @@ impl Parser {
     }
 
     fn variable(&mut self, can_assign: bool) -> Result<Expr> {
-        let (name, kind) = self.parse_var(false, false)?;
-        let variable = Expr::variable(name, kind);
+        let (name, _) = self.parse_var(false, false)?;
+        let variable = Expr::variable(name);
         if can_assign && self.matches(TokenKind::Equal) {
             self.assignment(variable)
         } else {

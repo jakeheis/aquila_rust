@@ -73,7 +73,7 @@ fn field_lookup() -> TestResult {
             test_token::var_name(),
             Some(test_token::int_type()),
             Some(Expr::field(
-                Expr::variable(test_token::window_instance(), None),
+                Expr::variable(test_token::window_instance()),
                 &test_token::property_name(),
             )),
         ),
@@ -93,7 +93,7 @@ fn field_lookup() -> TestResult {
                 test_token::var_name(),
                 Some(test_token::bool_type()),
                 Some(Expr::field(
-                    Expr::variable(prop_access[0].clone(), None),
+                    Expr::variable(prop_access[0].clone()),
                     &prop_access[2],
                 )),
             ),
@@ -115,7 +115,7 @@ fn call() -> TestResult {
             Some(test_token::int_type()),
             Some(Expr::call(
                 Expr::field(
-                    Expr::variable(test_token::window_instance(), None),
+                    Expr::variable(test_token::window_instance()),
                     &test_token::func_name(),
                 ),
                 vec![Expr::literal(&test_token::four())],
@@ -141,7 +141,7 @@ fn call() -> TestResult {
                 test_token::var_name(),
                 Some(test_token::int_type()),
                 Some(Expr::call(
-                    Expr::field(Expr::variable(tokens[0].clone(), None), &tokens[2]),
+                    Expr::field(Expr::variable(tokens[0].clone()), &tokens[2]),
                     vec![Expr::literal(&tokens[4])],
                     &tokens[5],
                 )),

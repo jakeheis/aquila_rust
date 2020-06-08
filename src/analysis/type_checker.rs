@@ -45,7 +45,6 @@ pub struct TypeChecker {
 impl TypeChecker {
     pub fn check(program: ParsedProgram, reporter: Rc<dyn Reporter>) -> bool {
         let table = SymbolTableBuilder::build(&program);
-        println!("{}", table);
         let global_scope = Scope::global(table);
 
         let mut checker = TypeChecker {
@@ -341,7 +340,7 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_variable_expr(&mut self, name: &Token, _var_type: &Option<Token>) -> Self::ExprResult {
+    fn visit_variable_expr(&mut self, name: &Token) -> Self::ExprResult {
         if let Some((scope, symbol)) = self.resolve_var(name.lexeme()) {
             Ok(scope.symbols.get_type(symbol).unwrap().clone())
         } else {
