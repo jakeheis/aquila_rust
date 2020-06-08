@@ -72,7 +72,7 @@ fn assert_failure(text: &str, expected: &[Diagnostic]) -> TestResult {
 }
 
 fn test_lex(text: &str) -> (Vec<Token>, Vec<Diagnostic>) {
-    let test_source = aquila::source::text(text);
+    let test_source = test_source::new_text(text);
 
     let (reporter, mut diagnostics) = TestReporter::new();
 

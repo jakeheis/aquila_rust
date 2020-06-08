@@ -4,14 +4,22 @@ use std::rc::Rc;
 
 pub type TestResult = std::result::Result<(), String>;
 
+#[allow(dead_code)]
 pub mod test_source {
 
     use aquila::source::{Source, SourceImpl};
 
     pub fn new() -> Source {
         std::rc::Rc::new(SourceImpl {
-            name: String::from("<stdin>"),
+            name: String::from("<test>"),
             content: String::new(),
+        })
+    }
+
+    pub fn new_text(text: &str) -> Source {
+        std::rc::Rc::new(SourceImpl {
+            name: String::from("<test>"),
+            content: String::from(text),
         })
     }
 }
@@ -35,11 +43,11 @@ pub mod test_span {
 pub mod test_token {
 
     use aquila::lexing::*;
-    use aquila::source::{self, Source, Span};
+    use aquila::source::{Source, Span};
+    use super::test_source;
 
     pub fn test(kind: TokenKind, text: &str) -> Token {
-        let source = source::text(text);
-        let span = Span::new(&source, 0, text.chars().count(), 1);
+        let span = Span::new(&test_source::new_text(text), 0, text.chars().count(), 1);
         Token::new(kind, span)
     }
 
@@ -100,7 +108,7 @@ pub mod test_token {
             .iter()
             .map(|t| &t.span.source.content)
             .fold(String::new(), |acc, c| acc + c);
-        let new_source = source::text(&combined);
+        let new_source = test_source::new_text(&combined);
         let mut index = 0;
         let mut tokens: Vec<Token> = tokens
             .iter()
