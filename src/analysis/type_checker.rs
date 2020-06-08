@@ -14,19 +14,11 @@ struct Scope {
 }
 
 impl Scope {
-    fn function(id: Symbol, return_type: NodeType) -> Self {
+    fn new(id: Symbol, return_type: Option<NodeType>) -> Self {
         Scope {
             id: Some(id),
             symbols: SymbolTable::new(),
-            function_return_type: Some(return_type),
-        }
-    }
-
-    fn new(id: Symbol) -> Self {
-        Scope {
-            id: Some(id),
-            symbols: SymbolTable::new(),
-            function_return_type: None,
+            function_return_type: return_type,
         }
     }
 
@@ -101,18 +93,18 @@ impl TypeChecker {
     }
 
     fn push_scope(&mut self, name: &Token) {
-        let symbol = Symbol::new((&self.current_scope().id).as_ref(), name);
-        self.scopes.push(Scope::new(symbol));
+        self.push_scope_named(name.lexeme());
     }
 
     fn push_function_scope(&mut self, name: &Token, ret_type: NodeType) {
         let symbol = Symbol::new((&self.current_scope().id).as_ref(), name);
-        self.scopes.push(Scope::function(symbol, ret_type));
+        self.scopes.push(Scope::new(symbol, Some(ret_type)));
     }
 
     fn push_scope_named(&mut self, name: &str) {
         let symbol = Symbol::new_str((&self.current_scope().id).as_ref(), name);
-        self.scopes.push(Scope::new(symbol));
+        let ret_type = self.current_scope().function_return_type.clone();
+        self.scopes.push(Scope::new(symbol, ret_type));
     }
 
     fn pop_scope(&mut self) {
