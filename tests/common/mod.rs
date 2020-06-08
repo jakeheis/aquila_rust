@@ -1,29 +1,29 @@
 pub use aquila::diagnostic::*;
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 pub type TestResult = std::result::Result<(), String>;
 
 pub mod test_source {
 
-    use aquila::source::SourceImpl;
+    use aquila::source::{Source, SourceImpl};
 
-    pub fn new() -> SourceImpl {
-        SourceImpl {
+    pub fn new() -> Source {
+        std::rc::Rc::new(SourceImpl {
             name: String::from("<stdin>"),
             content: String::new(),
-        }
+        })
     }
 }
 
 pub mod test_span {
 
-    use aquila::source::*;
     use super::test_source;
+    use aquila::source::*;
 
     pub fn new(index: usize, length: usize) -> Span {
         Span {
-            source: std::rc::Rc::new(test_source::new()),
+            source: test_source::new(),
             index,
             length,
             line: 1,
@@ -33,13 +33,13 @@ pub mod test_span {
 
 #[allow(dead_code)]
 pub mod test_token {
-    
+
     use aquila::lexing::*;
     use aquila::source::{self, Source, Span};
 
     pub fn test(kind: TokenKind, text: &str) -> Token {
         let source = source::text(text);
-        let span = Span::new(&source, 0, text.chars().count(), 0);
+        let span = Span::new(&source, 0, text.chars().count(), 1);
         Token::new(kind, span)
     }
 
@@ -67,8 +67,32 @@ pub mod test_token {
         test(TokenKind::Semicolon, ";")
     }
 
+    pub fn left_brace() -> Token {
+        test(TokenKind::LeftBrace, "{")
+    }
+
+    pub fn right_brace() -> Token {
+        test(TokenKind::RightBrace, "}")
+    }
+
     pub fn equals() -> Token {
         test(TokenKind::Equal, "=")
+    }
+
+    pub fn var_name() -> Token {
+        test(TokenKind::Identifier, "var_name")
+    }
+
+    pub fn type_name() -> Token {
+        test(TokenKind::Identifier, "type_name")
+    }
+
+    pub fn int_type() -> Token {
+        test(TokenKind::Identifier, "int")
+    }
+
+    pub fn type_keyword() -> Token {
+        test(TokenKind::Type, "type")
     }
 
     pub fn combine_tokens(tokens: &[Token]) -> (Source, Vec<Token>) {
@@ -95,7 +119,7 @@ pub mod test_token {
 }
 
 pub struct DiagnosticCapture {
-    diagnostics: Rc<RefCell<Vec<Diagnostic>>>
+    diagnostics: Rc<RefCell<Vec<Diagnostic>>>,
 }
 
 impl DiagnosticCapture {
@@ -113,9 +137,12 @@ pub struct TestReporter {
 impl TestReporter {
     pub fn new() -> (Rc<dyn Reporter>, DiagnosticCapture) {
         let diagnostics = Rc::new(RefCell::new(Vec::new()));
-        (Rc::new(TestReporter {
-            diagnostics: Rc::clone(&diagnostics),
-        }), DiagnosticCapture { diagnostics  })
+        (
+            Rc::new(TestReporter {
+                diagnostics: Rc::clone(&diagnostics),
+            }),
+            DiagnosticCapture { diagnostics },
+        )
     }
 }
 
@@ -148,9 +175,9 @@ where
     }
 
     for (lhs, rhs) in got.iter().zip(expected) {
-        if test(lhs, rhs) {
+        if !test(lhs, rhs) {
             println!("Expected:\n  {}\nGot:\n  {}", rhs, lhs);
-            return Err(String::from("Unexpected item"))
+            return Err(String::from("Unexpected item"));
         }
     }
 

@@ -29,7 +29,11 @@ impl Diagnostic {
 
 impl std::fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Diagnostic({:#?}, '{}' ({}))", self.severity, self.message, self.span)
+        write!(
+            f,
+            "Diagnostic({:#?}, '{}' ({}))",
+            self.severity, self.message, self.span
+        )
     }
 }
 

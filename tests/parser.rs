@@ -1,6 +1,6 @@
+use aquila::diagnostic::*;
 use aquila::lexing::*;
 use aquila::parsing::*;
-use aquila::diagnostic::*;
 
 mod common;
 use common::*;
@@ -85,7 +85,7 @@ fn assert_failure(tokens: Vec<Token>, expected: &[Diagnostic]) -> TestResult {
         "diagnostics",
         &got,
         expected,
-        |lhs, rhs| lhs != rhs,
+        |lhs, rhs| lhs == rhs,
         &got.diagnostic_string(),
     )
 }

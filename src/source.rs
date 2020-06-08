@@ -117,10 +117,11 @@ impl std::fmt::Display for Span {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "Span(in: {}, index: {}, length: {})",
+            "Span(in: {}, index: {}, length: {}, line: {})",
             self.source.name(),
             self.index,
-            self.length
+            self.length,
+            self.line
         )
     }
 }

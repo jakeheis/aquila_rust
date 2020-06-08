@@ -3,6 +3,7 @@ use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::parsing::*;
 use crate::source::*;
+use std::rc::Rc;
 
 pub type Result = DiagnosticResult<NodeType>;
 
@@ -30,17 +31,19 @@ impl Scope {
 }
 
 pub struct TypeChecker {
+    reporter: Rc<dyn Reporter>,
     scopes: Vec<Scope>,
     errored: bool,
 }
 
 impl TypeChecker {
-    pub fn check(program: ParsedProgram) -> bool {
+    pub fn check(program: ParsedProgram, reporter: Rc<dyn Reporter>) -> bool {
         let table = SymbolTableBuilder::build(&program);
         println!("{}", table);
         let global_scope = Scope::global(table);
 
         let mut checker = TypeChecker {
+            reporter,
             scopes: vec![global_scope],
             errored: false,
         };
@@ -59,20 +62,11 @@ impl TypeChecker {
         match expr.accept(self) {
             Ok(t) => Some(t),
             Err(diag) => {
-                DefaultReporter::new().report(diag);
+                self.reporter.report(diag);
                 None
             }
         }
     }
-
-    // fn require(&self, expr: &Expr, given: ExprType, expected: ExprType) -> Result {
-    //     if given == expected {
-    //         Ok(given)
-    //     } else  {
-    //         let message = format!("Expected {:#?}, got {:#?}", expected, given);
-    //         Err(Diagnostic::error_expr(expr, &message))
-    //     }
-    // }
 
     fn type_mismatch<T: ContainsSpan>(
         &self,
@@ -149,13 +143,23 @@ impl StmtVisitor for TypeChecker {
     ) {
         let explicit_type = kind.as_ref().map(|k| NodeType::from(k));
         if let Some(explicit_type) = explicit_type.as_ref() {
+            self.current_scope().define_var(name, explicit_type);
+
             if let NodeType::Type(compound_type) = explicit_type {
-                if let None = self.global_scope().symbols.symbol_named(&compound_type) {
-                    DefaultReporter::new()
-                        .report(Diagnostic::error(kind.as_ref().unwrap(), "Undefined type"))
+                match self
+                    .global_scope()
+                    .symbols
+                    .symbol_and_type_named(&compound_type)
+                {
+                    Some((_, symbol_type)) if !symbol_type.is_metatype() => self
+                        .reporter
+                        .report(Diagnostic::error(kind.as_ref().unwrap(), "Not a type")),
+                    None => self
+                        .reporter
+                        .report(Diagnostic::error(kind.as_ref().unwrap(), "Undefined type")),
+                    _ => (),
                 }
             }
-            self.current_scope().define_var(name, explicit_type);
         }
 
         if let Some(value) = value.as_ref() {
@@ -163,26 +167,23 @@ impl StmtVisitor for TypeChecker {
                 if let Some(explicit_type) = explicit_type {
                     if explicit_type != value_type {
                         let diagnostic = self.type_mismatch(value, value_type, explicit_type);
-                        DefaultReporter::new().report(diagnostic);
+                        self.reporter.report(diagnostic);
                     }
                 } else {
                     self.current_scope().define_var(name, &value_type);
                 }
             }
         } else if explicit_type.is_none() {
-            let diag = Diagnostic::error(name, "Couldn't infer type");
-            DefaultReporter::new().report(diag);
+            let diag = Diagnostic::error(name, "Can't infer type");
+            self.reporter.report(diag);
         }
     }
 
     fn visit_if_stmt(&mut self, _stmt: &Stmt, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) {
         if let Some(cond_type) = self.check_expr(condition) {
             if cond_type != NodeType::Bool {
-                DefaultReporter::new().report(self.type_mismatch(
-                    condition,
-                    cond_type,
-                    NodeType::Bool,
-                ));
+                self.reporter
+                    .report(self.type_mismatch(condition, cond_type, NodeType::Bool));
             }
         }
 
@@ -327,6 +328,7 @@ pub enum NodeType {
     Bool,
     Function(Vec<NodeType>, Box<NodeType>),
     Type(String),
+    Metatype(String),
 }
 
 impl NodeType {
@@ -344,6 +346,13 @@ impl NodeType {
             .as_ref()
             .map(|t| NodeType::from(t))
             .unwrap_or(NodeType::Void)
+    }
+
+    fn is_metatype(&self) -> bool {
+        match self {
+            NodeType::Metatype(_) => true,
+            _ => false,
+        }
     }
 }
 
@@ -366,6 +375,7 @@ impl std::fmt::Display for NodeType {
                 string
             }
             NodeType::Type(ty) => ty.clone(),
+            NodeType::Metatype(ty) => ty.clone() + "_Meta",
         };
         write!(f, "{}", kind)
     }

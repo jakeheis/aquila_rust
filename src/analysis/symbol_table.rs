@@ -53,6 +53,14 @@ impl SymbolTable {
             .keys()
             .find(|symbol| symbol.user_def_name == name)
     }
+
+    pub fn symbol_and_type_named(&self, name: &str) -> Option<(&Symbol, &NodeType)> {
+        let symbol = self
+            .type_map
+            .keys()
+            .find(|symbol| symbol.user_def_name == name);
+        symbol.map(|s| (s, self.get_type(s).unwrap()))
+    }
 }
 
 impl std::fmt::Display for SymbolTable {
@@ -94,7 +102,7 @@ impl StmtVisitor for SymbolTableBuilder {
         methods: &[Stmt],
     ) -> Self::StmtResult {
         let new_symbol = Symbol::new(self.context.last(), name);
-        let new_type = NodeType::Type(name.lexeme().to_string());
+        let new_type = NodeType::Metatype(name.lexeme().to_string());
         self.table.insert(new_symbol.clone(), new_type.clone());
 
         self.context.push(new_symbol);

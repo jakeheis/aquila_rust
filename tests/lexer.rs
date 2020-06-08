@@ -1,12 +1,15 @@
-use aquila::lexing::*;
 use aquila::diagnostic::*;
+use aquila::lexing::*;
 
 mod common;
 use common::*;
 
 #[test]
 fn math() -> TestResult {
-    assert_success("4 + 5", &[test_token::four(), test_token::plus(), test_token::five()])
+    assert_success(
+        "4 + 5",
+        &[test_token::four(), test_token::plus(), test_token::five()],
+    )
 }
 
 #[test]
@@ -43,7 +46,7 @@ fn assert_success(text: &str, expected: &[Token]) -> TestResult {
             "tokens",
             &tokens,
             &test_token::combine_tokens(&expected).1,
-            |lhs, rhs| lhs.lexeme() != rhs.lexeme(),
+            |lhs, rhs| lhs.lexeme() == rhs.lexeme(),
             &tokens.token_string(),
         )
     } else {
@@ -63,7 +66,7 @@ fn assert_failure(text: &str, expected: &[Diagnostic]) -> TestResult {
         "diagnostics",
         got,
         expected,
-        |lhs, rhs| lhs != rhs,
+        |lhs, rhs| lhs == rhs,
         &got.diagnostic_string(),
     )
 }

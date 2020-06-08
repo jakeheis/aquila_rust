@@ -17,13 +17,13 @@ pub fn run(source: Source) {
     let lexer = Lexer::new(source, Rc::clone(&reporter));
     let lexed = lexer.lex();
 
-    let parser = Parser::new(lexed, reporter);
+    let parser = Parser::new(lexed, Rc::clone(&reporter));
     let parsed = parser.parse();
 
     let mut printer = ASTPrinter::new();
     printer.print(&parsed);
 
-    if TypeChecker::check(parsed) == false {
+    if TypeChecker::check(parsed, reporter) == false {
         return;
     }
 }
