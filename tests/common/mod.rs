@@ -42,9 +42,9 @@ pub mod test_span {
 #[allow(dead_code)]
 pub mod test_token {
 
+    use super::test_source;
     use aquila::lexing::*;
     use aquila::source::{Source, Span};
-    use super::test_source;
 
     pub fn test(kind: TokenKind, text: &str) -> Token {
         let span = Span::new(&test_source::new_text(text), 0, text.chars().count(), 1);
@@ -71,8 +71,16 @@ pub mod test_token {
         test(TokenKind::Plus, "+")
     }
 
+    pub fn bang() -> Token {
+        test(TokenKind::Bang, "!")
+    }
+
     pub fn semicolon() -> Token {
         test(TokenKind::Semicolon, ";")
+    }
+
+    pub fn period() -> Token {
+        test(TokenKind::Period, ".")
     }
 
     pub fn left_brace() -> Token {
@@ -87,23 +95,59 @@ pub mod test_token {
         test(TokenKind::Equal, "=")
     }
 
+    pub fn equal_equal() -> Token {
+        test(TokenKind::EqualEqual, "==")
+    }
+
+    pub fn greater_than() -> Token {
+        test(TokenKind::Greater, ">")
+    }
+
+    pub fn less_than() -> Token {
+        test(TokenKind::Less, "<")
+    }
+
     pub fn var_name() -> Token {
         test(TokenKind::Identifier, "var_name")
     }
 
+    pub fn func_name() -> Token {
+        test(TokenKind::Identifier, "add")
+    }
+
     pub fn type_name() -> Token {
-        test(TokenKind::Identifier, "type_name")
+        test(TokenKind::Identifier, "Window")
+    }
+
+    pub fn property_name() -> Token {
+        test(TokenKind::Identifier, "property")
+    }
+
+    pub fn window_instance() -> Token {
+        test(TokenKind::Identifier, "instance")
     }
 
     pub fn int_type() -> Token {
         test(TokenKind::Identifier, "int")
     }
 
+    pub fn bool_type() -> Token {
+        test(TokenKind::Identifier, "bool")
+    }
+
     pub fn type_keyword() -> Token {
         test(TokenKind::Type, "type")
     }
 
-    pub fn combine_tokens(tokens: &[Token]) -> (Source, Vec<Token>) {
+    pub fn def_keyword() -> Token {
+        test(TokenKind::Def, "def")
+    }
+
+    pub fn true_keyword() -> Token {
+        test(TokenKind::True, "true")
+    }
+
+    pub fn join(tokens: &[Token]) -> (Source, Vec<Token>) {
         let combined = tokens
             .iter()
             .map(|t| &t.span.source.content)
@@ -124,6 +168,48 @@ pub mod test_token {
         ));
         (new_source, tokens)
     }
+}
+
+#[allow(dead_code)]
+pub mod test_ast {
+
+    use super::test_token;
+    use aquila::lexing::*;
+    use aquila::parsing::*;
+
+    pub fn window_type() -> Stmt {
+        Stmt::type_decl(
+            test_token::type_keyword().span,
+            test_token::type_name(),
+            vec![Stmt::variable_decl(
+                test_token::property_name(),
+                Some(test_token::int_type()),
+                None,
+            )],
+            vec![Stmt::function_decl(
+                test_token::def_keyword().span,
+                test_token::func_name(),
+                vec![Stmt::variable_decl(
+                    test_token::test(TokenKind::Identifier, "rhs"),
+                    Some(test_token::int_type()),
+                    None,
+                )],
+                Some(test_token::int_type()),
+                vec![],
+                test_token::right_brace().span,
+            )],
+            &test_token::right_brace(),
+        )
+    }
+
+    pub fn window_instance() -> Stmt {
+        Stmt::variable_decl(
+            test_token::window_instance(),
+            Some(test_token::type_name()),
+            None
+        )
+    }
+
 }
 
 pub struct DiagnosticCapture {

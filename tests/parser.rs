@@ -46,6 +46,10 @@ fn invalid_assignment() -> TestResult {
     )
 }
 
+//
+// Helpers
+//
+
 fn assert_expr_success(tokens: Vec<Token>, expr: Expr) -> TestResult {
     let (program, diagnostics) = test_parse(tokens);
     let diagnostics: &[Diagnostic] = &diagnostics;
@@ -92,7 +96,7 @@ fn assert_failure(tokens: Vec<Token>, expected: &[Diagnostic]) -> TestResult {
 
 fn test_parse(mut tokens: Vec<Token>) -> (ParsedProgram, Vec<Diagnostic>) {
     tokens.push(test_token::semicolon());
-    let (source, combined) = test_token::combine_tokens(&tokens);
+    let (source, combined) = test_token::join(&tokens);
     let program = LexedProgram {
         source: source,
         tokens: combined,

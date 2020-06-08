@@ -13,8 +13,8 @@ fn cant_infer_type() -> TestResult {
 }
 
 #[test]
-fn bad_explicit_type() -> TestResult {
-    let (_, tokens) = test_token::combine_tokens(&[
+fn explicit_type() -> TestResult {
+    let (_, tokens) = test_token::join(&[
         test_token::var_name(),
         test_token::semicolon(),
         test_token::var_name(),
@@ -22,13 +22,10 @@ fn bad_explicit_type() -> TestResult {
 
     assert_failure(
         Stmt::variable_decl(tokens[0].clone(), Some(tokens[2].clone()), None),
-        &[Diagnostic::error(
-            &test_span::new(9, 8),
-            "Not a type",
-        )],
+        &[Diagnostic::error(&test_span::new(9, 8), "Not a type")],
     )?;
 
-    let (_, tokens) = test_token::combine_tokens(&[
+    let (_, tokens) = test_token::join(&[
         test_token::var_name(),
         test_token::semicolon(),
         test_token::type_name(),
@@ -36,21 +33,83 @@ fn bad_explicit_type() -> TestResult {
 
     assert_failure(
         Stmt::variable_decl(tokens[0].clone(), Some(tokens[2].clone()), None),
-        &[Diagnostic::error(
-            &test_span::new(9, 9),
-            "Undefined type",
-        )],
+        &[Diagnostic::error(&test_span::new(9, 6), "Undefined type")],
     )?;
 
-    assert_success(
-        Stmt::variable_decl(test_token::var_name(), Some(test_token::int_type()), None),
-    )?;
+    assert_success(Stmt::variable_decl(
+        test_token::var_name(),
+        Some(test_token::int_type()),
+        None,
+    ))?;
 
     assert_success_stmts(vec![
-        Stmt::type_decl(test_token::type_keyword().span, test_token::type_name(), vec![], vec![], &test_token::right_brace()),
-        Stmt::variable_decl(test_token::right_brace(), Some(test_token::type_name()), None),
+        test_ast::window_type(),
+        Stmt::variable_decl(
+            test_token::var_name(),
+            Some(test_token::type_name()),
+            None,
+        ),
     ])
 }
+
+#[test]
+fn complex_expression() -> TestResult {
+    assert_success(Stmt::expression(Expr::binary(
+        Expr::binary(
+            Expr::literal(&test_token::four()),
+            test_token::greater_than(),
+            Expr::literal(&test_token::five()),
+        ),
+        test_token::equal_equal(),
+        Expr::unary(
+            test_token::bang(),
+            Expr::literal(&test_token::true_keyword()),
+        ),
+    )))
+}
+
+#[test]
+fn field_lookup() -> TestResult {
+    assert_success_stmts(vec![
+        test_ast::window_type(),
+        test_ast::window_instance(),
+        Stmt::variable_decl(
+            test_token::var_name(),
+            Some(test_token::int_type()),
+            Some(
+                Expr::field(
+                    Expr::variable(test_token::window_instance(), None),
+                    &test_token::property_name(),
+                )
+            )
+        ),
+    ])?;
+
+    let (_, prop_access) = test_token::join(&[
+        test_token::window_instance(),
+        test_token::period(),
+        test_token::property_name(),
+    ]);
+
+    assert_failure_stmts(vec![
+        test_ast::window_type(),
+        test_ast::window_instance(),
+        Stmt::variable_decl(
+            test_token::var_name(),
+            Some(test_token::bool_type()),
+            Some(
+                Expr::field(
+                    Expr::variable(prop_access[0].clone(), None),
+                    &prop_access[2],
+                )
+            )
+        ),
+    ], &[Diagnostic::error(&test_span::new(0, 8 + 1 + 8), "Expected Bool, got Int")],)
+}
+
+//
+// Helpers
+//
 
 fn assert_success(stmt: Stmt) -> TestResult {
     assert_success_stmts(vec![stmt])

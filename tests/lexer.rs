@@ -34,7 +34,9 @@ fn illegal_char() -> TestResult {
     )
 }
 
+//
 // Helpers
+//
 
 fn assert_success(text: &str, expected: &[Token]) -> TestResult {
     let (tokens, diagnostics) = test_lex(text);
@@ -45,7 +47,7 @@ fn assert_success(text: &str, expected: &[Token]) -> TestResult {
         assert_slices_equal(
             "tokens",
             &tokens,
-            &test_token::combine_tokens(&expected).1,
+            &test_token::join(&expected).1,
             |lhs, rhs| lhs.lexeme() == rhs.lexeme(),
             &tokens.token_string(),
         )
