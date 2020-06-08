@@ -44,16 +44,6 @@ impl SourceImpl {
     }
 }
 
-#[cfg(test)]
-impl SourceImpl {
-    pub fn test() -> Self {
-        SourceImpl {
-            name: String::from("<stdin>"),
-            content: String::new(),
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct Span {
     pub source: Source,
@@ -142,27 +132,6 @@ impl PartialEq for Span {
             && self.length == other.length
             && self.line == other.line
     }
-}
-
-#[cfg(test)]
-impl Span {
-    pub fn test(index: usize, length: usize) -> Self {
-        Span {
-            source: Rc::new(SourceImpl::test()),
-            index,
-            length,
-            line: 1,
-        }
-    }
-
-    // fn test_str(text: &str) -> Self {
-    //     Span {
-    //         source: Rc::new(SourceImpl::test()),
-    //         index,
-    //         length,
-    //         line: 1,
-    //     }
-    // }
 }
 
 // Span traits

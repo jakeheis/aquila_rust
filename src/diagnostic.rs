@@ -1,6 +1,5 @@
 use crate::source::*;
 use colored::*;
-use std::cell::RefCell;
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq)]
@@ -63,10 +62,6 @@ impl<T> ReplaceableSpan for DiagnosticResult<T> {
 
 pub trait Reporter {
     fn report(&self, diagnostic: Diagnostic);
-
-    fn collected_diagnostics(&self) -> Vec<Diagnostic> {
-        panic!();
-    }
 }
 
 pub struct DefaultReporter {}
@@ -97,27 +92,5 @@ impl Reporter for DefaultReporter {
         };
         println!("  {}{}", offset, colored_outline);
         println!("  {}\n", diagnostic.span.location());
-    }
-}
-
-pub struct TestReporter {
-    diagnostics: RefCell<Vec<Diagnostic>>,
-}
-
-impl TestReporter {
-    pub fn new() -> Self {
-        TestReporter {
-            diagnostics: RefCell::new(Vec::new()),
-        }
-    }
-}
-
-impl Reporter for TestReporter {
-    fn report(&self, diagnostic: Diagnostic) {
-        self.diagnostics.borrow_mut().push(diagnostic);
-    }
-
-    fn collected_diagnostics(&self) -> Vec<Diagnostic> {
-        self.diagnostics.replace(Vec::new())
     }
 }

@@ -2,7 +2,6 @@ pub mod analysis;
 pub mod diagnostic;
 pub mod lexing;
 pub mod parsing;
-pub mod program;
 pub mod source;
 
 use analysis::*;

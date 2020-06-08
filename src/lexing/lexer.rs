@@ -1,6 +1,5 @@
 use super::token::*;
 use crate::diagnostic::*;
-use crate::program::*;
 use crate::source::*;
 use std::rc::Rc;
 
@@ -23,7 +22,7 @@ impl Lexer {
         }
     }
 
-    pub fn lex(mut self) -> LexedProgram {
+    pub fn lex(mut self) -> super::LexedProgram {
         let mut tokens = Vec::new();
 
         while !self.is_at_end() {
@@ -37,7 +36,7 @@ impl Lexer {
         self.start = self.current;
         tokens.push(self.make_token(TokenKind::EOF).unwrap());
 
-        LexedProgram {
+        super::LexedProgram {
             source: self.source,
             tokens,
         }
@@ -194,118 +193,4 @@ impl Lexer {
     fn is_at_end(&self) -> bool {
         self.current == self.source.length()
     }
-}
-
-#[cfg(test)]
-mod tests {
-
-    type Result = std::result::Result<(), String>;
-
-    use super::*;
-    use crate::source;
-
-    #[test]
-    fn math() -> Result {
-        assert_success("4 + 5", &[Token::four(), Token::plus(), Token::five()])
-    }
-
-    #[test]
-    fn numbers() -> Result {
-        assert_success("4", &[Token::four()])?;
-        assert_success("0.01", &[Token::test(TokenKind::Number, "0.01")])
-    }
-
-    #[test]
-    fn comment() -> Result {
-        assert_success("4 // asdfa 43 if", &[Token::four()])
-    }
-
-    #[test]
-    fn illegal_char() -> Result {
-        assert_failure(
-            "4$3",
-            &[Diagnostic::error(
-                &Span::test(1, 1),
-                "unrecognized character '$'",
-            )],
-        )
-    }
-
-    fn assert_success(text: &str, expected: &[Token]) -> Result {
-        let (tokens, diagnostics) = test_lex(text);
-        let tokens: &[Token] = &tokens;
-        let diagnostics: &[Diagnostic] = &diagnostics;
-
-        if diagnostics.is_empty() {
-            assert_slices_equal(
-                "tokens",
-                &tokens,
-                &Token::combine_tokens(&expected).1,
-                |lhs, rhs| lhs.lexeme() != rhs.lexeme(),
-                &tokens.token_string(),
-            )
-        } else {
-            let message = format!(
-                "Expected no diagnostics, got: {}",
-                diagnostics.diagnostic_string()
-            );
-            Err(message)
-        }
-    }
-
-    fn assert_failure(text: &str, expected: &[Diagnostic]) -> Result {
-        let (_, diagnostics) = test_lex(text);
-        let got: &[Diagnostic] = &diagnostics;
-
-        assert_slices_equal(
-            "diagnostics",
-            got,
-            expected,
-            |lhs, rhs| lhs != rhs,
-            &got.diagnostic_string(),
-        )
-    }
-
-    fn test_lex(text: &str) -> (Vec<Token>, Vec<Diagnostic>) {
-        let test_source = source::text(text);
-        let reporter: Rc<dyn Reporter> = Rc::new(TestReporter::new());
-
-        let lexer = Lexer::new(test_source, Rc::clone(&reporter));
-        let program = lexer.lex();
-        let diagnostics = reporter.collected_diagnostics();
-        return (program.tokens, diagnostics);
-    }
-}
-
-#[cfg(test)]
-pub fn assert_slices_equal<T, U>(
-    kind: &str,
-    got: &[T],
-    expected: &[T],
-    test: U,
-    list: &str,
-) -> Result<(), String>
-where
-    T: std::fmt::Display,
-    U: Fn(&T, &T) -> bool,
-{
-    if got.iter().count() != expected.iter().count() {
-        let one_line = format!(
-            "Expected {} {}, got {}",
-            expected.iter().count(),
-            kind,
-            got.iter().count(),
-        );
-        println!("{}\n{}", &one_line, list);
-        return Err(one_line);
-    }
-
-    for (lhs, rhs) in got.iter().zip(expected) {
-        if test(lhs, rhs) {
-            println!("Expected:\n  {}\nGot:\n  {}", rhs, lhs);
-            return Err(String::from("Unexpected item"))
-        }
-    }
-
-    Ok(())
 }

@@ -1,7 +1,6 @@
 use super::type_checker::NodeType;
 use crate::lexing::*;
 use crate::parsing::*;
-use crate::program::*;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

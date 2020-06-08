@@ -1,7 +1,6 @@
 use super::ast::*;
 use crate::diagnostic::*;
 use crate::lexing::*;
-use crate::program::*;
 use crate::source::*;
 use std::rc::Rc;
 
@@ -29,10 +28,10 @@ impl Parser {
         }
     }
 
-    pub fn parse(mut self) -> ParsedProgram {
+    pub fn parse(mut self) -> super::ParsedProgram {
         let statements = self.stmt_list(Context::TopLevel, None);
 
-        ParsedProgram {
+        super::ParsedProgram {
             source: Rc::clone(&self.tokens[0].span().source),
             statements,
         }
@@ -486,113 +485,5 @@ impl Precedence {
             Precedence::Call => Precedence::Atom,
             Precedence::Atom => panic!(),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    type Result = std::result::Result<(), String>;
-
-    use super::*;
-    use std::rc::Rc;
-
-    #[test]
-    fn precedence() -> Result {
-        let tokens = vec![
-            Token::five(),
-            Token::plus(),
-            Token::four(),
-            Token::star(),
-            Token::six(),
-        ];
-
-        assert_expr_success(
-            tokens,
-            Expr::binary(
-                Expr::literal(&Token::five()),
-                Token::plus(),
-                Expr::binary(
-                    Expr::literal(&Token::four()),
-                    Token::star(),
-                    Expr::literal(&Token::six()),
-                ),
-            ),
-        )
-    }
-
-    #[test]
-    fn invalid_assignment() -> Result {
-        assert_failure(
-            vec![
-                Token::five(),
-                Token::plus(),
-                Token::six(),
-                Token::equals(),
-                Token::four(),
-            ],
-            &[Diagnostic::error(
-                &Span::test(0, 3),
-                "Invalid assignment target",
-            )],
-        )
-    }
-
-    fn assert_expr_success(tokens: Vec<Token>, expr: Expr) -> Result {
-        let (program, diagnostics) = test_parse(tokens);
-        let diagnostics: &[Diagnostic] = &diagnostics;
-
-        if !diagnostics.is_empty() {
-            let message = format!(
-                "Expected no diagnostics, got: {}",
-                diagnostics.diagnostic_string()
-            );
-            return Err(message);
-        }
-
-        let mut got_printer = ASTPrinter::collect();
-        got_printer.print(&program);
-
-        let mut expected_printer = ASTPrinter::collect();
-        Stmt::expression(expr).accept(&mut expected_printer);
-
-        if got_printer.collected() == expected_printer.collected() {
-            Ok(())
-        } else {
-            println!();
-            println!("Expected:");
-            println!("{}", expected_printer.collected().join("\n"));
-            println!("Got:");
-            println!("{}", got_printer.collected().join("\n"));
-            println!();
-            Err(String::from("Parse failed"))
-        }
-    }
-
-    fn assert_failure(tokens: Vec<Token>, expected: &[Diagnostic]) -> Result {
-        let (_, got) = test_parse(tokens);
-        let got: &[Diagnostic] = &got;
-
-        lexer::assert_slices_equal(
-            "diagnostics",
-            &got,
-            expected,
-            |lhs, rhs| lhs != rhs,
-            &got.diagnostic_string(),
-        )
-    }
-
-    fn test_parse(mut tokens: Vec<Token>) -> (ParsedProgram, Vec<Diagnostic>) {
-        tokens.push(Token::semicolon());
-        let (source, combined) = Token::combine_tokens(&tokens);
-        let program = LexedProgram {
-            source: source,
-            tokens: combined,
-        };
-        let reporter: Rc<dyn Reporter> = Rc::new(TestReporter::new());
-
-        let parser = Parser::new(program, Rc::clone(&reporter));
-        let parsed = parser.parse();
-        (parsed, reporter.collected_diagnostics())
     }
 }

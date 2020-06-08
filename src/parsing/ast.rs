@@ -268,7 +268,7 @@ impl ASTPrinter {
         }
     }
 
-    pub fn print(&mut self, program: &crate::program::ParsedProgram) {
+    pub fn print(&mut self, program: &super::ParsedProgram) {
         program.statements.iter().for_each(|s| s.accept(self));
     }
 

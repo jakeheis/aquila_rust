@@ -2,7 +2,6 @@ use super::symbol_table::*;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::parsing::*;
-use crate::program::*;
 use crate::source::*;
 
 pub type Result = DiagnosticResult<NodeType>;
@@ -115,15 +114,6 @@ impl TypeChecker {
         }
         None
     }
-
-    // fn resolve_symbol(&self, name: &Symbol) -> Option<NodeType> {
-    //     for scope in self.scopes.iter().rev() {
-    //         if let Some(symbol) = scope.symbols.get_type(name) {
-    //             return Some(symbol.clone())
-    //         }
-    //     }
-    //     None
-    // }
 }
 
 impl StmtVisitor for TypeChecker {
