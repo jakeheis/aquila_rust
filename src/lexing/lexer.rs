@@ -220,39 +220,92 @@ mod tests {
         assert_success("4 // asdfa 43 if", &[Token::four()])
     }
 
-    fn assert_success(text: &str, tokens: &[Token]) -> Result {
+    #[test]
+    fn illegal_char() -> Result {
+        assert_failure(
+            "4$3",
+            &[Diagnostic::error(
+                &Span::test(1, 1),
+                "unrecognized character '$'",
+            )],
+        )
+    }
+
+    fn assert_success(text: &str, expected: &[Token]) -> Result {
+        let (tokens, diagnostics) = test_lex(text);
+        let tokens: &[Token] = &tokens;
+        let diagnostics: &[Diagnostic] = &diagnostics;
+
+        if diagnostics.is_empty() {
+            assert_slices_equal(
+                "tokens",
+                &tokens,
+                &Token::combine_tokens(&expected).1,
+                |lhs, rhs| lhs.lexeme() != rhs.lexeme(),
+                &tokens.token_string(),
+            )
+        } else {
+            let message = format!(
+                "Expected no diagnostics, got: {}",
+                diagnostics.diagnostic_string()
+            );
+            Err(message)
+        }
+    }
+
+    fn assert_failure(text: &str, expected: &[Diagnostic]) -> Result {
+        let (_, diagnostics) = test_lex(text);
+        let got: &[Diagnostic] = &diagnostics;
+
+        assert_slices_equal(
+            "diagnostics",
+            got,
+            expected,
+            |lhs, rhs| lhs != rhs,
+            &got.diagnostic_string(),
+        )
+    }
+
+    fn test_lex(text: &str) -> (Vec<Token>, Vec<Diagnostic>) {
         let test_source = source::text(text);
         let reporter: Rc<dyn Reporter> = Rc::new(TestReporter::new());
 
         let lexer = Lexer::new(test_source, Rc::clone(&reporter));
         let program = lexer.lex();
+        let diagnostics = reporter.collected_diagnostics();
+        return (program.tokens, diagnostics);
+    }
+}
 
-        reporter.assert_no_diagnostics()?;
-
-        assert_tokens(&program.tokens, Token::combine_tokens(tokens).1)
+#[cfg(test)]
+pub fn assert_slices_equal<T, U>(
+    kind: &str,
+    got: &[T],
+    expected: &[T],
+    test: U,
+    list: &str,
+) -> Result<(), String>
+where
+    T: std::fmt::Display,
+    U: Fn(&T, &T) -> bool,
+{
+    if got.iter().count() != expected.iter().count() {
+        let one_line = format!(
+            "Expected {} {}, got {}",
+            expected.iter().count(),
+            kind,
+            got.iter().count(),
+        );
+        println!("{}\n{}", &one_line, list);
+        return Err(one_line);
     }
 
-    fn assert_tokens(got: &[Token], expected: Vec<Token>) -> Result {
-        if got.iter().count() != expected.iter().count() {
-            return Err(format!(
-                "Expected {} tokens, got {} -- {}",
-                expected.iter().count(),
-                got.iter().count(),
-                got.token_string()
-            ));
+    for (lhs, rhs) in got.iter().zip(expected) {
+        if test(lhs, rhs) {
+            println!("Expected:\n  {}\nGot:\n  {}", rhs, lhs);
+            return Err(String::from("Unexpected item"))
         }
-
-        for (lhs, rhs) in got.iter().zip(expected) {
-            if lhs.lexeme() != rhs.lexeme() {
-                return Err(format!(
-                    "Expected {}, got {} -- {}",
-                    rhs,
-                    lhs,
-                    got.token_string()
-                ));
-            }
-        }
-
-        Ok(())
     }
+
+    Ok(())
 }

@@ -521,22 +521,37 @@ mod tests {
         )
     }
 
-    fn assert_expr_success(mut tokens: Vec<Token>, expr: Expr) -> Result {
-        tokens.push(Token::semicolon());
-        let (source, combined) = Token::combine_tokens(&tokens);
-        let program = LexedProgram {
-            source: source,
-            tokens: combined,
-        };
-        let reporter: Rc<dyn Reporter> = Rc::new(TestReporter::new());
+    #[test]
+    fn invalid_assignment() -> Result {
+        assert_failure(
+            vec![
+                Token::five(),
+                Token::plus(),
+                Token::six(),
+                Token::equals(),
+                Token::four(),
+            ],
+            &[Diagnostic::error(
+                &Span::test(0, 3),
+                "Invalid assignment target",
+            )],
+        )
+    }
 
-        let parser = Parser::new(program, Rc::clone(&reporter));
-        let parsed = parser.parse();
+    fn assert_expr_success(tokens: Vec<Token>, expr: Expr) -> Result {
+        let (program, diagnostics) = test_parse(tokens);
+        let diagnostics: &[Diagnostic] = &diagnostics;
 
-        reporter.assert_no_diagnostics()?;
+        if !diagnostics.is_empty() {
+            let message = format!(
+                "Expected no diagnostics, got: {}",
+                diagnostics.diagnostic_string()
+            );
+            return Err(message);
+        }
 
         let mut got_printer = ASTPrinter::collect();
-        got_printer.print(&parsed);
+        got_printer.print(&program);
 
         let mut expected_printer = ASTPrinter::collect();
         Stmt::expression(expr).accept(&mut expected_printer);
@@ -552,5 +567,32 @@ mod tests {
             println!();
             Err(String::from("Parse failed"))
         }
+    }
+
+    fn assert_failure(tokens: Vec<Token>, expected: &[Diagnostic]) -> Result {
+        let (_, got) = test_parse(tokens);
+        let got: &[Diagnostic] = &got;
+
+        lexer::assert_slices_equal(
+            "diagnostics",
+            &got,
+            expected,
+            |lhs, rhs| lhs != rhs,
+            &got.diagnostic_string(),
+        )
+    }
+
+    fn test_parse(mut tokens: Vec<Token>) -> (ParsedProgram, Vec<Diagnostic>) {
+        tokens.push(Token::semicolon());
+        let (source, combined) = Token::combine_tokens(&tokens);
+        let program = LexedProgram {
+            source: source,
+            tokens: combined,
+        };
+        let reporter: Rc<dyn Reporter> = Rc::new(TestReporter::new());
+
+        let parser = Parser::new(program, Rc::clone(&reporter));
+        let parsed = parser.parse();
+        (parsed, reporter.collected_diagnostics())
     }
 }

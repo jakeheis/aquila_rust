@@ -121,6 +121,10 @@ impl Token {
         Token::test(TokenKind::Semicolon, ";")
     }
 
+    pub fn equals() -> Self {
+        Token::test(TokenKind::Equal, "=")
+    }
+
     pub fn combine_tokens(tokens: &[Token]) -> (Source, Vec<Token>) {
         let combined = tokens
             .iter()

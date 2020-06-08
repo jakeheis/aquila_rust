@@ -3,18 +3,19 @@ use colored::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-#[derive(PartialEq)]
-enum Severity {
+#[derive(Debug, PartialEq)]
+pub enum Severity {
     Error,
     // Warning,
 }
 
 pub type DiagnosticResult<T> = Result<T, Diagnostic>;
 
+#[derive(PartialEq)]
 pub struct Diagnostic {
-    severity: Severity,
-    span: Span,
-    message: String,
+    pub severity: Severity,
+    pub span: Span,
+    pub message: String,
 }
 
 impl Diagnostic {
@@ -27,15 +28,20 @@ impl Diagnostic {
     }
 }
 
+impl std::fmt::Display for Diagnostic {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Diagnostic({:#?}, '{}' ({}))", self.severity, self.message, self.span)
+    }
+}
+
 pub trait DiagnosticString {
     fn diagnostic_string(&self) -> String;
 }
 
 impl DiagnosticString for &[Diagnostic] {
     fn diagnostic_string(&self) -> String {
-        self.iter().fold(String::from("["), |acc, diag| {
-            acc + &format!("Diag({})", diag.message)
-        })
+        self.iter()
+            .fold(String::from("["), |acc, diag| acc + &diag.to_string())
     }
 }
 
@@ -58,7 +64,7 @@ impl<T> ReplaceableSpan for DiagnosticResult<T> {
 pub trait Reporter {
     fn report(&self, diagnostic: Diagnostic);
 
-    fn assert_no_diagnostics(&self) -> Result<(), String> {
+    fn collected_diagnostics(&self) -> Vec<Diagnostic> {
         panic!();
     }
 }
@@ -111,16 +117,7 @@ impl Reporter for TestReporter {
         self.diagnostics.borrow_mut().push(diagnostic);
     }
 
-    fn assert_no_diagnostics(&self) -> Result<(), String> {
-        if self.diagnostics.borrow().is_empty() {
-            Ok(())
-        } else {
-            let slice: &[Diagnostic] = &self.diagnostics.borrow();
-            let message = format!(
-                "Expected no diagnostics, got: {:#?}",
-                slice.diagnostic_string()
-            );
-            Err(message)
-        }
+    fn collected_diagnostics(&self) -> Vec<Diagnostic> {
+        self.diagnostics.replace(Vec::new())
     }
 }
