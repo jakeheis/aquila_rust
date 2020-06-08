@@ -214,10 +214,9 @@ pub mod test_ast {
         Stmt::variable_decl(
             test_token::window_instance(),
             Some(test_token::type_name()),
-            None
+            None,
         )
     }
-
 }
 
 pub struct DiagnosticCapture {

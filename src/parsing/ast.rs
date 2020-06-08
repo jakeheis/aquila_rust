@@ -6,7 +6,8 @@ pub enum StmtKind {
     FunctionDecl(Token, Vec<Stmt>, Option<Token>, Vec<Stmt>),
     VariableDecl(Token, Option<Token>, Option<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
-    Expression(Expr),
+    ReturnStmt(Option<Expr>),
+    ExpressionStmt(Expr),
 }
 
 pub struct Stmt {
@@ -29,7 +30,8 @@ impl Stmt {
             StmtKind::IfStmt(condition, body, else_body) => {
                 visitor.visit_if_stmt(&self, &condition, &body, &else_body)
             }
-            StmtKind::Expression(expr) => visitor.visit_expression_stmt(&self, expr),
+            StmtKind::ReturnStmt(expr) => visitor.visit_return_stmt(&self, expr),
+            StmtKind::ExpressionStmt(expr) => visitor.visit_expression_stmt(&self, expr),
         }
     }
 
@@ -91,10 +93,18 @@ impl Stmt {
         }
     }
 
+    pub fn return_stmt(return_keyword: Span, expr: Option<Expr>) -> Self {
+        let span = Span::join_opt(&return_keyword, &expr);
+        Stmt {
+            kind: StmtKind::ReturnStmt(expr),
+            span,
+        }
+    }
+
     pub fn expression(expr: Expr) -> Self {
         let span = expr.span.clone();
         Stmt {
-            kind: StmtKind::Expression(expr),
+            kind: StmtKind::ExpressionStmt(expr),
             span,
         }
     }
@@ -135,6 +145,8 @@ pub trait StmtVisitor {
         body: &[Stmt],
         else_body: &[Stmt],
     ) -> Self::StmtResult;
+
+    fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult;
 
     fn visit_expression_stmt(&mut self, stmt: &Stmt, expr: &Expr) -> Self::StmtResult;
 }
@@ -382,6 +394,15 @@ impl StmtVisitor for ASTPrinter {
                 else_body.iter().for_each(|s| s.accept(visitor));
             });
         })
+    }
+
+    fn visit_return_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) {
+        self.write_ln("ReturnStmt");
+        if let Some(expr) = expr.as_ref() {
+            self.indent(|visitor| {
+                expr.accept(visitor);
+            })
+        }
     }
 
     fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) {

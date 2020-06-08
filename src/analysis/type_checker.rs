@@ -10,18 +10,32 @@ pub type Result = DiagnosticResult<NodeType>;
 struct Scope {
     id: Option<Symbol>,
     symbols: SymbolTable,
+    function_return_type: Option<NodeType>,
 }
 
 impl Scope {
-    fn new(id: Symbol, symbols: SymbolTable) -> Self {
+    fn function(id: Symbol, return_type: NodeType) -> Self {
         Scope {
             id: Some(id),
-            symbols,
+            symbols: SymbolTable::new(),
+            function_return_type: Some(return_type),
+        }
+    }
+
+    fn new(id: Symbol) -> Self {
+        Scope {
+            id: Some(id),
+            symbols: SymbolTable::new(),
+            function_return_type: None,
         }
     }
 
     fn global(symbols: SymbolTable) -> Self {
-        Scope { id: None, symbols }
+        Scope {
+            id: None,
+            symbols,
+            function_return_type: None,
+        }
     }
 
     fn define_var(&mut self, name: &Token, var_type: &NodeType) {
@@ -88,12 +102,17 @@ impl TypeChecker {
 
     fn push_scope(&mut self, name: &Token) {
         let symbol = Symbol::new((&self.current_scope().id).as_ref(), name);
-        self.scopes.push(Scope::new(symbol, SymbolTable::new()));
+        self.scopes.push(Scope::new(symbol));
+    }
+
+    fn push_function_scope(&mut self, name: &Token, ret_type: NodeType) {
+        let symbol = Symbol::new((&self.current_scope().id).as_ref(), name);
+        self.scopes.push(Scope::function(symbol, ret_type));
     }
 
     fn push_scope_named(&mut self, name: &str) {
         let symbol = Symbol::new_str((&self.current_scope().id).as_ref(), name);
-        self.scopes.push(Scope::new(symbol, SymbolTable::new()));
+        self.scopes.push(Scope::new(symbol));
     }
 
     fn pop_scope(&mut self) {
@@ -128,7 +147,9 @@ impl StmtVisitor for TypeChecker {
         return_type: &Option<Token>,
         body: &[Stmt],
     ) {
-        self.push_scope(name);
+        let return_type = return_type.as_ref().map(|r| NodeType::from(r)).unwrap_or(NodeType::Void);
+
+        self.push_function_scope(name, return_type);
         self.check_list(params);
         self.check_list(body);
         self.pop_scope();
@@ -194,6 +215,24 @@ impl StmtVisitor for TypeChecker {
         self.push_scope_named("else");
         self.check_list(else_body);
         self.pop_scope();
+    }
+
+    fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) {
+        let ret_type = expr
+            .as_ref()
+            .and_then(|e| self.check_expr(e))
+            .unwrap_or(NodeType::Void);
+        if let Some(expected_return) = &self.current_scope().function_return_type {
+            if &ret_type != expected_return {
+                if let Some(ret_expr) = expr.as_ref() {
+                    let message = format!("Cannot return value of type {}, expect type {}", ret_type, expected_return);
+                    self.reporter.report(Diagnostic::error(ret_expr, &message));
+                } else {
+                    let message = format!("Expect function to return type {}", expected_return);
+                    self.reporter.report(Diagnostic::error(stmt, &message));
+                }
+            }
+        }
     }
 
     fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) {

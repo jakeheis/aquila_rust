@@ -44,11 +44,7 @@ fn explicit_type() -> TestResult {
 
     assert_success_stmts(vec![
         test_ast::window_type(),
-        Stmt::variable_decl(
-            test_token::var_name(),
-            Some(test_token::type_name()),
-            None,
-        ),
+        Stmt::variable_decl(test_token::var_name(), Some(test_token::type_name()), None),
     ])
 }
 
@@ -76,12 +72,10 @@ fn field_lookup() -> TestResult {
         Stmt::variable_decl(
             test_token::var_name(),
             Some(test_token::int_type()),
-            Some(
-                Expr::field(
-                    Expr::variable(test_token::window_instance(), None),
-                    &test_token::property_name(),
-                )
-            )
+            Some(Expr::field(
+                Expr::variable(test_token::window_instance(), None),
+                &test_token::property_name(),
+            )),
         ),
     ])?;
 
@@ -91,20 +85,24 @@ fn field_lookup() -> TestResult {
         test_token::property_name(),
     ]);
 
-    assert_failure_stmts(vec![
-        test_ast::window_type(),
-        test_ast::window_instance(),
-        Stmt::variable_decl(
-            test_token::var_name(),
-            Some(test_token::bool_type()),
-            Some(
-                Expr::field(
+    assert_failure_stmts(
+        vec![
+            test_ast::window_type(),
+            test_ast::window_instance(),
+            Stmt::variable_decl(
+                test_token::var_name(),
+                Some(test_token::bool_type()),
+                Some(Expr::field(
                     Expr::variable(prop_access[0].clone(), None),
                     &prop_access[2],
-                )
-            )
-        ),
-    ], &[Diagnostic::error(&test_span::new(0, 8 + 1 + 8), "Expected Bool, got Int")],)
+                )),
+            ),
+        ],
+        &[Diagnostic::error(
+            &test_span::new(0, 8 + 1 + 8),
+            "Expected Bool, got Int",
+        )],
+    )
 }
 
 #[test]
@@ -115,18 +113,14 @@ fn call() -> TestResult {
         Stmt::variable_decl(
             test_token::var_name(),
             Some(test_token::int_type()),
-            Some(
-                Expr::call(
-                    Expr::field(
-                        Expr::variable(test_token::window_instance(), None),
-                        &test_token::func_name(),
-                    ),
-                    vec![
-                        Expr::literal(&test_token::four()),
-                    ],
-                    &test_token::right_paren(),
-                )
-            )
+            Some(Expr::call(
+                Expr::field(
+                    Expr::variable(test_token::window_instance(), None),
+                    &test_token::func_name(),
+                ),
+                vec![Expr::literal(&test_token::four())],
+                &test_token::right_paren(),
+            )),
         ),
     ])?;
 
@@ -139,28 +133,25 @@ fn call() -> TestResult {
         test_token::right_paren(),
     ]);
 
-    assert_failure_stmts(vec![
-        test_ast::window_type(),
-        test_ast::window_instance(),
-        Stmt::variable_decl(
-            test_token::var_name(),
-            Some(test_token::int_type()),
-            Some(
-                Expr::call(
-                    Expr::field(
-                        Expr::variable(tokens[0].clone(), None),
-                        &tokens[2],
-                    ),
-                    vec![
-                        Expr::literal(&tokens[4]),
-                    ],
+    assert_failure_stmts(
+        vec![
+            test_ast::window_type(),
+            test_ast::window_instance(),
+            Stmt::variable_decl(
+                test_token::var_name(),
+                Some(test_token::int_type()),
+                Some(Expr::call(
+                    Expr::field(Expr::variable(tokens[0].clone(), None), &tokens[2]),
+                    vec![Expr::literal(&tokens[4])],
                     &tokens[5],
-                )
-            )
-        ),
-    ], &[
-        Diagnostic::error(&test_span::new(8 + 1 + 3 + 1, 4), "Expected Int, got Bool")
-    ])
+                )),
+            ),
+        ],
+        &[Diagnostic::error(
+            &test_span::new(8 + 1 + 3 + 1, 4),
+            "Expected Int, got Bool",
+        )],
+    )
 }
 
 //

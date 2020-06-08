@@ -92,6 +92,21 @@ impl Parser {
                     "If statement not allowed",
                 ))
             }
+        } else if self.matches(TokenKind::Return) {
+            let stmt = self.return_stmt();
+            self.consume(
+                TokenKind::Semicolon,
+                "Expected semicolon after return statement",
+            )?;
+            if context == Context::InsideFunction {
+                stmt
+            } else {
+                let span = stmt.map(|s| s.span.clone()).unwrap_or(self.previous().span.clone());
+                Err(Diagnostic::error(
+                    &span,
+                    "Return statement only allowed inside functions",
+                ))
+            }
         } else {
             if context == Context::TopLevel || context == Context::InsideFunction {
                 let stmt = Stmt::expression(self.parse_precedence(Precedence::Assignment)?);
@@ -111,6 +126,7 @@ impl Parser {
                 | TokenKind::Def
                 | TokenKind::Let
                 | TokenKind::If
+                | TokenKind::Return
                 | TokenKind::RightBrace => true,
                 TokenKind::Semicolon => {
                     self.advance();
@@ -250,6 +266,16 @@ impl Parser {
             else_body,
             end_brace_span,
         ))
+    }
+
+    fn return_stmt(&mut self) -> Result<Stmt> {
+        let ret_keyword = self.previous().span.clone();
+        if self.peek() != TokenKind::Semicolon {
+            let value = self.expression()?;
+            Ok(Stmt::return_stmt(ret_keyword, Some(value)))
+        } else {
+            Ok(Stmt::return_stmt(ret_keyword, None))
+        }
     }
 
     fn expression(&mut self) -> Result<Expr> {

@@ -132,6 +132,7 @@ impl Lexer {
             "if" => self.make_token(TokenKind::If),
             "else" => self.make_token(TokenKind::Else),
             "def" => self.make_token(TokenKind::Def),
+            "return" => self.make_token(TokenKind::Return),
             _ => Some(token),
         }
     }

@@ -38,6 +38,7 @@ pub enum TokenKind {
     Let,
     If,
     Else,
+    Return,
 
     // Other
     Comma,

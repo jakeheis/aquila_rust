@@ -163,6 +163,10 @@ impl StmtVisitor for SymbolTableBuilder {
         NodeType::Void
     }
 
+    fn visit_return_stmt(&mut self, _stmt: &Stmt, _expr: &Option<Expr>) -> Self::StmtResult {
+        NodeType::Void
+    }
+
     fn visit_expression_stmt(&mut self, _stmt: &Stmt, _expr: &Expr) -> Self::StmtResult {
         NodeType::Void
     }
