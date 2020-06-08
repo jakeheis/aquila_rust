@@ -107,6 +107,62 @@ fn field_lookup() -> TestResult {
     ], &[Diagnostic::error(&test_span::new(0, 8 + 1 + 8), "Expected Bool, got Int")],)
 }
 
+#[test]
+fn call() -> TestResult {
+    assert_success_stmts(vec![
+        test_ast::window_type(),
+        test_ast::window_instance(),
+        Stmt::variable_decl(
+            test_token::var_name(),
+            Some(test_token::int_type()),
+            Some(
+                Expr::call(
+                    Expr::field(
+                        Expr::variable(test_token::window_instance(), None),
+                        &test_token::func_name(),
+                    ),
+                    vec![
+                        Expr::literal(&test_token::four()),
+                    ],
+                    &test_token::right_paren(),
+                )
+            )
+        ),
+    ])?;
+
+    let (_, tokens) = test_token::join(&[
+        test_token::window_instance(),
+        test_token::period(),
+        test_token::func_name(),
+        test_token::left_paren(),
+        test_token::true_keyword(),
+        test_token::right_paren(),
+    ]);
+
+    assert_failure_stmts(vec![
+        test_ast::window_type(),
+        test_ast::window_instance(),
+        Stmt::variable_decl(
+            test_token::var_name(),
+            Some(test_token::int_type()),
+            Some(
+                Expr::call(
+                    Expr::field(
+                        Expr::variable(tokens[0].clone(), None),
+                        &tokens[2],
+                    ),
+                    vec![
+                        Expr::literal(&tokens[4]),
+                    ],
+                    &tokens[5],
+                )
+            )
+        ),
+    ], &[
+        Diagnostic::error(&test_span::new(8 + 1 + 3 + 1, 4), "Expected Int, got Bool")
+    ])
+}
+
 //
 // Helpers
 //

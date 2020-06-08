@@ -91,6 +91,14 @@ pub mod test_token {
         test(TokenKind::RightBrace, "}")
     }
 
+    pub fn left_paren() -> Token {
+        test(TokenKind::LeftParen, "(")
+    }
+
+    pub fn right_paren() -> Token {
+        test(TokenKind::RightParen, ")")
+    }
+
     pub fn equals() -> Token {
         test(TokenKind::Equal, "=")
     }
