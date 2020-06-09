@@ -21,6 +21,10 @@ impl Symbol {
             user_def_name: name.to_string(),
         }
     }
+
+    pub fn mangled(&self) -> String {
+        self.id.replace("$", "__")
+    }
 }
 
 impl std::fmt::Display for Symbol {

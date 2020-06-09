@@ -3,11 +3,13 @@ pub mod diagnostic;
 pub mod lexing;
 pub mod parsing;
 pub mod source;
+pub mod codegen;
 
 use analysis::*;
 use diagnostic::*;
 use lexing::*;
 use parsing::*;
+use codegen::*;
 pub use source::*;
 use std::rc::Rc;
 
@@ -23,7 +25,10 @@ pub fn run(source: Source) {
     let mut printer = ASTPrinter::new();
     printer.print(&parsed);
 
-    if TypeChecker::check(parsed, reporter) == false {
+    let (symbols, success) = TypeChecker::check(&parsed, Rc::clone(&reporter));
+    if success == false {
         return;
     }
+
+    Codegen::generate(parsed, symbols, reporter);
 }

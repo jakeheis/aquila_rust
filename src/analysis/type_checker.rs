@@ -47,8 +47,8 @@ pub struct Analysis {
 }
 
 impl TypeChecker {
-    pub fn check(program: ParsedProgram, reporter: Rc<dyn Reporter>) -> bool {
-        let table = SymbolTableBuilder::build(&program);
+    pub fn check(program: &ParsedProgram, reporter: Rc<dyn Reporter>) -> (SymbolTable, bool) {
+        let table = SymbolTableBuilder::build(program);
         let global_scope = Scope::global(table);
 
         let mut checker = TypeChecker {
@@ -58,7 +58,7 @@ impl TypeChecker {
         };
         checker.check_list(&program.statements);
 
-        checker.errored
+        (checker.scopes.remove(0).symbols, !checker.errored)
     }
 
     fn check_list(&mut self, stmt_list: &[Stmt]) -> Analysis {
@@ -82,10 +82,15 @@ impl TypeChecker {
         match expr.accept(self) {
             Ok(t) => Some(t),
             Err(diag) => {
-                self.reporter.report(diag);
+                self.report(diag);
                 None
             }
         }
+    }
+
+    fn report(&mut self, diag: Diagnostic) {
+        self.reporter.report(diag);
+        self.errored = true;
     }
 
     fn type_mismatch<T: ContainsSpan>(
@@ -178,7 +183,7 @@ impl StmtVisitor for TypeChecker {
             let last_param = params.last().map(|p| p.span.clone());
             let span_params = Span::join_opt(name, &last_param);
             let span = Span::join_opt(&span_params, return_type_token);
-            self.reporter.report(Diagnostic::error(&span, &message));
+            self.report(Diagnostic::error(&span, &message));
         }
 
         Analysis {
@@ -219,7 +224,7 @@ impl StmtVisitor for TypeChecker {
                 if let Some(explicit_type) = explicit_type {
                     if explicit_type != value_type {
                         let diagnostic = self.type_mismatch(value, value_type, explicit_type);
-                        self.reporter.report(diagnostic);
+                        self.report(diagnostic);
                     }
                 } else {
                     self.current_scope().define_var(name, &value_type);
@@ -227,7 +232,7 @@ impl StmtVisitor for TypeChecker {
             }
         } else if explicit_type.is_none() {
             let diag = Diagnostic::error(name, "Can't infer type");
-            self.reporter.report(diag);
+            self.report(diag);
         }
 
         Analysis {
@@ -244,8 +249,7 @@ impl StmtVisitor for TypeChecker {
     ) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
             if cond_type != NodeType::Bool {
-                self.reporter
-                    .report(self.type_mismatch(condition, cond_type, NodeType::Bool));
+                self.report(self.type_mismatch(condition, cond_type, NodeType::Bool));
             }
         }
 
@@ -280,10 +284,10 @@ impl StmtVisitor for TypeChecker {
                         "Cannot return value of type {}, expect type {}",
                         ret_type, expected_return
                     );
-                    self.reporter.report(Diagnostic::error(ret_expr, &message));
+                    self.report(Diagnostic::error(ret_expr, &message));
                 } else {
                     let message = format!("Expect function to return type {}", expected_return);
-                    self.reporter.report(Diagnostic::error(stmt, &message));
+                    self.report(Diagnostic::error(stmt, &message));
                 }
             }
         }
@@ -426,8 +430,8 @@ pub enum NodeType {
     Void,
     Int,
     Bool,
-    Function(Vec<NodeType>, Box<NodeType>),
     Type(String),
+    Function(Vec<NodeType>, Box<NodeType>),
     Metatype(String),
 }
 

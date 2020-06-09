@@ -50,6 +50,10 @@
 
 // add(3, true);
 
+def add(a: int, b: int): int {
+  return a + b;
+}
+
 type Hey {
   let a: int;
   
@@ -58,15 +62,15 @@ type Hey {
     if true {
       return false;
     }
-    4 + 6;
+    return true;
   }
 }
 
-return 5;
+//return 5;
 
-let s: Hey;
+//let s: Hey;
 // let b: Yo;
 
-s.a + 3;
+//s.a + 3;
 
-s.sup(3) + 3;
+//ss.sup(3) + 3;
