@@ -5,7 +5,7 @@ use std::rc::Rc;
 #[derive(Debug, PartialEq)]
 pub enum Severity {
     Error,
-    // Warning,
+    Warning,
 }
 
 pub type DiagnosticResult<T> = Result<T, Diagnostic>;
@@ -21,6 +21,14 @@ impl Diagnostic {
     pub fn error<T: ContainsSpan>(span: &T, message: &str) -> Self {
         Diagnostic {
             severity: Severity::Error,
+            span: span.span().clone(),
+            message: String::from(message),
+        }
+    }
+
+    pub fn warning<T: ContainsSpan>(span: &T, message: &str) -> Self {
+        Diagnostic {
+            severity: Severity::Warning,
             span: span.span().clone(),
             message: String::from(message),
         }

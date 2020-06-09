@@ -42,6 +42,10 @@ pub struct TypeChecker {
     errored: bool,
 }
 
+pub struct Analysis {
+    guarantees_return: bool,
+}
+
 impl TypeChecker {
     pub fn check(program: ParsedProgram, reporter: Rc<dyn Reporter>) -> bool {
         let table = SymbolTableBuilder::build(&program);
@@ -57,10 +61,20 @@ impl TypeChecker {
         checker.errored
     }
 
-    fn check_list(&mut self, stmt_list: &[Stmt]) {
+    fn check_list(&mut self, stmt_list: &[Stmt]) -> Analysis {
+        let mut warned_unused = false;
+        let mut guarantees_return = false;
         for stmt in stmt_list {
-            stmt.accept(self);
+            if guarantees_return && warned_unused == false {
+                self.reporter.report(Diagnostic::warning(stmt, "Code will never be executed"));
+                warned_unused = true;
+            }
+            let analysis = stmt.accept(self);
+            if analysis.guarantees_return {
+                guarantees_return = true;
+            }
         }
+        Analysis { guarantees_return }
     }
 
     fn check_expr(&mut self, expr: &Expr) -> Option<NodeType> {
@@ -121,13 +135,15 @@ impl TypeChecker {
 }
 
 impl StmtVisitor for TypeChecker {
-    type StmtResult = ();
+    type StmtResult = Analysis;
 
-    fn visit_type_decl(&mut self, _stmt: &Stmt, name: &Token, fields: &[Stmt], methods: &[Stmt]) {
+    fn visit_type_decl(&mut self, _stmt: &Stmt, name: &Token, fields: &[Stmt], methods: &[Stmt]) -> Analysis {
         self.push_scope(name);
         self.check_list(fields);
         self.check_list(methods);
         self.pop_scope();
+
+        Analysis { guarantees_return: false }
     }
 
     fn visit_function_decl(
@@ -135,15 +151,25 @@ impl StmtVisitor for TypeChecker {
         _stmt: &Stmt,
         name: &Token,
         params: &[Stmt],
-        return_type: &Option<Token>,
+        return_type_token: &Option<Token>,
         body: &[Stmt],
-    ) {
-        let return_type = return_type.as_ref().map(|r| NodeType::from(r)).unwrap_or(NodeType::Void);
+    ) -> Analysis {
+        let return_type = return_type_token.as_ref().map(|r| NodeType::from(r)).unwrap_or(NodeType::Void);
 
-        self.push_function_scope(name, return_type);
+        self.push_function_scope(name, return_type.clone());
         self.check_list(params);
-        self.check_list(body);
+        let analysis = self.check_list(body);
         self.pop_scope();
+
+        if analysis.guarantees_return == false {
+            let message = format!("Function may not return {}", return_type);
+            let last_param = params.last().map(|p| p.span.clone());
+            let span_params = Span::join_opt(name, &last_param);
+            let span = Span::join_opt(&span_params, return_type_token);
+            self.reporter.report(Diagnostic::error(&span, &message));
+        }
+
+        Analysis { guarantees_return: false }
     }
 
     fn visit_variable_decl(
@@ -152,7 +178,7 @@ impl StmtVisitor for TypeChecker {
         name: &Token,
         kind: &Option<Token>,
         value: &Option<Expr>,
-    ) {
+    )  -> Analysis {
         let explicit_type = kind.as_ref().map(|k| NodeType::from(k));
         if let Some(explicit_type) = explicit_type.as_ref() {
             self.current_scope().define_var(name, explicit_type);
@@ -189,9 +215,11 @@ impl StmtVisitor for TypeChecker {
             let diag = Diagnostic::error(name, "Can't infer type");
             self.reporter.report(diag);
         }
+
+        Analysis { guarantees_return: false }
     }
 
-    fn visit_if_stmt(&mut self, _stmt: &Stmt, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) {
+    fn visit_if_stmt(&mut self, _stmt: &Stmt, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
             if cond_type != NodeType::Bool {
                 self.reporter
@@ -199,16 +227,26 @@ impl StmtVisitor for TypeChecker {
             }
         }
 
+        let mut guarantees_return = true;
+
         self.push_scope_named("if");
-        self.check_list(body);
+        let body_analysis = self.check_list(body);
+        if body_analysis.guarantees_return == false {
+            guarantees_return = false;
+        }
         self.pop_scope();
 
         self.push_scope_named("else");
-        self.check_list(else_body);
+        let else_analysis = self.check_list(else_body);
+        if else_analysis.guarantees_return == false {
+            guarantees_return = false;
+        }
         self.pop_scope();
+
+        Analysis { guarantees_return }
     }
 
-    fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) {
+    fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Analysis {
         let ret_type = expr
             .as_ref()
             .and_then(|e| self.check_expr(e))
@@ -224,10 +262,13 @@ impl StmtVisitor for TypeChecker {
                 }
             }
         }
+
+        Analysis { guarantees_return: true }
     }
 
-    fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) {
+    fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) -> Analysis {
         self.check_expr(expr);
+        Analysis { guarantees_return: false }
     }
 }
 
