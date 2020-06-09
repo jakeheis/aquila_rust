@@ -101,7 +101,9 @@ impl Parser {
             if context == Context::InsideFunction {
                 stmt
             } else {
-                let span = stmt.map(|s| s.span.clone()).unwrap_or(self.previous().span.clone());
+                let span = stmt
+                    .map(|s| s.span.clone())
+                    .unwrap_or(self.previous().span.clone());
                 Err(Diagnostic::error(
                     &span,
                     "Return statement only allowed inside functions",

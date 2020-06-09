@@ -155,6 +155,10 @@ pub mod test_token {
         test(TokenKind::True, "true")
     }
 
+    pub fn return_keyword() -> Token {
+        test(TokenKind::Return, "return")
+    }
+
     pub fn join(tokens: &[Token]) -> (Source, Vec<Token>) {
         let combined = tokens
             .iter()
@@ -203,7 +207,10 @@ pub mod test_ast {
                     None,
                 )],
                 Some(test_token::int_type()),
-                vec![],
+                vec![Stmt::return_stmt(
+                    test_token::return_keyword().span,
+                    Some(Expr::literal(&test_token::four())),
+                )],
                 test_token::right_brace().span,
             )],
             &test_token::right_brace(),

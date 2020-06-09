@@ -66,7 +66,8 @@ impl TypeChecker {
         let mut guarantees_return = false;
         for stmt in stmt_list {
             if guarantees_return && warned_unused == false {
-                self.reporter.report(Diagnostic::warning(stmt, "Code will never be executed"));
+                self.reporter
+                    .report(Diagnostic::warning(stmt, "Code will never be executed"));
                 warned_unused = true;
             }
             let analysis = stmt.accept(self);
@@ -137,13 +138,21 @@ impl TypeChecker {
 impl StmtVisitor for TypeChecker {
     type StmtResult = Analysis;
 
-    fn visit_type_decl(&mut self, _stmt: &Stmt, name: &Token, fields: &[Stmt], methods: &[Stmt]) -> Analysis {
+    fn visit_type_decl(
+        &mut self,
+        _stmt: &Stmt,
+        name: &Token,
+        fields: &[Stmt],
+        methods: &[Stmt],
+    ) -> Analysis {
         self.push_scope(name);
         self.check_list(fields);
         self.check_list(methods);
         self.pop_scope();
 
-        Analysis { guarantees_return: false }
+        Analysis {
+            guarantees_return: false,
+        }
     }
 
     fn visit_function_decl(
@@ -154,7 +163,10 @@ impl StmtVisitor for TypeChecker {
         return_type_token: &Option<Token>,
         body: &[Stmt],
     ) -> Analysis {
-        let return_type = return_type_token.as_ref().map(|r| NodeType::from(r)).unwrap_or(NodeType::Void);
+        let return_type = return_type_token
+            .as_ref()
+            .map(|r| NodeType::from(r))
+            .unwrap_or(NodeType::Void);
 
         self.push_function_scope(name, return_type.clone());
         self.check_list(params);
@@ -169,7 +181,9 @@ impl StmtVisitor for TypeChecker {
             self.reporter.report(Diagnostic::error(&span, &message));
         }
 
-        Analysis { guarantees_return: false }
+        Analysis {
+            guarantees_return: false,
+        }
     }
 
     fn visit_variable_decl(
@@ -178,7 +192,7 @@ impl StmtVisitor for TypeChecker {
         name: &Token,
         kind: &Option<Token>,
         value: &Option<Expr>,
-    )  -> Analysis {
+    ) -> Analysis {
         let explicit_type = kind.as_ref().map(|k| NodeType::from(k));
         if let Some(explicit_type) = explicit_type.as_ref() {
             self.current_scope().define_var(name, explicit_type);
@@ -216,10 +230,18 @@ impl StmtVisitor for TypeChecker {
             self.reporter.report(diag);
         }
 
-        Analysis { guarantees_return: false }
+        Analysis {
+            guarantees_return: false,
+        }
     }
 
-    fn visit_if_stmt(&mut self, _stmt: &Stmt, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) -> Analysis {
+    fn visit_if_stmt(
+        &mut self,
+        _stmt: &Stmt,
+        condition: &Expr,
+        body: &[Stmt],
+        else_body: &[Stmt],
+    ) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
             if cond_type != NodeType::Bool {
                 self.reporter
@@ -254,7 +276,10 @@ impl StmtVisitor for TypeChecker {
         if let Some(expected_return) = &self.current_scope().function_return_type {
             if &ret_type != expected_return {
                 if let Some(ret_expr) = expr.as_ref() {
-                    let message = format!("Cannot return value of type {}, expect type {}", ret_type, expected_return);
+                    let message = format!(
+                        "Cannot return value of type {}, expect type {}",
+                        ret_type, expected_return
+                    );
                     self.reporter.report(Diagnostic::error(ret_expr, &message));
                 } else {
                     let message = format!("Expect function to return type {}", expected_return);
@@ -263,12 +288,16 @@ impl StmtVisitor for TypeChecker {
             }
         }
 
-        Analysis { guarantees_return: true }
+        Analysis {
+            guarantees_return: true,
+        }
     }
 
     fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) -> Analysis {
         self.check_expr(expr);
-        Analysis { guarantees_return: false }
+        Analysis {
+            guarantees_return: false,
+        }
     }
 }
 

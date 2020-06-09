@@ -465,9 +465,6 @@ impl ExprVisitor for ASTPrinter {
     }
 
     fn visit_variable_expr(&mut self, name: &Token) {
-        self.write_ln(&format!(
-            "Variable({})",
-            name.lexeme(),
-        ))
+        self.write_ln(&format!("Variable({})", name.lexeme(),))
     }
 }
