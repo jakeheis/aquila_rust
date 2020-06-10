@@ -9,13 +9,13 @@ impl CWriter {
         CWriter { indent: 0 }
     }
 
-    pub fn decl_struct(&mut self, name: &str, fields: &[(NodeType, String)]) {
+    pub fn start_decl_struct(&mut self, name: &str) {
         self.writeln(&format!("struct {} {{", name));
-        self.indent(|writer| {
-            for (var_type, name) in fields {
-                writer.decl_var(var_type, name);
-            }
-        });
+        self.indent += 1;
+    }
+
+    pub fn end_decl_struct(&mut self) {
+        self.indent -= 1;
         self.writeln("};");
     }
 
@@ -44,9 +44,9 @@ impl CWriter {
         self.writeln("}");
     }
 
-    // pub fn write_text(&mut self, text: &str) {
-
-    // }
+    pub fn decl_var(&self, var_type: &NodeType, name: &str) {
+        self.writeln(&format!("{} {};", CWriter::convert_type(var_type), name));
+    }
 
     fn convert_type(node_type: &NodeType) -> String {
         let slice = match node_type {
@@ -57,18 +57,6 @@ impl CWriter {
             _ => panic!(),
         };
         String::from(slice)
-    }
-
-    // pub fn decl_struct<F>(&mut self, name: &str, fields: F) where F: Fn(&mut CWriter) -> () {
-    //     self.writeln(&format!("struct {} {{", name));
-    //     self.indent(|writer| {
-    //         fields(writer);
-    //     });
-    //     self.writeln("};");
-    // }
-
-    pub fn decl_var(&self, var_type: &NodeType, name: &str) {
-        self.writeln(&format!("{} {};", CWriter::convert_type(var_type), name));
     }
 
     fn indent<F>(&mut self, block: F)

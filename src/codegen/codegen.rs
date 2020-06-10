@@ -8,7 +8,7 @@ use std::rc::Rc;
 pub struct Codegen {
     writer: CWriter,
     global_symbols: SymbolTable,
-    current_type: Option<String>,
+    current_type: Option<Symbol>,
     reporter: Rc<dyn Reporter>,
 }
 
@@ -50,29 +50,20 @@ impl StmtVisitor for Codegen {
     fn visit_type_decl(
         &mut self,
         stmt: &Stmt,
-        name: &Token,
+        _name: &Token,
         fields: &[Stmt],
         methods: &[Stmt],
     ) -> Self::StmtResult {
         let borrowed_symbol = stmt.symbol.borrow();
         let struct_symbol = borrowed_symbol.as_ref().unwrap();
 
-        let struct_fields: Vec<(NodeType, String)> = fields
-            .iter()
-            .map(|f| {
-                let borrowed_symbol = f.symbol.borrow();
-                let borrowed_type = f.stmt_type.borrow();
+        self.writer.start_decl_struct(&struct_symbol.mangled());
+        for field in fields {
+            field.accept(self);
+        }
+        self.writer.end_decl_struct();
 
-                (
-                    borrowed_type.as_ref().unwrap().clone(),
-                    borrowed_symbol.as_ref().unwrap().mangled(),
-                )
-            })
-            .collect();
-
-        self.writer.decl_struct(name.lexeme(), &struct_fields);
-
-        self.current_type = Some(struct_symbol.mangled());
+        self.current_type = Some(struct_symbol.clone());
         for method in methods {
             method.accept(self);
         }
@@ -89,8 +80,8 @@ impl StmtVisitor for Codegen {
     ) -> Self::StmtResult {
         let borrowed_symbol = stmt.symbol.borrow();
         let func_symbol = borrowed_symbol.as_ref().unwrap();
-
-        let func_type = self.global_symbols.get_type(func_symbol).unwrap();
+        let borrowed_type = stmt.stmt_type.borrow();
+        let func_type = borrowed_type.as_ref().unwrap();
 
         guard!(NodeType::Function[param_types, ret_type] = func_type);
 
@@ -108,7 +99,7 @@ impl StmtVisitor for Codegen {
         if let Some(current_type) = &self.current_type {
             params.insert(
                 0,
-                (NodeType::Type(current_type.clone()), String::from("self")),
+                (NodeType::Type(current_type.mangled()), String::from("self")),
             );
         }
 
@@ -123,7 +114,7 @@ impl StmtVisitor for Codegen {
         stmt: &Stmt,
         _name: &Token,
         _kind: &Option<Token>,
-        _value: &Option<Expr>,
+        value: &Option<Expr>,
     ) -> Self::StmtResult {
         let borrowed_symbol = stmt.symbol.borrow();
         let var_symbol = borrowed_symbol.as_ref().unwrap();
@@ -132,6 +123,11 @@ impl StmtVisitor for Codegen {
         let var_type = borrowed_type.as_ref().unwrap();
 
         self.writer.decl_var(var_type, &var_symbol.mangled());
+
+        if let Some(value) = value.as_ref() {
+            let line = format!("{} = {};", var_symbol.mangled(), value.accept(self));
+            self.writer.writeln(&line);
+        }
     }
 
     fn visit_if_stmt(
@@ -143,11 +139,81 @@ impl StmtVisitor for Codegen {
     ) -> Self::StmtResult {
     }
 
-    fn visit_return_stmt(&mut self, stmt: &Stmt, _expr: &Option<Expr>) -> Self::StmtResult {
-        self.writer.writeln(stmt.span.lexeme());
+    fn visit_return_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult {
+        let val = expr.as_ref().map(|e| e.accept(self)).unwrap_or(String::from(""));
+        let line = format!("return {};", val);
+        self.writer.writeln(&line);
     }
 
     fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) {
-        self.writer.writeln(expr.span.lexeme());
+        let line = format!("{};", expr.accept(self));
+        self.writer.writeln(&line);
     }
+}
+
+impl ExprVisitor for Codegen {
+
+    type ExprResult = String;
+
+    fn visit_assignment_expr(
+        &mut self,
+        _expr: &Expr,
+        target: &Expr,
+        value: &Expr,
+    ) -> Self::ExprResult {
+        format!("{} = {}", target.accept(self), value.accept(self))
+    }
+
+    fn visit_binary_expr(
+        &mut self,
+        _expr: &Expr,
+        lhs: &Expr,
+        op: &Token,
+        rhs: &Expr,
+    ) -> Self::ExprResult {
+        format!("({}) {} ({})", lhs.accept(self), op.lexeme(), rhs.accept(self))
+    }
+
+    fn visit_unary_expr(&mut self, _expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
+        format!("{}({})", op.lexeme(), operand.accept(self))
+    }
+
+    fn visit_call_expr(&mut self, _expr: &Expr, target: &Expr, args: &[Expr]) -> Self::ExprResult {
+        let mut args: Vec<_> = args.iter().map(|a| a.accept(self)).collect();
+        
+        match &target.kind {
+            ExprKind::Field(field_target, _) => {
+                args.insert(0, field_target.accept(self));
+            },
+            ExprKind::Variable(_) => (),
+            _ => unimplemented!()
+        }
+
+        let borrowed_symbol = target.symbol.borrow();
+        format!("{}({})", borrowed_symbol.as_ref().unwrap().mangled(), args.join(","))
+    }
+
+    fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, field: &Token) -> Self::ExprResult {
+        let borrowed_symbol = expr.symbol.borrow();
+        let symbol = borrowed_symbol.as_ref().unwrap();
+        match self.global_symbols.get_type(symbol) {
+            Some(NodeType::Function(_, _)) => symbol.mangled(),
+            _ => format!("{}.{}", target.accept(self), field.lexeme()),
+        }
+    }
+
+    fn visit_literal_expr(&mut self, _expr: &Expr, token: &Token) -> Self::ExprResult {
+        String::from(token.lexeme())
+    }
+
+    fn visit_variable_expr(&mut self, expr: &Expr, _name: &Token) -> Self::ExprResult {
+        let borrowed_symbol = expr.symbol.borrow();
+        let symbol = borrowed_symbol.as_ref().unwrap();
+        if self.current_type.as_ref().map(|t| t.owns(symbol)).unwrap_or(false) {
+            format!("self.{}", symbol.mangled())
+        } else {
+            symbol.mangled()
+        }
+    }
+
 }

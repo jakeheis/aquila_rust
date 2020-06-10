@@ -25,6 +25,11 @@ impl Symbol {
     pub fn mangled(&self) -> String {
         self.id.replace("$", "__")
     }
+
+    pub fn owns(&self, other: &Symbol) -> bool {
+        let expected = self.id.clone() + "$" + &other.user_def_name;
+        other.id == expected
+    }
 }
 
 impl std::fmt::Display for Symbol {
@@ -119,7 +124,7 @@ impl StmtVisitor for SymbolTableBuilder {
 
     fn visit_function_decl(
         &mut self,
-        _stmt: &Stmt,
+        stmt: &Stmt,
         name: &Token,
         params: &[Stmt],
         return_type: &Option<Token>,
@@ -136,6 +141,7 @@ impl StmtVisitor for SymbolTableBuilder {
         let new_type = NodeType::Function(param_types, Box::new(return_type));
 
         self.table.insert(new_symbol, new_type.clone());
+        stmt.stmt_type.replace(Some(new_type.clone()));
 
         new_type
     }

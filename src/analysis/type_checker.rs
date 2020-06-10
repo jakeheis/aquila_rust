@@ -373,7 +373,7 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_call_expr(&mut self, _expr: &Expr, target: &Expr, args: &[Expr]) -> Self::ExprResult {
+    fn visit_call_expr(&mut self, expr: &Expr, target: &Expr, args: &[Expr]) -> Self::ExprResult {
         let func_type = target.accept(self)?;
         if let NodeType::Function(params, ret) = func_type.clone() {
             let arg_types: DiagnosticResult<Vec<NodeType>> =
