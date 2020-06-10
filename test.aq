@@ -66,6 +66,10 @@ type Hey {
   }
 }
 
+let hi: Hey;
+let temp = add(1, 2);
+let t2 = hi.sup(hi.a);
+
 //return 5;
 
 //let s: Hey;

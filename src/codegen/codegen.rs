@@ -7,7 +7,6 @@ use std::rc::Rc;
 
 pub struct Codegen {
     writer: CWriter,
-    context: Vec<Symbol>,
     global_symbols: SymbolTable,
     reporter: Rc<dyn Reporter>,
 }
@@ -17,7 +16,6 @@ impl Codegen {
     pub fn generate(program: ParsedProgram, global_symbols: SymbolTable, reporter: Rc<dyn Reporter>) {
         let mut codegen = Codegen {
             writer: CWriter::new(),
-            context: Vec::new(),
             global_symbols,
             reporter,
         };
@@ -49,36 +47,34 @@ impl StmtVisitor for Codegen {
 
     fn visit_type_decl(
         &mut self,
-        _stmt: &Stmt,
+        stmt: &Stmt,
         name: &Token,
         fields: &[Stmt],
         methods: &[Stmt],
     ) -> Self::StmtResult {
-        let struct_symbol = Symbol::new(self.context.last(), name);
-        let struct_fields = self.map_vars(Some(&struct_symbol), fields);
+        let borrowed_symbol = stmt.symbol.borrow();
+        let struct_symbol = borrowed_symbol.as_ref().unwrap();
+
+        let struct_fields = self.map_vars(Some(struct_symbol), fields);
 
         self.writer.decl_struct(name.lexeme(), &struct_fields);
     }
 
     fn visit_function_decl(
         &mut self,
-        _stmt: &Stmt,
-        name: &Token,
+        stmt: &Stmt,
+        _name: &Token,
         params: &[Stmt],
         _return_type: &Option<Token>,
         body: &[Stmt],
     ) -> Self::StmtResult {
-        let func_symbol = Symbol::new(self.context.last(), name);
+        let borrowed_symbol = stmt.symbol.borrow();
+        let func_symbol = borrowed_symbol.as_ref().unwrap();
 
-        let func_type = self.global_symbols.get_type(&func_symbol).unwrap();
+        let func_type = self.global_symbols.get_type(func_symbol).unwrap();
         if let NodeType::Function(param_types, ret_type) = func_type {
             let params: Vec<(NodeType, String)> = param_types.iter().zip(params).map(|(param_type, param_stmt)| {
-                if let StmtKind::VariableDecl(name, _, _) = &param_stmt.kind {
-                    let param_symbol = Symbol::new(Some(&func_symbol), name);
-                    (param_type.clone(), param_symbol.mangled())
-                } else {
-                    unreachable!()
-                }
+                (param_type.clone(), param_stmt.symbol.borrow().as_ref().unwrap().mangled())
             }).collect();
 
             self.writer.start_decl_func(ret_type, &func_symbol.mangled(), &params);
@@ -96,7 +92,13 @@ impl StmtVisitor for Codegen {
         _kind: &Option<Token>,
         _value: &Option<Expr>,
     ) -> Self::StmtResult {
-        self.writer.writeln(stmt.span.lexeme());
+        let borrowed_symbol = stmt.symbol.borrow();
+        let var_symbol = borrowed_symbol.as_ref().unwrap();
+
+        let borrowed_type = stmt.stmt_type.borrow();
+        let var_type = borrowed_type.as_ref().unwrap();
+
+        self.writer.decl_var(var_type, &var_symbol.mangled());
     }
 
     fn visit_if_stmt(

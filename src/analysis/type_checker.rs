@@ -30,9 +30,12 @@ impl Scope {
         }
     }
 
-    fn define_var(&mut self, name: &Token, var_type: &NodeType) {
+    fn define_var(&mut self, decl: &Stmt, name: &Token, var_type: &NodeType) {
         let new_symbol = Symbol::new((&self.id).as_ref(), name);
         self.symbols.insert(new_symbol.clone(), var_type.clone());
+        
+        decl.symbol.replace(Some(new_symbol));
+        decl.stmt_type.replace(Some(var_type.clone()));
     }
 }
 
@@ -111,19 +114,21 @@ impl TypeChecker {
         self.scopes.first_mut().unwrap()
     }
 
-    fn push_scope(&mut self, name: &Token) {
-        self.push_scope_named(name.lexeme());
+    fn push_scope(&mut self, name: &Token) -> Symbol {
+        self.push_scope_named(name.lexeme())
     }
 
-    fn push_function_scope(&mut self, name: &Token, ret_type: NodeType) {
+    fn push_function_scope(&mut self, name: &Token, ret_type: NodeType) -> Symbol {
         let symbol = Symbol::new((&self.current_scope().id).as_ref(), name);
-        self.scopes.push(Scope::new(symbol, Some(ret_type)));
+        self.scopes.push(Scope::new(symbol.clone(), Some(ret_type)));
+        symbol
     }
 
-    fn push_scope_named(&mut self, name: &str) {
+    fn push_scope_named(&mut self, name: &str) -> Symbol {
         let symbol = Symbol::new_str((&self.current_scope().id).as_ref(), name);
         let ret_type = self.current_scope().function_return_type.clone();
-        self.scopes.push(Scope::new(symbol, ret_type));
+        self.scopes.push(Scope::new(symbol.clone(), ret_type));
+        symbol
     }
 
     fn pop_scope(&mut self) {
@@ -145,12 +150,14 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_type_decl(
         &mut self,
-        _stmt: &Stmt,
+        stmt: &Stmt,
         name: &Token,
         fields: &[Stmt],
         methods: &[Stmt],
     ) -> Analysis {
-        self.push_scope(name);
+        let symbol = self.push_scope(name);
+        stmt.symbol.replace(Some(symbol));
+
         self.check_list(fields);
         self.check_list(methods);
         self.pop_scope();
@@ -162,7 +169,7 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_function_decl(
         &mut self,
-        _stmt: &Stmt,
+        stmt: &Stmt,
         name: &Token,
         params: &[Stmt],
         return_type_token: &Option<Token>,
@@ -173,7 +180,9 @@ impl StmtVisitor for TypeChecker {
             .map(|r| NodeType::from(r))
             .unwrap_or(NodeType::Void);
 
-        self.push_function_scope(name, return_type.clone());
+        let symbol = self.push_function_scope(name, return_type.clone());
+        stmt.symbol.replace(Some(symbol));
+
         self.check_list(params);
         let analysis = self.check_list(body);
         self.pop_scope();
@@ -193,14 +202,14 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_variable_decl(
         &mut self,
-        _stmt: &Stmt,
+        stmt: &Stmt,
         name: &Token,
         kind: &Option<Token>,
         value: &Option<Expr>,
     ) -> Analysis {
         let explicit_type = kind.as_ref().map(|k| NodeType::from(k));
         if let Some(explicit_type) = explicit_type.as_ref() {
-            self.current_scope().define_var(name, explicit_type);
+            self.current_scope().define_var(&stmt, name, explicit_type);
 
             if let NodeType::Type(compound_type) = explicit_type {
                 match self
@@ -227,7 +236,7 @@ impl StmtVisitor for TypeChecker {
                         self.report(diagnostic);
                     }
                 } else {
-                    self.current_scope().define_var(name, &value_type);
+                    self.current_scope().define_var(&stmt, name, &value_type);
                 }
             }
         } else if explicit_type.is_none() {
@@ -308,11 +317,11 @@ impl StmtVisitor for TypeChecker {
 impl ExprVisitor for TypeChecker {
     type ExprResult = Result;
 
-    fn visit_assignment_expr(&mut self, _target: &Expr, _value: &Expr) -> Self::ExprResult {
+    fn visit_assignment_expr(&mut self, _expr: &Expr, _target: &Expr, _value: &Expr) -> Self::ExprResult {
         Ok(NodeType::Void)
     }
 
-    fn visit_binary_expr(&mut self, lhs: &Expr, op: &Token, rhs: &Expr) -> Self::ExprResult {
+    fn visit_binary_expr(&mut self, _expr: &Expr, lhs: &Expr, op: &Token, rhs: &Expr) -> Self::ExprResult {
         let lhs_type = lhs.accept(self)?;
         let rhs_type = rhs.accept(self)?;
 
@@ -336,8 +345,8 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_unary_expr(&mut self, op: &Token, expr: &Expr) -> Self::ExprResult {
-        let operand_type = expr.accept(self)?;
+    fn visit_unary_expr(&mut self, _expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
+        let operand_type = operand.accept(self)?;
 
         let entries: &[NodeType] = match op.kind {
             TokenKind::Minus => &NEGATE_ENTRIES,
@@ -349,11 +358,11 @@ impl ExprVisitor for TypeChecker {
             Ok(operand_type.clone())
         } else {
             let message = format!("Cannot {} on {}", op.lexeme(), operand_type);
-            Err(Diagnostic::error(expr, &message))
+            Err(Diagnostic::error(operand, &message))
         }
     }
 
-    fn visit_call_expr(&mut self, target: &Expr, args: &[Expr]) -> Self::ExprResult {
+    fn visit_call_expr(&mut self, _expr: &Expr, target: &Expr, args: &[Expr]) -> Self::ExprResult {
         let func_type = target.accept(self)?;
         if let NodeType::Function(params, ret) = func_type.clone() {
             let arg_types: DiagnosticResult<Vec<NodeType>> =
@@ -379,13 +388,15 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_field_expr(&mut self, target: &Expr, field: &Token) -> Self::ExprResult {
+    fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, field: &Token) -> Self::ExprResult {
         let target_type = target.accept(self)?;
 
         if let NodeType::Type(type_name) = target_type {
             let type_symbol = Symbol::new_str(None, &type_name);
             let field_symbol = Symbol::new(Some(&type_symbol), field);
+
             if let Some(field_type) = self.global_scope().symbols.get_type(&field_symbol) {
+                expr.symbol.replace(Some(field_symbol));
                 Ok(field_type.clone())
             } else {
                 Err(Diagnostic::error(
@@ -405,7 +416,7 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_literal_expr(&mut self, token: &Token) -> Self::ExprResult {
+    fn visit_literal_expr(&mut self, _expr: &Expr, token: &Token) -> Self::ExprResult {
         match token.kind {
             TokenKind::Number => Ok(NodeType::Int),
             TokenKind::True => Ok(NodeType::Bool),
@@ -414,8 +425,9 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_variable_expr(&mut self, name: &Token) -> Self::ExprResult {
+    fn visit_variable_expr(&mut self, expr: &Expr, name: &Token) -> Self::ExprResult {
         if let Some((scope, symbol)) = self.resolve_var(name.lexeme()) {
+            expr.symbol.replace(Some(symbol.clone()));
             Ok(scope.symbols.get_type(symbol).unwrap().clone())
         } else {
             Err(Diagnostic::error(name, "Undefined variable"))

@@ -197,6 +197,6 @@ fn test_typecheck(stmts: Vec<Stmt>) -> Vec<Diagnostic> {
     };
 
     let (reporter, mut diagnostics) = TestReporter::new();
-    TypeChecker::check(program, reporter);
+    TypeChecker::check(&program, reporter);
     diagnostics.unwrap()
 }

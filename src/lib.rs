@@ -22,13 +22,13 @@ pub fn run(source: Source) {
     let parser = Parser::new(lexed, Rc::clone(&reporter));
     let parsed = parser.parse();
 
-    let mut printer = ASTPrinter::new();
-    printer.print(&parsed);
-
     let (symbols, success) = TypeChecker::check(&parsed, Rc::clone(&reporter));
     if success == false {
         return;
     }
+
+    let mut printer = ASTPrinter::new();
+    printer.print(&parsed);
 
     Codegen::generate(parsed, symbols, reporter);
 }
