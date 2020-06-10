@@ -1,22 +1,35 @@
 pub use crate::analysis::NodeType;
+use std::fs::File;
+use std::io::Write;
+// use std::io::BufWriter;
 
 pub struct CWriter {
+    file: File,
     indent: u32,
 }
 
 impl CWriter {
-    pub fn new() -> Self {
-        CWriter { indent: 0 }
+    pub fn new(file: File) -> Self {
+        let mut writer = CWriter { file, indent: 0 };
+
+        writer.write_includes();
+
+        writer
     }
 
-    pub fn start_decl_struct(&mut self, name: &str) {
-        self.writeln(&format!("struct {} {{", name));
+    fn write_includes(&mut self) {
+        self.writeln("#include <stdbool.h>");
+        self.writeln("");
+    }
+
+    pub fn start_decl_struct(&mut self) {
+        self.writeln(&format!("typedef struct {{"));
         self.indent += 1;
     }
 
-    pub fn end_decl_struct(&mut self) {
+    pub fn end_decl_struct(&mut self, name: &str) {
         self.indent -= 1;
-        self.writeln("};");
+        self.writeln(&format!("}} {};", name));
     }
 
     pub fn start_decl_func(
@@ -44,7 +57,7 @@ impl CWriter {
         self.writeln("}");
     }
 
-    pub fn decl_var(&self, var_type: &NodeType, name: &str) {
+    pub fn decl_var(&mut self, var_type: &NodeType, name: &str) {
         self.writeln(&format!("{} {};", CWriter::convert_type(var_type), name));
     }
 
@@ -59,18 +72,19 @@ impl CWriter {
         String::from(slice)
     }
 
-    fn indent<F>(&mut self, block: F)
-    where
-        F: Fn(&mut CWriter) -> (),
-    {
-        self.indent += 1;
-        block(self);
-        self.indent -= 1;
-    }
+    // fn indent<F>(&mut self, block: F)
+    // where
+    //     F: Fn(&mut CWriter) -> (),
+    // {
+    //     self.indent += 1;
+    //     block(self);
+    //     self.indent -= 1;
+    // }
 
-    pub fn writeln(&self, line: &str) {
+    pub fn writeln(&mut self, line: &str) {
         let indent = (0..self.indent).map(|_| "    ").collect::<String>();
         let line = format!("{}{}", indent, line);
-        println!("{}", line);
+        // println!("{}", line);
+        writeln!(self.file, "{}", line);
     }
 }

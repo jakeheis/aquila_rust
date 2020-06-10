@@ -3,6 +3,8 @@ use crate::analysis::*;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::parsing::*;
+use std::fs::{self, File};
+use std::process::Command;
 use std::rc::Rc;
 
 pub struct Codegen {
@@ -28,13 +30,49 @@ impl Codegen {
         global_symbols: SymbolTable,
         reporter: Rc<dyn Reporter>,
     ) {
+        fs::create_dir_all("build").unwrap();
+        let file = File::create("build/main.c").unwrap();
+
         let mut codegen = Codegen {
-            writer: CWriter::new(),
+            writer: CWriter::new(file),
             global_symbols,
             current_type: None,
             reporter,
         };
-        codegen.gen_stmts(&program.statements);
+
+        let (decls, main): (Vec<_>, Vec<_>) =
+            program.statements.iter().partition(|s| match s.kind {
+                StmtKind::TypeDecl(..) | StmtKind::FunctionDecl(..) => true,
+                _ => false,
+            });
+
+        for decl in decls {
+            decl.accept(&mut codegen);
+        }
+        codegen.write_main(&main);
+
+        Command::new("/usr/local/opt/llvm/bin/clang")
+            .args(&[
+                "-g",
+                "-Iinclude",
+                "-I/Library/Developer/CommandLineTools/usr/include/c++/v1",
+                "-O0",
+                "main.c",
+                "-o",
+                "program",
+            ])
+            .current_dir("build")
+            .status()
+            .unwrap();
+    }
+
+    fn write_main(&mut self, stmts: &[&Stmt]) {
+        self.writer.start_decl_func(&NodeType::Int, "main", &[]);
+        for stmt in stmts {
+            stmt.accept(self);
+        }
+        self.writer.writeln("return 0;");
+        self.writer.end_decl_func();
     }
 
     fn gen_stmts(&mut self, stmts: &[Stmt]) {
@@ -57,11 +95,11 @@ impl StmtVisitor for Codegen {
         let borrowed_symbol = stmt.symbol.borrow();
         let struct_symbol = borrowed_symbol.as_ref().unwrap();
 
-        self.writer.start_decl_struct(&struct_symbol.mangled());
+        self.writer.start_decl_struct();
         for field in fields {
             field.accept(self);
         }
-        self.writer.end_decl_struct();
+        self.writer.end_decl_struct(&struct_symbol.mangled());
 
         self.current_type = Some(struct_symbol.clone());
         for method in methods {
@@ -140,7 +178,10 @@ impl StmtVisitor for Codegen {
     }
 
     fn visit_return_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult {
-        let val = expr.as_ref().map(|e| e.accept(self)).unwrap_or(String::from(""));
+        let val = expr
+            .as_ref()
+            .map(|e| e.accept(self))
+            .unwrap_or(String::from(""));
         let line = format!("return {};", val);
         self.writer.writeln(&line);
     }
@@ -152,7 +193,6 @@ impl StmtVisitor for Codegen {
 }
 
 impl ExprVisitor for Codegen {
-
     type ExprResult = String;
 
     fn visit_assignment_expr(
@@ -171,7 +211,12 @@ impl ExprVisitor for Codegen {
         op: &Token,
         rhs: &Expr,
     ) -> Self::ExprResult {
-        format!("({}) {} ({})", lhs.accept(self), op.lexeme(), rhs.accept(self))
+        format!(
+            "({}) {} ({})",
+            lhs.accept(self),
+            op.lexeme(),
+            rhs.accept(self)
+        )
     }
 
     fn visit_unary_expr(&mut self, _expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
@@ -180,25 +225,29 @@ impl ExprVisitor for Codegen {
 
     fn visit_call_expr(&mut self, _expr: &Expr, target: &Expr, args: &[Expr]) -> Self::ExprResult {
         let mut args: Vec<_> = args.iter().map(|a| a.accept(self)).collect();
-        
+
         match &target.kind {
             ExprKind::Field(field_target, _) => {
                 args.insert(0, field_target.accept(self));
-            },
+            }
             ExprKind::Variable(_) => (),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
 
         let borrowed_symbol = target.symbol.borrow();
-        format!("{}({})", borrowed_symbol.as_ref().unwrap().mangled(), args.join(","))
+        format!(
+            "{}({})",
+            borrowed_symbol.as_ref().unwrap().mangled(),
+            args.join(",")
+        )
     }
 
-    fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, field: &Token) -> Self::ExprResult {
+    fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, _field: &Token) -> Self::ExprResult {
         let borrowed_symbol = expr.symbol.borrow();
         let symbol = borrowed_symbol.as_ref().unwrap();
         match self.global_symbols.get_type(symbol) {
             Some(NodeType::Function(_, _)) => symbol.mangled(),
-            _ => format!("{}.{}", target.accept(self), field.lexeme()),
+            _ => format!("{}.{}", target.accept(self), symbol.mangled()),
         }
     }
 
@@ -209,11 +258,15 @@ impl ExprVisitor for Codegen {
     fn visit_variable_expr(&mut self, expr: &Expr, _name: &Token) -> Self::ExprResult {
         let borrowed_symbol = expr.symbol.borrow();
         let symbol = borrowed_symbol.as_ref().unwrap();
-        if self.current_type.as_ref().map(|t| t.owns(symbol)).unwrap_or(false) {
+        if self
+            .current_type
+            .as_ref()
+            .map(|t| t.owns(symbol))
+            .unwrap_or(false)
+        {
             format!("self.{}", symbol.mangled())
         } else {
             symbol.mangled()
         }
     }
-
 }
