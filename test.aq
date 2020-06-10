@@ -57,18 +57,19 @@ def add(a: int, b: int): int {
 type Hey {
   let a: int;
   
-  def sup(b: int): bool {
-    a == b;
-    if true {
-      return false;
+  def sup(b: int): int {
+    if a == b {
+      return 4;
     }
-    return true;
+    return a;
   }
 }
 
 let hi: Hey;
 let temp = add(1, 2);
 let t2 = hi.sup(hi.a);
+
+print_int temp;
 
 //return 5;
 

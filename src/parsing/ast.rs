@@ -9,6 +9,7 @@ pub enum StmtKind {
     VariableDecl(Token, Option<Token>, Option<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
+    PrintStmt(Option<Expr>),
     ExpressionStmt(Expr),
 }
 
@@ -44,6 +45,7 @@ impl Stmt {
                 visitor.visit_if_stmt(&self, &condition, &body, &else_body)
             }
             StmtKind::ReturnStmt(expr) => visitor.visit_return_stmt(&self, expr),
+            StmtKind::PrintStmt(expr) => visitor.visit_print_stmt(&self, expr),
             StmtKind::ExpressionStmt(expr) => visitor.visit_expression_stmt(&self, expr),
         }
     }
@@ -102,6 +104,12 @@ impl Stmt {
         Stmt::new(StmtKind::ReturnStmt(expr), span)
     }
 
+    pub fn print_stmt(print_keyword: Span, variable: &Token) -> Self {
+        let variable = Expr::variable(variable.clone());
+        let span = Span::join(&print_keyword, &variable);
+        Stmt::new(StmtKind::PrintStmt(Some(variable)), span)
+    }
+
     pub fn expression(expr: Expr) -> Self {
         let span = expr.span.clone();
         Stmt::new(StmtKind::ExpressionStmt(expr), span)
@@ -145,6 +153,8 @@ pub trait StmtVisitor {
     ) -> Self::StmtResult;
 
     fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult;
+
+    fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult;
 
     fn visit_expression_stmt(&mut self, stmt: &Stmt, expr: &Expr) -> Self::StmtResult;
 }
@@ -435,6 +445,15 @@ impl StmtVisitor for ASTPrinter {
 
     fn visit_return_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) {
         self.write_ln("ReturnStmt");
+        if let Some(expr) = expr.as_ref() {
+            self.indent(|visitor| {
+                expr.accept(visitor);
+            })
+        }
+    }
+
+    fn visit_print_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) {
+        self.write_ln("PrintStmt");
         if let Some(expr) = expr.as_ref() {
             self.indent(|visitor| {
                 expr.accept(visitor);

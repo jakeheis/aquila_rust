@@ -85,13 +85,13 @@ impl TypeChecker {
         match expr.accept(self) {
             Ok(t) => Some(t),
             Err(diag) => {
-                self.report(diag);
+                self.report_error(diag);
                 None
             }
         }
     }
 
-    fn report(&mut self, diag: Diagnostic) {
+    fn report_error(&mut self, diag: Diagnostic) {
         self.reporter.report(diag);
         self.errored = true;
     }
@@ -192,7 +192,7 @@ impl StmtVisitor for TypeChecker {
             let last_param = params.last().map(|p| p.span.clone());
             let span_params = Span::join_opt(name, &last_param);
             let span = Span::join_opt(&span_params, return_type_token);
-            self.report(Diagnostic::error(&span, &message));
+            self.report_error(Diagnostic::error(&span, &message));
         }
 
         Analysis {
@@ -233,7 +233,7 @@ impl StmtVisitor for TypeChecker {
                 if let Some(explicit_type) = explicit_type {
                     if explicit_type != value_type {
                         let diagnostic = self.type_mismatch(value, value_type, explicit_type);
-                        self.report(diagnostic);
+                        self.report_error(diagnostic);
                     }
                 } else {
                     self.current_scope().define_var(&stmt, name, &value_type);
@@ -241,7 +241,7 @@ impl StmtVisitor for TypeChecker {
             }
         } else if explicit_type.is_none() {
             let diag = Diagnostic::error(name, "Can't infer type");
-            self.report(diag);
+            self.report_error(diag);
         }
 
         Analysis {
@@ -258,7 +258,7 @@ impl StmtVisitor for TypeChecker {
     ) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
             if cond_type != NodeType::Bool {
-                self.report(self.type_mismatch(condition, cond_type, NodeType::Bool));
+                self.report_error(self.type_mismatch(condition, cond_type, NodeType::Bool));
             }
         }
 
@@ -293,16 +293,27 @@ impl StmtVisitor for TypeChecker {
                         "Cannot return value of type {}, expect type {}",
                         ret_type, expected_return
                     );
-                    self.report(Diagnostic::error(ret_expr, &message));
+                    self.report_error(Diagnostic::error(ret_expr, &message));
                 } else {
                     let message = format!("Expect function to return type {}", expected_return);
-                    self.report(Diagnostic::error(stmt, &message));
+                    self.report_error(Diagnostic::error(stmt, &message));
                 }
             }
         }
 
         Analysis {
             guarantees_return: true,
+        }
+    }
+
+    fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Analysis {
+        if let Some(kind) = self.check_expr(expr.as_ref().unwrap()) {
+            if kind != NodeType::Int {
+                self.report_error(self.type_mismatch(stmt, kind, NodeType::Int));
+            }
+        }
+        Analysis {
+            guarantees_return: false,
         }
     }
 

@@ -19,6 +19,7 @@ impl CWriter {
 
     fn write_includes(&mut self) {
         self.writeln("#include <stdbool.h>");
+        self.writeln("#include <stdio.h>");
         self.writeln("");
     }
 

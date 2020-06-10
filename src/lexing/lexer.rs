@@ -116,7 +116,7 @@ impl Lexer {
 
     fn identifier(&mut self) -> Option<Token> {
         while !self.is_at_end() {
-            if let '0'..='9' | 'a'..='z' | 'A'..='Z' = self.peek() {
+            if let '0'..='9' | 'a'..='z' | 'A'..='Z' | '_' = self.peek() {
                 self.advance();
             } else {
                 break;
@@ -133,6 +133,7 @@ impl Lexer {
             "else" => self.make_token(TokenKind::Else),
             "def" => self.make_token(TokenKind::Def),
             "return" => self.make_token(TokenKind::Return),
+            "print_int" => self.make_token(TokenKind::Print),
             _ => Some(token),
         }
     }

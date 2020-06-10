@@ -109,6 +109,13 @@ impl Parser {
                     "Return statement only allowed inside functions",
                 ))
             }
+        } else if self.matches(TokenKind::Print) {
+            let stmt = self.print_stmt();
+            self.consume(
+                TokenKind::Semicolon,
+                "Expected semicolon after print statement",
+            )?;
+            stmt
         } else {
             if context == Context::TopLevel || context == Context::InsideFunction {
                 let stmt = Stmt::expression(self.parse_precedence(Precedence::Assignment)?);
@@ -278,6 +285,12 @@ impl Parser {
         } else {
             Ok(Stmt::return_stmt(ret_keyword, None))
         }
+    }
+
+    fn print_stmt(&mut self) -> Result<Stmt> {
+        let print_keyword = self.previous().span.clone();
+        let name = self.consume(TokenKind::Identifier, "Expect variable name.")?;
+        Ok(Stmt::print_stmt(print_keyword, name))
     }
 
     fn expression(&mut self) -> Result<Expr> {

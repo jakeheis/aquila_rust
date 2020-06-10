@@ -186,7 +186,12 @@ impl StmtVisitor for Codegen {
         self.writer.writeln(&line);
     }
 
-    fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) {
+    fn visit_print_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult {
+        let line = format!("printf(\"%i\\n\", {});", expr.as_ref().unwrap().accept(self));
+        self.writer.writeln(&line);
+    }
+
+    fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) -> Self::StmtResult {
         let line = format!("{};", expr.accept(self));
         self.writer.writeln(&line);
     }

@@ -19,6 +19,9 @@ pub fn run(source: Source) {
     let lexer = Lexer::new(source, Rc::clone(&reporter));
     let lexed = lexer.lex();
 
+    // let re: &[Token] = &lexed.tokens;
+    // println!("lexed {}", re.token_string());
+
     let parser = Parser::new(lexed, Rc::clone(&reporter));
     let parsed = parser.parse();
 
