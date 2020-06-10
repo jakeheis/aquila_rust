@@ -1,15 +1,15 @@
 pub mod analysis;
+pub mod codegen;
 pub mod diagnostic;
 pub mod lexing;
 pub mod parsing;
 pub mod source;
-pub mod codegen;
 
 use analysis::*;
+use codegen::*;
 use diagnostic::*;
 use lexing::*;
 use parsing::*;
-use codegen::*;
 pub use source::*;
 use std::rc::Rc;
 

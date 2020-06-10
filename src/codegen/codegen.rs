@@ -1,22 +1,37 @@
+use super::c_writer::*;
+use crate::analysis::*;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::parsing::*;
-use crate::analysis::*;
-use super::c_writer::*;
 use std::rc::Rc;
 
 pub struct Codegen {
     writer: CWriter,
     global_symbols: SymbolTable,
+    current_type: Option<String>,
     reporter: Rc<dyn Reporter>,
 }
 
-impl Codegen {
+macro_rules! guard {
+    ($pattern_path:path[$( $name:ident ), *] = $bound:expr) => {
+        let ($($name), *) = if let $pattern_path($($name), *) = $bound {
+            ($($name), *)
+        } else {
+            unreachable!()
+        };
+    };
+}
 
-    pub fn generate(program: ParsedProgram, global_symbols: SymbolTable, reporter: Rc<dyn Reporter>) {
+impl Codegen {
+    pub fn generate(
+        program: ParsedProgram,
+        global_symbols: SymbolTable,
+        reporter: Rc<dyn Reporter>,
+    ) {
         let mut codegen = Codegen {
             writer: CWriter::new(),
             global_symbols,
+            current_type: None,
             reporter,
         };
         codegen.gen_stmts(&program.statements);
@@ -27,19 +42,6 @@ impl Codegen {
             stmt.accept(self);
         }
     }
-
-    fn map_vars(&self, parent: Option<&Symbol>, vars: &[Stmt]) -> Vec<(NodeType, String)> {
-        vars.iter().map(|f| {
-            if let StmtKind::VariableDecl(name, _, _) = &f.kind {
-                let field_symbol = Symbol::new(parent, &name);
-                let field_type = self.global_symbols.get_type(&field_symbol).unwrap().clone();
-                (field_type, field_symbol.mangled())
-            } else {
-                unreachable!()
-            }
-        }).collect()
-    }
-
 }
 
 impl StmtVisitor for Codegen {
@@ -55,9 +57,26 @@ impl StmtVisitor for Codegen {
         let borrowed_symbol = stmt.symbol.borrow();
         let struct_symbol = borrowed_symbol.as_ref().unwrap();
 
-        let struct_fields = self.map_vars(Some(struct_symbol), fields);
+        let struct_fields: Vec<(NodeType, String)> = fields
+            .iter()
+            .map(|f| {
+                let borrowed_symbol = f.symbol.borrow();
+                let borrowed_type = f.stmt_type.borrow();
+
+                (
+                    borrowed_type.as_ref().unwrap().clone(),
+                    borrowed_symbol.as_ref().unwrap().mangled(),
+                )
+            })
+            .collect();
 
         self.writer.decl_struct(name.lexeme(), &struct_fields);
+
+        self.current_type = Some(struct_symbol.mangled());
+        for method in methods {
+            method.accept(self);
+        }
+        self.current_type = None;
     }
 
     fn visit_function_decl(
@@ -72,17 +91,31 @@ impl StmtVisitor for Codegen {
         let func_symbol = borrowed_symbol.as_ref().unwrap();
 
         let func_type = self.global_symbols.get_type(func_symbol).unwrap();
-        if let NodeType::Function(param_types, ret_type) = func_type {
-            let params: Vec<(NodeType, String)> = param_types.iter().zip(params).map(|(param_type, param_stmt)| {
-                (param_type.clone(), param_stmt.symbol.borrow().as_ref().unwrap().mangled())
-            }).collect();
 
-            self.writer.start_decl_func(ret_type, &func_symbol.mangled(), &params);
-            self.gen_stmts(body);
-            self.writer.end_decl_func();
-        } else {
-            unreachable!();
+        guard!(NodeType::Function[param_types, ret_type] = func_type);
+
+        let mut params: Vec<(NodeType, String)> = param_types
+            .iter()
+            .zip(params)
+            .map(|(param_type, param_stmt)| {
+                (
+                    param_type.clone(),
+                    param_stmt.symbol.borrow().as_ref().unwrap().mangled(),
+                )
+            })
+            .collect();
+
+        if let Some(current_type) = &self.current_type {
+            params.insert(
+                0,
+                (NodeType::Type(current_type.clone()), String::from("self")),
+            );
         }
+
+        self.writer
+            .start_decl_func(ret_type, &func_symbol.mangled(), &params);
+        self.gen_stmts(body);
+        self.writer.end_decl_func();
     }
 
     fn visit_variable_decl(
@@ -108,14 +141,13 @@ impl StmtVisitor for Codegen {
         _body: &[Stmt],
         _else_body: &[Stmt],
     ) -> Self::StmtResult {
-
     }
 
     fn visit_return_stmt(&mut self, stmt: &Stmt, _expr: &Option<Expr>) -> Self::StmtResult {
         self.writer.writeln(stmt.span.lexeme());
     }
 
-    fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr)  {
+    fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) {
         self.writer.writeln(expr.span.lexeme());
     }
 }

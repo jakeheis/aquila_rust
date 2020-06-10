@@ -33,7 +33,7 @@ impl Scope {
     fn define_var(&mut self, decl: &Stmt, name: &Token, var_type: &NodeType) {
         let new_symbol = Symbol::new((&self.id).as_ref(), name);
         self.symbols.insert(new_symbol.clone(), var_type.clone());
-        
+
         decl.symbol.replace(Some(new_symbol));
         decl.stmt_type.replace(Some(var_type.clone()));
     }
@@ -317,11 +317,22 @@ impl StmtVisitor for TypeChecker {
 impl ExprVisitor for TypeChecker {
     type ExprResult = Result;
 
-    fn visit_assignment_expr(&mut self, _expr: &Expr, _target: &Expr, _value: &Expr) -> Self::ExprResult {
+    fn visit_assignment_expr(
+        &mut self,
+        _expr: &Expr,
+        _target: &Expr,
+        _value: &Expr,
+    ) -> Self::ExprResult {
         Ok(NodeType::Void)
     }
 
-    fn visit_binary_expr(&mut self, _expr: &Expr, lhs: &Expr, op: &Token, rhs: &Expr) -> Self::ExprResult {
+    fn visit_binary_expr(
+        &mut self,
+        _expr: &Expr,
+        lhs: &Expr,
+        op: &Token,
+        rhs: &Expr,
+    ) -> Self::ExprResult {
         let lhs_type = lhs.accept(self)?;
         let rhs_type = rhs.accept(self)?;
 
