@@ -71,6 +71,9 @@ let t2 = hi.sup(hi.a);
 
 print_int temp;
 
+
+let my_str: StringLiteral = "hello";
+
 //return 5;
 
 //let s: Hey;

@@ -1,6 +1,7 @@
 use crate::source::*;
 use colored::*;
 use std::rc::Rc;
+use std::cell::Cell;
 
 #[derive(Debug, PartialEq)]
 pub enum Severity {
@@ -74,19 +75,26 @@ impl<T> ReplaceableSpan for DiagnosticResult<T> {
 
 pub trait Reporter {
     fn report(&self, diagnostic: Diagnostic);
+
+    fn has_errored(&self) -> bool;
 }
 
-pub struct DefaultReporter {}
+pub struct DefaultReporter {
+    errored: Cell<bool>,
+}
 
 impl DefaultReporter {
     pub fn new() -> Rc<Self> {
-        Rc::new(DefaultReporter {})
+        Rc::new(DefaultReporter {
+            errored: Cell::new(false)
+        })
     }
 }
 
 impl Reporter for DefaultReporter {
     fn report(&self, diagnostic: Diagnostic) {
         let header = if diagnostic.severity == Severity::Error {
+            self.errored.replace(true);
             "• Error:".red().bold()
         } else {
             "• Warning:".yellow().bold()
@@ -104,5 +112,9 @@ impl Reporter for DefaultReporter {
         };
         println!("  {}{}", offset, colored_outline);
         println!("  {}\n", diagnostic.span.location());
+    }
+
+    fn has_errored(&self) -> bool {
+        self.errored.get()
     }
 }

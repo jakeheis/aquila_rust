@@ -42,7 +42,6 @@ impl Scope {
 pub struct TypeChecker {
     reporter: Rc<dyn Reporter>,
     scopes: Vec<Scope>,
-    errored: bool,
 }
 
 pub struct Analysis {
@@ -50,18 +49,18 @@ pub struct Analysis {
 }
 
 impl TypeChecker {
-    pub fn check(program: &ParsedProgram, reporter: Rc<dyn Reporter>) -> (SymbolTable, bool) {
+
+    pub fn check(program: &ParsedProgram, reporter: Rc<dyn Reporter>) -> SymbolTable {
         let table = SymbolTableBuilder::build(program);
         let global_scope = Scope::global(table);
 
         let mut checker = TypeChecker {
             reporter,
             scopes: vec![global_scope],
-            errored: false,
         };
         checker.check_list(&program.statements);
 
-        (checker.scopes.remove(0).symbols, !checker.errored)
+        checker.scopes.remove(0).symbols
     }
 
     fn check_list(&mut self, stmt_list: &[Stmt]) -> Analysis {
@@ -93,7 +92,6 @@ impl TypeChecker {
 
     fn report_error(&mut self, diag: Diagnostic) {
         self.reporter.report(diag);
-        self.errored = true;
     }
 
     fn type_mismatch<T: ContainsSpan>(

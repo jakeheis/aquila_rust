@@ -13,25 +13,55 @@ use parsing::*;
 pub use source::*;
 use std::rc::Rc;
 
-pub fn run(source: Source) {
+pub struct LogOptions {
+    lexer: bool,
+    parser: bool,
+    type_checker: bool,
+}
+
+pub fn run(source: Source) -> bool {
+    let log_options = LogOptions {
+        lexer: false,
+        parser: false,
+        type_checker: false,
+    };
+
     let reporter: Rc<dyn Reporter> = diagnostic::DefaultReporter::new();
 
     let lexer = Lexer::new(source, Rc::clone(&reporter));
     let lexed = lexer.lex();
 
-    // let re: &[Token] = &lexed.tokens;
-    // println!("lexed {}", re.token_string());
+    if log_options.lexer {
+        let re: &[Token] = &lexed.tokens;
+        println!("lexed {}", re.token_string());
+    }
 
     let parser = Parser::new(lexed, Rc::clone(&reporter));
     let parsed = parser.parse();
 
-    let (symbols, success) = TypeChecker::check(&parsed, Rc::clone(&reporter));
-    if success == false {
-        return;
+    if log_options.parser {
+        let mut printer = ASTPrinter::new();
+        printer.print(&parsed);
     }
 
-    let mut printer = ASTPrinter::new();
-    printer.print(&parsed);
+    if reporter.has_errored() {
+        return false;
+    }
+
+    let symbols = TypeChecker::check(&parsed, Rc::clone(&reporter));
+
+    if log_options.type_checker {
+        println!("Table: {}", symbols);
+        
+        let mut printer = ASTPrinter::new();
+        printer.print(&parsed);
+    }
+
+    if reporter.has_errored() == false {
+        return false;
+    }
 
     Codegen::generate(parsed, symbols, reporter);
+
+    return true;
 }
