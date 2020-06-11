@@ -104,10 +104,9 @@ impl Stmt {
         Stmt::new(StmtKind::ReturnStmt(expr), span)
     }
 
-    pub fn print_stmt(print_keyword: Span, variable: &Token) -> Self {
-        let variable = Expr::variable(variable.clone());
-        let span = Span::join(&print_keyword, &variable);
-        Stmt::new(StmtKind::PrintStmt(Some(variable)), span)
+    pub fn print_stmt(print_keyword: Span, expr: Option<Expr>) -> Self {
+        let span = Span::join_opt(&print_keyword, &expr);
+        Stmt::new(StmtKind::PrintStmt(expr), span)
     }
 
     pub fn expression(expr: Expr) -> Self {

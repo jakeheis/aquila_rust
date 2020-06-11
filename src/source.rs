@@ -104,10 +104,8 @@ impl Span {
             start -= 1;
         }
         let mut end = self.index + self.length;
-        if self.source.character(end) != '\n' {
-            while end + 1 < self.source.length() && self.source.character(end + 1) != '\n' {
-                end += 1;
-            }
+        while end + 1 < self.source.length() && self.source.character(end) != '\n' {
+            end += 1;
         }
         (&self.source.content[start..end], self.index - start)
     }

@@ -186,9 +186,16 @@ impl StmtVisitor for Codegen {
         self.writer.writeln(&line);
     }
 
-    fn visit_print_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult {
+    fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult {
+        let borrowed_type = stmt.stmt_type.borrow();
+        let format_specificer = match borrowed_type.as_ref().unwrap() {
+            NodeType::Int | NodeType::Bool => "%i",
+            NodeType::StringLiteral => "%s",
+            _ => unreachable!(),
+        };
         let line = format!(
-            "printf(\"%i\\n\", {});",
+            "printf(\"{}\\n\", {});",
+            format_specificer,
             expr.as_ref().unwrap().accept(self)
         );
         self.writer.writeln(&line);

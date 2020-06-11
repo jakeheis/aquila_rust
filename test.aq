@@ -69,10 +69,12 @@ let hi: Hey;
 let temp = add(1, 2);
 let t2 = hi.sup(hi.a);
 
-print_int temp;
-
+print temp;
+print t2;
 
 let my_str: StringLiteral = "hello";
+
+print my_str;
 
 //return 5;
 

@@ -289,8 +289,12 @@ impl Parser {
 
     fn print_stmt(&mut self) -> Result<Stmt> {
         let print_keyword = self.previous().span.clone();
-        let name = self.consume(TokenKind::Identifier, "Expect variable name.")?;
-        Ok(Stmt::print_stmt(print_keyword, name))
+        if self.peek() != TokenKind::Semicolon {
+            let expr = self.expression()?;
+            Ok(Stmt::print_stmt(print_keyword, Some(expr)))
+        } else {
+            Ok(Stmt::print_stmt(print_keyword, None))
+        }
     }
 
     fn expression(&mut self) -> Result<Expr> {

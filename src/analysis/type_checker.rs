@@ -304,11 +304,20 @@ impl StmtVisitor for TypeChecker {
     }
 
     fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Analysis {
-        if let Some(kind) = self.check_expr(expr.as_ref().unwrap()) {
-            if kind != NodeType::Int {
-                self.report_error(self.type_mismatch(stmt, kind, NodeType::Int));
+        if let Some(expr) = expr.as_ref() {
+            if let Some(node_type) = self.check_expr(expr) {
+                match node_type {
+                    NodeType::Int | NodeType::Bool | NodeType::StringLiteral => {
+                        stmt.stmt_type.replace(Some(node_type));
+                    },
+                    _ => {
+                        let message = format!("Can't print object of type {}", node_type);
+                        self.report_error(Diagnostic::error(expr, &message));
+                    },
+                }
             }
         }
+        
         Analysis {
             guarantees_return: false,
         }
