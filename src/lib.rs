@@ -22,8 +22,8 @@ pub struct LogOptions {
 pub fn run(source: Source) -> Result<(), &'static str> {
     let log_options = LogOptions {
         lexer: false,
-        parser: true,
-        type_checker: false,
+        parser: false,
+        type_checker: true,
     };
 
     let reporter: Rc<dyn Reporter> = diagnostic::DefaultReporter::new();

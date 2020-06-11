@@ -51,6 +51,8 @@ impl Lexer {
             '/' => {
                 if self.matches('/') {
                     self.comment()
+                } else if self.matches('*') {
+                    self.block_comment()
                 } else {
                     self.make_token(TokenKind::Slash)
                 }
@@ -91,6 +93,19 @@ impl Lexer {
     fn comment(&mut self) -> Option<Token> {
         while !self.is_at_end() && self.peek() != '\n' {
             self.advance();
+        }
+        None
+    }
+
+    fn block_comment(&mut self) -> Option<Token> {
+        while !self.is_at_end() {
+            if self.matches('*') {
+                if self.matches('/') {
+                    break;
+                }
+            } else {
+                self.advance();
+            }
         }
         None
     }

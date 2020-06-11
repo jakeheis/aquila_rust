@@ -63,11 +63,22 @@ type Hey {
     }
     return a;
   }
+
+  def new(starter: int): Hey {
+    let re: Hey;
+    re.a = starter;
+    return re;
+  }
 }
 
+new(4).a = 7;
+
 let hi: Hey;
+hi.a = 0;
+
+/*
 let temp = add(1, 2);
-let t2 = hi.sup(hi.a);
+let t2 = hi.sup(6);
 
 print temp;
 print t2;
@@ -91,14 +102,4 @@ print;
 print fib(3);
 print;
 print fib(5);
-
-
-
-//return 5;
-
-//let s: Hey;
-// let b: Yo;
-
-//s.a + 3;
-
-//ss.sup(3) + 3;
+*/

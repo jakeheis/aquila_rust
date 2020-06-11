@@ -342,9 +342,14 @@ impl ExprVisitor for TypeChecker {
     fn visit_assignment_expr(
         &mut self,
         _expr: &Expr,
-        _target: &Expr,
-        _value: &Expr,
+        target: &Expr,
+        value: &Expr,
     ) -> Self::ExprResult {
+        let target_type = target.accept(self)?;
+        let value_type = value.accept(self)?;
+        if target_type != value_type {
+            self.report_error(self.type_mismatch(value, value_type, target_type));
+        }
         Ok(NodeType::Void)
     }
 
@@ -439,7 +444,7 @@ impl ExprVisitor for TypeChecker {
             ));
         });
 
-        let type_symbol = Symbol::new_str(self.current_symbol(), &type_name);
+        let type_symbol = Symbol::new_str(None, &type_name);
         let field_symbol = Symbol::new(Some(&type_symbol), field);
 
         if let Some(field_type) = self.global_scope().symbols.get_type(&field_symbol) {
