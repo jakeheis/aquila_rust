@@ -4,6 +4,7 @@ use std::fmt;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TokenKind {
     Number,
+    StringLiteral,
     Identifier,
 
     // Operators

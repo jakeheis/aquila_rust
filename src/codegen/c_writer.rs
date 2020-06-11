@@ -67,25 +67,17 @@ impl CWriter {
             NodeType::Void => "void",
             NodeType::Int => "int",
             NodeType::Bool => "bool",
+            NodeType::StringLiteral => "char *",
             NodeType::Type(string) => &string,
             _ => panic!(),
         };
         String::from(slice)
     }
 
-    // fn indent<F>(&mut self, block: F)
-    // where
-    //     F: Fn(&mut CWriter) -> (),
-    // {
-    //     self.indent += 1;
-    //     block(self);
-    //     self.indent -= 1;
-    // }
-
     pub fn writeln(&mut self, line: &str) {
         let indent = (0..self.indent).map(|_| "    ").collect::<String>();
         let line = format!("{}{}", indent, line);
         // println!("{}", line);
-        writeln!(self.file, "{}", line);
+        writeln!(self.file, "{}", line).unwrap();
     }
 }

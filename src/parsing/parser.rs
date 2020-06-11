@@ -469,7 +469,9 @@ impl TokenKind {
     fn prefix(&self) -> Option<PrefixFn> {
         match self {
             TokenKind::Minus | TokenKind::Bang => Some(Parser::unary),
-            TokenKind::True | TokenKind::False | TokenKind::Number => Some(Parser::literal),
+            TokenKind::True | TokenKind::False | TokenKind::Number | TokenKind::StringLiteral => {
+                Some(Parser::literal)
+            }
             TokenKind::Identifier => Some(Parser::variable),
             _ => None,
         }

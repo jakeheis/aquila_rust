@@ -71,6 +71,7 @@ impl Lexer {
             ')' => self.make_token(TokenKind::RightParen),
             '0'..='9' => self.number(),
             'a'..='z' | 'A'..='Z' => self.identifier(),
+            '"' => self.string(),
             ',' => self.make_token(TokenKind::Comma),
             '.' => self.make_token(TokenKind::Period),
             ';' => self.make_token(TokenKind::Semicolon),
@@ -112,6 +113,16 @@ impl Lexer {
             }
         }
         self.make_token(TokenKind::Number)
+    }
+
+    fn string(&mut self) -> Option<Token> {
+        while !self.is_at_end() && self.peek() != '"' {
+            self.advance();
+        }
+        if self.peek() == '"' {
+            self.advance();
+        }
+        self.make_token(TokenKind::StringLiteral)
     }
 
     fn identifier(&mut self) -> Option<Token> {

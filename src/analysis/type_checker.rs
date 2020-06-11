@@ -49,7 +49,6 @@ pub struct Analysis {
 }
 
 impl TypeChecker {
-
     pub fn check(program: &ParsedProgram, reporter: Rc<dyn Reporter>) -> SymbolTable {
         let table = SymbolTableBuilder::build(program);
         let global_scope = Scope::global(table);
@@ -441,6 +440,7 @@ impl ExprVisitor for TypeChecker {
             TokenKind::Number => Ok(NodeType::Int),
             TokenKind::True => Ok(NodeType::Bool),
             TokenKind::False => Ok(NodeType::Bool),
+            TokenKind::StringLiteral => Ok(NodeType::StringLiteral),
             _ => panic!(),
         }
     }
@@ -462,6 +462,7 @@ pub enum NodeType {
     Void,
     Int,
     Bool,
+    StringLiteral,
     Type(String),
     Function(Vec<NodeType>, Box<NodeType>),
     Metatype(String),
@@ -473,6 +474,7 @@ impl NodeType {
             "void" => NodeType::Void,
             "int" => NodeType::Int,
             "bool" => NodeType::Bool,
+            "StringLiteral" => NodeType::StringLiteral,
             other => NodeType::Type(other.to_string()),
         }
     }
@@ -498,6 +500,7 @@ impl std::fmt::Display for NodeType {
             NodeType::Void => String::from("void"),
             NodeType::Int => String::from("int"),
             NodeType::Bool => String::from("bool"),
+            NodeType::StringLiteral => String::from("StringLiteral"),
             NodeType::Function(params, ret) => {
                 let mut string = String::from("(");
                 if let Some(first) = params.first() {

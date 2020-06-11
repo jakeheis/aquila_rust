@@ -1,7 +1,7 @@
 use crate::source::*;
 use colored::*;
-use std::rc::Rc;
 use std::cell::Cell;
+use std::rc::Rc;
 
 #[derive(Debug, PartialEq)]
 pub enum Severity {
@@ -86,7 +86,7 @@ pub struct DefaultReporter {
 impl DefaultReporter {
     pub fn new() -> Rc<Self> {
         Rc::new(DefaultReporter {
-            errored: Cell::new(false)
+            errored: Cell::new(false),
         })
     }
 }

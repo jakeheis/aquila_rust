@@ -19,10 +19,10 @@ pub struct LogOptions {
     type_checker: bool,
 }
 
-pub fn run(source: Source) -> bool {
+pub fn run(source: Source) -> Result<(), &'static str> {
     let log_options = LogOptions {
         lexer: false,
-        parser: false,
+        parser: true,
         type_checker: false,
     };
 
@@ -45,23 +45,23 @@ pub fn run(source: Source) -> bool {
     }
 
     if reporter.has_errored() {
-        return false;
+        return Err("Parsing failed");
     }
 
     let symbols = TypeChecker::check(&parsed, Rc::clone(&reporter));
 
     if log_options.type_checker {
         println!("Table: {}", symbols);
-        
+
         let mut printer = ASTPrinter::new();
         printer.print(&parsed);
     }
 
-    if reporter.has_errored() == false {
-        return false;
+    if reporter.has_errored() {
+        return Err("Type checker failed");
     }
 
     Codegen::generate(parsed, symbols, reporter);
 
-    return true;
+    Ok(())
 }

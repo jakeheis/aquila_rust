@@ -1,6 +1,6 @@
 use aquila;
 
-fn main() {
+fn main() -> Result<(), &'static str> {
     let source = aquila::file("test.aq");
-    aquila::run(source);
+    aquila::run(source)
 }
