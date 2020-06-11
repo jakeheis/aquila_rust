@@ -76,6 +76,24 @@ let my_str: StringLiteral = "hello";
 
 print my_str;
 
+def fib(num: int): int {
+  if num == 0 {
+    return 0;
+  }
+  if num == 1 {
+    return 1;
+  }
+  return fib(num - 2) + fib(num - 1);
+}
+
+print fib(1);
+print;
+print fib(3);
+print;
+print fib(5);
+
+
+
 //return 5;
 
 //let s: Hey;

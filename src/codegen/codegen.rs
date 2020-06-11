@@ -1,17 +1,14 @@
 use super::c_writer::*;
 use crate::analysis::*;
-use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::parsing::*;
 use std::fs::{self, File};
 use std::process::Command;
-use std::rc::Rc;
 
 pub struct Codegen {
     writer: CWriter,
     global_symbols: SymbolTable,
     current_type: Option<Symbol>,
-    reporter: Rc<dyn Reporter>,
 }
 
 macro_rules! guard {
@@ -24,12 +21,22 @@ macro_rules! guard {
     };
 }
 
+#[macro_export]
+macro_rules! guard_else {
+    ($pattern_path:path[$name:ident] = $bound:expr, $else_body:block) => {
+        let $name = if let $pattern_path($name) = $bound {
+            $name
+        } else $else_body;
+    };
+    ($pattern_path:path[$( $name:ident ), *] = $bound:expr, $else_body:block) => {
+        let ($($name), *) = if let $pattern_path($($name), *) = $bound {
+            ($($name), *)
+        } else $else_body;
+    };
+}
+
 impl Codegen {
-    pub fn generate(
-        program: ParsedProgram,
-        global_symbols: SymbolTable,
-        reporter: Rc<dyn Reporter>,
-    ) {
+    pub fn generate(program: ParsedProgram, global_symbols: SymbolTable) {
         fs::create_dir_all("build").unwrap();
         let file = File::create("build/main.c").unwrap();
 
@@ -37,7 +44,6 @@ impl Codegen {
             writer: CWriter::new(file),
             global_symbols,
             current_type: None,
-            reporter,
         };
 
         let (decls, main): (Vec<_>, Vec<_>) =
@@ -71,7 +77,7 @@ impl Codegen {
         for stmt in stmts {
             stmt.accept(self);
         }
-        self.writer.writeln("return 0;");
+        self.writer.write_return(Some(String::from("0")));
         self.writer.end_decl_func();
     }
 
@@ -171,34 +177,35 @@ impl StmtVisitor for Codegen {
     fn visit_if_stmt(
         &mut self,
         _stmt: &Stmt,
-        _condition: &Expr,
-        _body: &[Stmt],
-        _else_body: &[Stmt],
+        condition: &Expr,
+        body: &[Stmt],
+        else_body: &[Stmt],
     ) -> Self::StmtResult {
+        let condition = condition.accept(self);
+        self.writer.start_if_block(condition);
+        self.gen_stmts(body);
+        if !else_body.is_empty() {
+            self.writer.start_else_block();
+            self.gen_stmts(else_body);
+        }
+        self.writer.end_conditional_block();
     }
 
     fn visit_return_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult {
-        let val = expr
-            .as_ref()
-            .map(|e| e.accept(self))
-            .unwrap_or(String::from(""));
-        let line = format!("return {};", val);
-        self.writer.writeln(&line);
+        let val = expr.as_ref().map(|e| e.accept(self));
+        self.writer.write_return(val)
     }
 
     fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult {
         let borrowed_type = stmt.stmt_type.borrow();
-        let format_specificer = match borrowed_type.as_ref().unwrap() {
-            NodeType::Int | NodeType::Bool => "%i",
-            NodeType::StringLiteral => "%s",
-            _ => unreachable!(),
-        };
-        let line = format!(
-            "printf(\"{}\\n\", {});",
-            format_specificer,
-            expr.as_ref().unwrap().accept(self)
-        );
-        self.writer.writeln(&line);
+
+        if let Some(expr) = expr.as_ref() {
+            let expr_str = expr.accept(self);
+            self.writer
+                .write_print(Some((borrowed_type.as_ref().unwrap(), expr_str)));
+        } else {
+            self.writer.write_print(None);
+        }
     }
 
     fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) -> Self::StmtResult {

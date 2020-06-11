@@ -61,7 +61,7 @@ pub fn run(source: Source) -> Result<(), &'static str> {
         return Err("Type checker failed");
     }
 
-    Codegen::generate(parsed, symbols, reporter);
+    Codegen::generate(parsed, symbols);
 
     Ok(())
 }

@@ -1,5 +1,6 @@
 use super::symbol_table::*;
 use crate::diagnostic::*;
+use crate::guard_else;
 use crate::lexing::*;
 use crate::parsing::*;
 use crate::source::*;
@@ -107,22 +108,26 @@ impl TypeChecker {
         self.scopes.last_mut().unwrap()
     }
 
+    fn current_symbol(&mut self) -> Option<&Symbol> {
+        self.current_scope().id.as_ref()
+    }
+
     fn global_scope(&mut self) -> &mut Scope {
         self.scopes.first_mut().unwrap()
     }
 
-    fn push_scope(&mut self, name: &Token) -> Symbol {
+    fn push_type_scope(&mut self, name: &Token) -> Symbol {
         self.push_scope_named(name.lexeme())
     }
 
     fn push_function_scope(&mut self, name: &Token, ret_type: NodeType) -> Symbol {
-        let symbol = Symbol::new((&self.current_scope().id).as_ref(), name);
+        let symbol = Symbol::new(self.current_symbol(), name);
         self.scopes.push(Scope::new(symbol.clone(), Some(ret_type)));
         symbol
     }
 
     fn push_scope_named(&mut self, name: &str) -> Symbol {
-        let symbol = Symbol::new_str((&self.current_scope().id).as_ref(), name);
+        let symbol = Symbol::new_str(self.current_symbol(), name);
         let ret_type = self.current_scope().function_return_type.clone();
         self.scopes.push(Scope::new(symbol.clone(), ret_type));
         symbol
@@ -152,7 +157,7 @@ impl StmtVisitor for TypeChecker {
         fields: &[Stmt],
         methods: &[Stmt],
     ) -> Analysis {
-        let symbol = self.push_scope(name);
+        let symbol = self.push_type_scope(name);
         stmt.symbol.replace(Some(symbol));
 
         self.check_list(fields);
@@ -309,15 +314,15 @@ impl StmtVisitor for TypeChecker {
                 match node_type {
                     NodeType::Int | NodeType::Bool | NodeType::StringLiteral => {
                         stmt.stmt_type.replace(Some(node_type));
-                    },
+                    }
                     _ => {
                         let message = format!("Can't print object of type {}", node_type);
                         self.report_error(Diagnostic::error(expr, &message));
-                    },
+                    }
                 }
             }
         }
-        
+
         Analysis {
             guarantees_return: false,
         }
@@ -379,7 +384,7 @@ impl ExprVisitor for TypeChecker {
         let entries: &[NodeType] = match op.kind {
             TokenKind::Minus => &NEGATE_ENTRIES,
             TokenKind::Bang => &INVERT_ENTRIES,
-            _ => panic!(),
+            _ => unreachable!(),
         };
 
         if entries.contains(&operand_type) {
@@ -392,54 +397,62 @@ impl ExprVisitor for TypeChecker {
 
     fn visit_call_expr(&mut self, expr: &Expr, target: &Expr, args: &[Expr]) -> Self::ExprResult {
         let func_type = target.accept(self)?;
-        if let NodeType::Function(params, ret) = func_type.clone() {
-            let arg_types: DiagnosticResult<Vec<NodeType>> =
-                args.iter().map(|a| a.accept(self)).collect();
-            let arg_types = arg_types?;
-            if params.len() != arg_types.len() {
-                return Err(Diagnostic::error(
-                    target,
-                    &format!("Cannot call type {}", func_type),
-                ));
-            }
-            for ((index, param), arg) in params.into_iter().enumerate().zip(arg_types) {
-                if param != arg {
-                    return Err(self.type_mismatch(&args[index], arg, param));
-                }
-            }
-            Ok(*ret.clone())
-        } else {
-            Err(Diagnostic::error(
+
+        guard_else!(NodeType::Function[params, ret] = func_type.clone(), {
+            return Err(Diagnostic::error(
                 target,
                 &format!("Cannot call type {}", func_type),
-            ))
+            ));
+        });
+
+        let arg_types: DiagnosticResult<Vec<NodeType>> =
+            args.iter().map(|a| a.accept(self)).collect();
+        let arg_types = arg_types?;
+
+        if params.len() != arg_types.len() {
+            return Err(Diagnostic::error(
+                expr,
+                &format!(
+                    "Expected {} argument(s), got {}",
+                    params.len(),
+                    arg_types.len()
+                ),
+            ));
         }
+
+        for ((index, param), arg) in params.into_iter().enumerate().zip(arg_types) {
+            if param != arg {
+                return Err(self.type_mismatch(&args[index], arg, param));
+            }
+        }
+
+        Ok(*ret.clone())
     }
 
     fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, field: &Token) -> Self::ExprResult {
         let target_type = target.accept(self)?;
 
-        if let NodeType::Type(type_name) = target_type {
-            let type_symbol = Symbol::new_str(None, &type_name);
-            let field_symbol = Symbol::new(Some(&type_symbol), field);
+        guard_else!(NodeType::Type[type_name] = target_type, {
+            return Err(Diagnostic::error(
+                target,
+                &format!("Cannot access property of an {}", target_type),
+            ));
+        });
 
-            if let Some(field_type) = self.global_scope().symbols.get_type(&field_symbol) {
-                expr.symbol.replace(Some(field_symbol));
-                Ok(field_type.clone())
-            } else {
-                Err(Diagnostic::error(
-                    &Span::join(target, field),
-                    &format!(
-                        "Type '{}' does not has field '{}'",
-                        type_name,
-                        field.lexeme()
-                    ),
-                ))
-            }
+        let type_symbol = Symbol::new_str(self.current_symbol(), &type_name);
+        let field_symbol = Symbol::new(Some(&type_symbol), field);
+
+        if let Some(field_type) = self.global_scope().symbols.get_type(&field_symbol) {
+            expr.symbol.replace(Some(field_symbol));
+            Ok(field_type.clone())
         } else {
             Err(Diagnostic::error(
-                target,
-                &format!("Cannot access property of type {}", target_type),
+                &Span::join(target, field),
+                &format!(
+                    "Type '{}' does not has field '{}'",
+                    type_name,
+                    field.lexeme()
+                ),
             ))
         }
     }

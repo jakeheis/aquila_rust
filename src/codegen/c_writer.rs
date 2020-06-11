@@ -62,6 +62,43 @@ impl CWriter {
         self.writeln(&format!("{} {};", CWriter::convert_type(var_type), name));
     }
 
+    pub fn start_if_block(&mut self, condition: String) {
+        let line = format!("if ({}) {{", condition);
+        self.writeln(&line);
+        self.indent += 1;
+    }
+
+    pub fn start_else_block(&mut self) {
+        self.indent -= 1;
+        self.writeln("} else {");
+        self.indent += 1;
+    }
+
+    pub fn end_conditional_block(&mut self) {
+        self.indent -= 1;
+        self.writeln("}");
+    }
+
+    pub fn write_return(&mut self, value: Option<String>) {
+        let val = value.unwrap_or(String::from(""));
+        let line = format!("return {};", val);
+        self.writeln(&line);
+    }
+
+    pub fn write_print(&mut self, expr: Option<(&NodeType, String)>) {
+        if let Some((node_type, expr)) = expr {
+            let format_specificer = match node_type {
+                NodeType::Int | NodeType::Bool => "%i",
+                NodeType::StringLiteral => "%s",
+                _ => unreachable!(),
+            };
+            let line = format!("printf(\"{}\\n\", {});", format_specificer, expr);
+            self.writeln(&line);
+        } else {
+            self.writeln("printf(\"\\n\");");
+        }
+    }
+
     fn convert_type(node_type: &NodeType) -> String {
         let slice = match node_type {
             NodeType::Void => "void",
