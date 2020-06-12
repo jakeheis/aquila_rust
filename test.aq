@@ -71,10 +71,10 @@ type Hey {
   }
 }
 
-new(4).a = 7;
-
 let hi: Hey;
 hi.a = 0;
+
+hi.new(4).a = 7;
 
 /*
 let temp = add(1, 2);

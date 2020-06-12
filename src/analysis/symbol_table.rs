@@ -2,11 +2,12 @@ use super::type_checker::NodeType;
 use crate::lexing::*;
 use crate::parsing::*;
 use std::collections::HashMap;
+use crate::diagnostic::*;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Symbol {
     pub id: String,
-    pub user_def_name: String,
+    // pub user_def_name: String,
 }
 
 impl Symbol {
@@ -18,7 +19,7 @@ impl Symbol {
         let id = parent.map(|p| p.id.clone() + "$").unwrap_or("".to_string()) + name;
         Symbol {
             id,
-            user_def_name: name.to_string(),
+            // user_def_name: name.to_string(),
         }
     }
 
@@ -27,7 +28,8 @@ impl Symbol {
     }
 
     pub fn owns(&self, other: &Symbol) -> bool {
-        let expected = self.id.clone() + "$" + &other.user_def_name;
+        let name = other.id.rsplit("$").nth(0).unwrap();
+        let expected = self.id.clone() + "$" + &name;
         other.id == expected
     }
 }
@@ -57,19 +59,19 @@ impl SymbolTable {
         self.type_map.get(symbol)
     }
 
-    pub fn symbol_named(&self, name: &str) -> Option<&Symbol> {
-        self.type_map
-            .keys()
-            .find(|symbol| symbol.user_def_name == name)
-    }
+    // pub fn symbol_named(&self, name: &str) -> Option<&Symbol> {
+    //     self.type_map
+    //         .keys()
+    //         .find(|symbol| symbol.user_def_name == name)
+    // }
 
-    pub fn symbol_and_type_named(&self, name: &str) -> Option<(&Symbol, &NodeType)> {
-        let symbol = self
-            .type_map
-            .keys()
-            .find(|symbol| symbol.user_def_name == name);
-        symbol.map(|s| (s, self.get_type(s).unwrap()))
-    }
+    // pub fn symbol_and_type_named(&self, name: &str) -> Option<(&Symbol, &NodeType)> {
+    //     let symbol = self
+    //         .type_map
+    //         .keys()
+    //         .find(|symbol| symbol.user_def_name == name);
+    //     symbol.map(|s| (s, self.get_type(s).unwrap()))
+    // }
 }
 
 impl std::fmt::Display for SymbolTable {
@@ -84,6 +86,7 @@ pub struct SymbolTableBuilder {
 }
 
 impl SymbolTableBuilder {
+
     pub fn build(program: &ParsedProgram) -> SymbolTable {
         let mut builder = SymbolTableBuilder {
             table: SymbolTable::new(),
@@ -98,6 +101,26 @@ impl SymbolTableBuilder {
             s.accept(self);
         });
     }
+
+    fn resolve_type(&self, type_token: &Token) -> Option<NodeType> {
+        if let Some(primitive) = NodeType::primitive(type_token) {
+            Some(primitive)
+        } else {
+            for symbol in self.context.iter().rev() {
+                let type_symbol = Symbol::new(Some(&symbol), type_token);
+                if let Some(NodeType::Metatype(type_symbol)) = self.table.get_type(&type_symbol) {
+                    return Some(NodeType::Type(type_symbol.clone()));
+                }
+            }
+            let global_symbol = Symbol::new(None, type_token);
+            if let Some(NodeType::Metatype(type_symbol)) = self.table.get_type(&global_symbol) {
+                return Some(NodeType::Type(type_symbol.clone()));
+            } else {
+                None
+            }
+        }
+    }
+
 }
 
 impl StmtVisitor for SymbolTableBuilder {
@@ -111,7 +134,7 @@ impl StmtVisitor for SymbolTableBuilder {
         methods: &[Stmt],
     ) -> Self::StmtResult {
         let new_symbol = Symbol::new(self.context.last(), name);
-        let new_type = NodeType::Metatype(name.lexeme().to_string());
+        let new_type = NodeType::Metatype(new_symbol.clone());
         self.table.insert(new_symbol.clone(), new_type.clone());
 
         self.context.push(new_symbol);
@@ -137,7 +160,7 @@ impl StmtVisitor for SymbolTableBuilder {
         let param_types: Vec<NodeType> = params.iter().map(|p| p.accept(self)).collect();
         std::mem::swap(&mut self.table, &mut throwaway);
 
-        let return_type = NodeType::from_opt(return_type);
+        let return_type = return_type.as_ref().and_then(|r| self.resolve_type(r)).unwrap_or(NodeType::Void);
         let new_type = NodeType::Function(param_types, Box::new(return_type));
 
         self.table.insert(new_symbol, new_type.clone());
@@ -153,14 +176,24 @@ impl StmtVisitor for SymbolTableBuilder {
         kind: &Option<Token>,
         _value: &Option<Expr>,
     ) -> Self::StmtResult {
-        if let Some(new_type) = kind.as_ref().map(|k| NodeType::from(k)) {
+        if let Some(kind) = kind.as_ref() {
+            let new_type = self.resolve_type(kind).unwrap_or(NodeType::Void);
             let new_symbol = Symbol::new(self.context.last(), name);
-
             self.table.insert(new_symbol, new_type.clone());
             new_type
-        } else {
+        } else  {
             NodeType::Void
         }
+
+        // let var_type = kind.as_ref().unwrap().and_then(|r| self.resolve_type(r)).unwrap_or(NodeType::Void);
+        // if let Some(new_type) = kind.as_ref().map(|k| NodeType::from(k)) {
+        //     let new_symbol = Symbol::new(self.context.last(), name);
+
+        //     self.table.insert(new_symbol, new_type.clone());
+        //     new_type
+        // } else {
+            
+        // }
     }
 
     fn visit_if_stmt(

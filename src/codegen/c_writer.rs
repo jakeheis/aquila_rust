@@ -100,21 +100,19 @@ impl CWriter {
     }
 
     fn convert_type(node_type: &NodeType) -> String {
-        let slice = match node_type {
-            NodeType::Void => "void",
-            NodeType::Int => "int",
-            NodeType::Bool => "bool",
-            NodeType::StringLiteral => "char *",
-            NodeType::Type(string) => &string,
-            _ => panic!(),
-        };
-        String::from(slice)
+        match node_type {
+            NodeType::Void => String::from("void"),
+            NodeType::Int => String::from("int"),
+            NodeType::Bool => String::from("bool"),
+            NodeType::StringLiteral => String::from("char *"),
+            NodeType::Type(symbol) => symbol.mangled(),
+            other_type => panic!("Can't convert type {}", other_type),
+        }
     }
 
     pub fn writeln(&mut self, line: &str) {
         let indent = (0..self.indent).map(|_| "    ").collect::<String>();
         let line = format!("{}{}", indent, line);
-        // println!("{}", line);
         writeln!(self.file, "{}", line).unwrap();
     }
 }

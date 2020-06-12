@@ -368,8 +368,16 @@ impl Parser {
 
     fn field(&mut self, lhs: Expr, can_assign: bool) -> Result<Expr> {
         let field_name = self.consume(TokenKind::Identifier, "Expect field name after '.'")?;
+
+        let target_is_call = if let ExprKind::Call(..) = &lhs.kind {
+            true
+        } else {
+            false
+        };
+
         let field = Expr::field(lhs, field_name);
-        if can_assign && self.matches(TokenKind::Equal) {
+
+        if can_assign && !target_is_call && self.matches(TokenKind::Equal) {
             self.assignment(field)
         } else {
             Ok(field)

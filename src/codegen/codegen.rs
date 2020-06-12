@@ -143,7 +143,7 @@ impl StmtVisitor for Codegen {
         if let Some(current_type) = &self.current_type {
             params.insert(
                 0,
-                (NodeType::Type(current_type.mangled()), String::from("self")),
+                (NodeType::Type(current_type.clone()), String::from("self")),
             );
         }
 

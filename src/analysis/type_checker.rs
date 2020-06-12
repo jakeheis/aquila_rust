@@ -38,6 +38,15 @@ impl Scope {
         decl.symbol.replace(Some(new_symbol));
         decl.stmt_type.replace(Some(var_type.clone()));
     }
+
+    fn symbol_named(&self, name: &str) -> Option<Symbol> {
+        let symbol = Symbol::new_str((&self.id).as_ref(), name);
+        if let None = self.symbols.get_type(&symbol) {
+            None
+        } else {
+            Some(symbol)
+        }
+    }
 }
 
 pub struct TypeChecker {
@@ -137,14 +146,30 @@ impl TypeChecker {
         self.scopes.pop();
     }
 
-    fn resolve_var(&self, name: &str) -> Option<(&Scope, &Symbol)> {
+    fn resolve_var(&self, name: &str) -> Option<(&Scope, Symbol)> {
         for scope in self.scopes.iter().rev() {
-            if let Some(symbol) = scope.symbols.symbol_named(name) {
+            if let Some(symbol) = scope.symbol_named(name) {
                 return Some((scope, symbol));
             }
         }
         None
     }
+
+    fn resolve_type(&self, type_token: &Token) -> Result {
+        if let Some(primitive) = NodeType::primitive(type_token) {
+            Ok(primitive)
+        } else if let Some((scope, type_symbol)) = self.resolve_var(type_token.lexeme()) {
+            if let Some(NodeType::Metatype(type_symbol)) = scope.symbols.get_type(&type_symbol) {
+                let compound_type = NodeType::Type(type_symbol.clone());
+                Ok(compound_type)
+            } else {
+                Err(Diagnostic::error(type_token, "Not a type"))
+            }
+        } else {
+            Err(Diagnostic::error(type_token, "Undefined type"))
+        }
+    }
+
 }
 
 impl StmtVisitor for TypeChecker {
@@ -179,7 +204,7 @@ impl StmtVisitor for TypeChecker {
     ) -> Analysis {
         let return_type = return_type_token
             .as_ref()
-            .map(|r| NodeType::from(r))
+            .and_then(|r| self.resolve_type(r).ok())
             .unwrap_or(NodeType::Void);
 
         let symbol = self.push_function_scope(name, return_type.clone());
@@ -209,26 +234,20 @@ impl StmtVisitor for TypeChecker {
         kind: &Option<Token>,
         value: &Option<Expr>,
     ) -> Analysis {
-        let explicit_type = kind.as_ref().map(|k| NodeType::from(k));
-        if let Some(explicit_type) = explicit_type.as_ref() {
-            self.current_scope().define_var(&stmt, name, explicit_type);
-
-            if let NodeType::Type(compound_type) = explicit_type {
-                match self
-                    .global_scope()
-                    .symbols
-                    .symbol_and_type_named(&compound_type)
-                {
-                    Some((_, symbol_type)) if !symbol_type.is_metatype() => self
-                        .reporter
-                        .report(Diagnostic::error(kind.as_ref().unwrap(), "Not a type")),
-                    None => self
-                        .reporter
-                        .report(Diagnostic::error(kind.as_ref().unwrap(), "Undefined type")),
-                    _ => (),
+        let explicit_type = if let Some(explicit) = kind.as_ref() {
+            match self.resolve_type(explicit) {
+                Ok(explicit_type) => {
+                    self.current_scope().define_var(&stmt, name, &explicit_type);
+                    Some(explicit_type)
+                },
+                Err(diagnostic) => {
+                    self.report_error(diagnostic);
+                    None
                 }
             }
-        }
+        } else {
+            None
+        };
 
         if let Some(value) = value.as_ref() {
             if let Some(value_type) = self.check_expr(value) {
@@ -437,14 +456,13 @@ impl ExprVisitor for TypeChecker {
     fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, field: &Token) -> Self::ExprResult {
         let target_type = target.accept(self)?;
 
-        guard_else!(NodeType::Type[type_name] = target_type, {
+        guard_else!(NodeType::Type[type_symbol] = target_type, {
             return Err(Diagnostic::error(
                 target,
                 &format!("Cannot access property of an {}", target_type),
             ));
         });
 
-        let type_symbol = Symbol::new_str(None, &type_name);
         let field_symbol = Symbol::new(Some(&type_symbol), field);
 
         if let Some(field_type) = self.global_scope().symbols.get_type(&field_symbol) {
@@ -455,7 +473,7 @@ impl ExprVisitor for TypeChecker {
                 &Span::join(target, field),
                 &format!(
                     "Type '{}' does not has field '{}'",
-                    type_name,
+                    type_symbol.id,
                     field.lexeme()
                 ),
             ))
@@ -475,7 +493,7 @@ impl ExprVisitor for TypeChecker {
     fn visit_variable_expr(&mut self, expr: &Expr, name: &Token) -> Self::ExprResult {
         if let Some((scope, symbol)) = self.resolve_var(name.lexeme()) {
             expr.symbol.replace(Some(symbol.clone()));
-            Ok(scope.symbols.get_type(symbol).unwrap().clone())
+            Ok(scope.symbols.get_type(&symbol).unwrap().clone())
         } else {
             Err(Diagnostic::error(name, "Undefined variable"))
         }
@@ -490,33 +508,19 @@ pub enum NodeType {
     Int,
     Bool,
     StringLiteral,
-    Type(String),
+    Type(Symbol),
     Function(Vec<NodeType>, Box<NodeType>),
-    Metatype(String),
+    Metatype(Symbol),
 }
 
 impl NodeType {
-    pub fn from(token: &Token) -> Self {
+    pub fn primitive(token: &Token) -> Option<Self> {
         match token.lexeme() {
-            "void" => NodeType::Void,
-            "int" => NodeType::Int,
-            "bool" => NodeType::Bool,
-            "StringLiteral" => NodeType::StringLiteral,
-            other => NodeType::Type(other.to_string()),
-        }
-    }
-
-    pub fn from_opt(token: &Option<Token>) -> Self {
-        token
-            .as_ref()
-            .map(|t| NodeType::from(t))
-            .unwrap_or(NodeType::Void)
-    }
-
-    fn is_metatype(&self) -> bool {
-        match self {
-            NodeType::Metatype(_) => true,
-            _ => false,
+            "void" => Some(NodeType::Void),
+            "int" => Some(NodeType::Int),
+            "bool" => Some(NodeType::Bool),
+            "StringLiteral" => Some(NodeType::StringLiteral),
+            _ => None,
         }
     }
 }
@@ -540,8 +544,8 @@ impl std::fmt::Display for NodeType {
                 string += &format!("): {}", ret);
                 string
             }
-            NodeType::Type(ty) => ty.clone(),
-            NodeType::Metatype(ty) => ty.clone() + "_Meta",
+            NodeType::Type(ty) => ty.id.clone(),
+            NodeType::Metatype(ty) => ty.id.clone() + "_Meta",
         };
         write!(f, "{}", kind)
     }

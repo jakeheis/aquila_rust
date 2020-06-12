@@ -371,11 +371,18 @@ impl StmtVisitor for ASTPrinter {
             .as_ref()
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
+        let resolved_type = stmt
+            .stmt_type
+            .borrow()
+            .as_ref()
+            .map(|t| t.to_string())
+            .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
-            "FunctionDecl(name: {}, return_type: {}, symbol: {})",
+            "FunctionDecl(name: {}, return_type: {}, symbol: {}, resolved_type: {})",
             name.lexeme(),
             return_type.as_ref().map(|r| r.lexeme()).unwrap_or("<void>"),
-            symbol
+            symbol,
+            resolved_type
         ));
         self.indent(|visitor| {
             visitor.write_ln("Params");
