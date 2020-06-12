@@ -26,30 +26,17 @@
    // lhs + rhs + third
 // }
 
-type First {
-    let other: Second;
+type Adder {
+  let lhs: int;
+  let rhs: int;
+
+  def add(third: int): int {
+    return lhs + rhs + third;
+  }
 }
 
-type Second {
-  let fake: Third;
-}
-
-type Third {
-  let fake: int;
-      def method(): First {
-      let o: First;
-      return o;
-    }
-}
-
-//type Adder {
-  //  let lhs: int;
-   //let rhs: bool
-
-    //def add(third: int): int {
-      //  lhs + rhs + third;
-    //}
-//}
+let adder = Adder(4, 5);
+print adder.add(6);
 
 // -1;
 // !2;

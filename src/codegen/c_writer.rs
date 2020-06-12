@@ -125,6 +125,11 @@ impl CWriter {
         ));
     }
 
+    pub fn write_assignment(&mut self, target: String, value: String) {
+        let line = format!("{} = {};", target, value);
+        self.writeln(&line);
+    }
+
     fn convert_type(&self, node_type: &NodeType) -> String {
         match node_type {
             NodeType::Void => String::from("void"),

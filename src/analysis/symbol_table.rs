@@ -85,10 +85,10 @@ impl SymbolTableBuilder {
         builder.table
     }
 
-    fn build_list(&mut self, stmts: &[Stmt]) {
-        stmts.iter().for_each(|s| {
-            s.accept(self);
-        });
+    fn build_list(&mut self, stmts: &[Stmt]) -> Vec<NodeType> {
+        stmts.iter().map(|s| {
+            s.accept(self)
+        }).collect()
     }
 
     fn resolve_type(&self, type_token: &Token) -> NodeType {
@@ -124,9 +124,18 @@ impl StmtVisitor for SymbolTableBuilder {
         let new_type = NodeType::Metatype(new_symbol.clone());
 
         if self.visit_methods {
-            self.context.push(new_symbol);
-            self.build_list(&fields);
+            self.context.push(new_symbol.clone());
+            let field_types = self.build_list(&fields);
+
+            // Init method
+            let init_type = NodeType::Function(
+                field_types, 
+                Box::new(NodeType::Type(new_symbol))
+            );
+            self.table.insert(Symbol::new_str(self.context.last(), "init"), init_type.clone());
+
             self.build_list(&methods);
+            
             self.context.pop();
         } else {
             self.table.insert(new_symbol.clone(), new_type.clone());

@@ -82,7 +82,12 @@ impl CycleChecker {
 
         let (span, fields) = self.field_map.get(&cur_symbol).unwrap();
         for field_symbol in fields {
-            if chain.contains(field_symbol) {
+            if field_symbol == &cur_symbol {
+                self.reporter.report(Diagnostic::error(
+                    span,
+                    "Cannot contain a property of the same type",
+                ));
+            } else if chain.contains(field_symbol) {
                 let message = format!(
                     "Circular reference between {} and {}",
                     cur_symbol.mangled(),

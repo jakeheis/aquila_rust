@@ -5,6 +5,7 @@ use crate::lexing::*;
 use crate::parsing::*;
 use crate::source::*;
 use std::rc::Rc;
+use crate::guard;
 
 pub type Result = DiagnosticResult<NodeType>;
 
@@ -430,12 +431,23 @@ impl ExprVisitor for TypeChecker {
     fn visit_call_expr(&mut self, expr: &Expr, target: &Expr, args: &[Expr]) -> Self::ExprResult {
         let func_type = target.accept(self)?;
 
-        guard_else!(NodeType::Function[params, ret] = func_type.clone(), {
-            return Err(Diagnostic::error(
-                target,
-                &format!("Cannot call type {}", func_type),
-            ));
-        });
+        let (params, return_type) = match func_type.clone() {
+            NodeType::Function(p, r) => {
+                Ok((p ,*r))
+            },
+            NodeType::Metatype(symbol) => {
+                let init_symbol = Symbol::new_str(Some(&symbol), "init");
+                let init_type = self.global_scope().symbols.get_type(&init_symbol).unwrap();
+                guard!(NodeType::Function[p, r] = init_type.clone());
+                Ok((p ,*r))
+            },
+            _ => {
+                Err(Diagnostic::error(
+                    target,
+                    &format!("Cannot call type {}", func_type),
+                ))
+            }
+        }?;
 
         let arg_types: DiagnosticResult<Vec<NodeType>> =
             args.iter().map(|a| a.accept(self)).collect();
@@ -458,7 +470,7 @@ impl ExprVisitor for TypeChecker {
             }
         }
 
-        Ok(*ret.clone())
+        Ok(return_type)
     }
 
     fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, field: &Token) -> Self::ExprResult {

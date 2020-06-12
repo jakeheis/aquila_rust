@@ -107,6 +107,36 @@ impl StmtVisitor for Codegen {
                 for method in methods {
                     method.accept(self);
                 }
+
+                let init_symbol = Symbol::new_str(Some(struct_symbol), "init");
+                let init_type = self.global_symbols.get_type(&init_symbol).unwrap();
+                guard!(NodeType::Function[field_types, ret_type] = init_type);
+                
+                let field_list: Vec<_> = field_types.iter().zip(fields).map(|(ft, f)| {
+                    (ft.clone(), f.symbol.borrow().as_ref().unwrap().mangled(),)
+                }).collect();
+
+                if let CodegenStage::FuncPrototypes = self.stage {
+                    self.writer.write_function_prototype(
+                        &NodeType::Type(struct_symbol.clone()), 
+                        &init_symbol.mangled(), 
+                        &field_list,
+                    );
+                } else {
+                    self.writer.start_decl_func(
+                        &NodeType::Type(struct_symbol.clone()), 
+                        &init_symbol.mangled(), 
+                        &field_list,
+                    );
+                    self.writer.decl_var(&ret_type, "new_item");
+                    for (_, f) in field_list {
+                        let target = format!("new_item.{}", f);
+                        self.writer.write_assignment(target, f);
+                    }
+                    self.writer.write_return(Some(String::from("new_item")));
+                    self.writer.end_decl_func();
+                }
+                    
                 self.current_type = None;
             }
         }
@@ -172,8 +202,8 @@ impl StmtVisitor for Codegen {
         self.writer.decl_var(var_type, &var_symbol.mangled());
 
         if let Some(value) = value.as_ref() {
-            let line = format!("{} = {};", var_symbol.mangled(), value.accept(self));
-            self.writer.writeln(&line);
+            let value = value.accept(self);
+            self.writer.write_assignment(var_symbol.mangled(), value);
         }
     }
 
@@ -260,9 +290,15 @@ impl ExprVisitor for Codegen {
         }
 
         let borrowed_symbol = target.symbol.borrow();
+        let mut symbol = borrowed_symbol.as_ref().unwrap().clone();
+
+        if let Some(NodeType::Metatype(metatype_symbol)) = self.global_symbols.get_type(&symbol) {
+            symbol = Symbol::new_str(Some(metatype_symbol), "init");
+        }
+
         format!(
             "{}({})",
-            borrowed_symbol.as_ref().unwrap().mangled(),
+            symbol.mangled(),
             args.join(",")
         )
     }
