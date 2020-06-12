@@ -99,7 +99,9 @@ impl Lexer {
 
     fn block_comment(&mut self) -> Option<Token> {
         while !self.is_at_end() {
-            if self.matches('*') {
+            if self.matches('\n') {
+                self.line += 1;
+            } else if self.matches('*') {
                 if self.matches('/') {
                     break;
                 }

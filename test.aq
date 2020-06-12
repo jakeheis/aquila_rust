@@ -26,6 +26,23 @@
    // lhs + rhs + third
 // }
 
+def hello(fake: Fake): OtherFake {
+  let o: OtherFake;
+      return o;
+}
+
+type Fake {
+    let other: OtherFake;
+    def method(): OtherFake {
+      let o: OtherFake;
+      return o;
+    }
+}
+
+type OtherFake {
+  
+}
+
 //type Adder {
   //  let lhs: int;
    //let rhs: bool
@@ -50,6 +67,7 @@
 
 // add(3, true);
 
+/*
 def add(a: int, b: int): int {
   return a + b;
 }
@@ -74,8 +92,8 @@ type Hey {
 let hi: Hey;
 hi.a = 0;
 
-hi.new(4).a = 7;
-
+hi.new.a = 7;
+*/
 /*
 let temp = add(1, 2);
 let t2 = hi.sup(6);

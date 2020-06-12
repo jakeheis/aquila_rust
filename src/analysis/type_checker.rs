@@ -59,6 +59,7 @@ pub struct Analysis {
 }
 
 impl TypeChecker {
+
     pub fn check(program: &ParsedProgram, reporter: Rc<dyn Reporter>) -> SymbolTable {
         let table = SymbolTableBuilder::build(program);
         let global_scope = Scope::global(table);
@@ -67,6 +68,7 @@ impl TypeChecker {
             reporter,
             scopes: vec![global_scope],
         };
+
         checker.check_list(&program.statements);
 
         checker.scopes.remove(0).symbols
@@ -202,10 +204,17 @@ impl StmtVisitor for TypeChecker {
         return_type_token: &Option<Token>,
         body: &[Stmt],
     ) -> Analysis {
-        let return_type = return_type_token
-            .as_ref()
-            .and_then(|r| self.resolve_type(r).ok())
-            .unwrap_or(NodeType::Void);
+        let return_type = if let Some(return_type_token) = return_type_token {
+            match self.resolve_type(return_type_token) {
+                Ok(node_type) => node_type,
+                Err(diagnostic) => {
+                    self.report_error(diagnostic);
+                    NodeType::Void
+                }
+            }
+        } else {
+            NodeType::Void
+        };
 
         let symbol = self.push_function_scope(name, return_type.clone());
         stmt.symbol.replace(Some(symbol));
@@ -215,11 +224,10 @@ impl StmtVisitor for TypeChecker {
         self.pop_scope();
 
         if analysis.guarantees_return == false {
-            let message = format!("Function may not return {}", return_type);
             let last_param = params.last().map(|p| p.span.clone());
             let span_params = Span::join_opt(name, &last_param);
             let span = Span::join_opt(&span_params, return_type_token);
-            self.report_error(Diagnostic::error(&span, &message));
+            self.report_error(Diagnostic::error(&span, "Function may not return"));
         }
 
         Analysis {
@@ -353,9 +361,11 @@ impl StmtVisitor for TypeChecker {
             guarantees_return: false,
         }
     }
+
 }
 
 impl ExprVisitor for TypeChecker {
+
     type ExprResult = Result;
 
     fn visit_assignment_expr(
@@ -459,7 +469,7 @@ impl ExprVisitor for TypeChecker {
         guard_else!(NodeType::Type[type_symbol] = target_type, {
             return Err(Diagnostic::error(
                 target,
-                &format!("Cannot access property of an {}", target_type),
+                &format!("Cannot access property of a {}", target_type),
             ));
         });
 
@@ -498,6 +508,7 @@ impl ExprVisitor for TypeChecker {
             Err(Diagnostic::error(name, "Undefined variable"))
         }
     }
+    
 }
 
 // NodeType
@@ -533,7 +544,7 @@ impl std::fmt::Display for NodeType {
             NodeType::Bool => String::from("bool"),
             NodeType::StringLiteral => String::from("StringLiteral"),
             NodeType::Function(params, ret) => {
-                let mut string = String::from("(");
+                let mut string = String::from("def(");
                 if let Some(first) = params.first() {
                     string += &first.to_string()
                 }

@@ -20,17 +20,27 @@ impl CWriter {
     fn write_includes(&mut self) {
         self.writeln("#include <stdbool.h>");
         self.writeln("#include <stdio.h>");
-        self.writeln("");
     }
 
-    pub fn start_decl_struct(&mut self) {
-        self.writeln(&format!("typedef struct {{"));
+    pub fn write_struct_forward_decl(&mut self, name: &str) {
+        self.writeln("");
+        self.writeln(&format!("struct {};", name));
+    }
+
+    pub fn start_decl_struct(&mut self, name: &str) {
+        self.writeln("");
+        self.writeln(&format!("typedef struct {} {{", name));
         self.indent += 1;
     }
 
     pub fn end_decl_struct(&mut self, name: &str) {
         self.indent -= 1;
         self.writeln(&format!("}} {};", name));
+    }
+    
+    pub fn write_function_prototype(&mut self, ret_type: &NodeType, name: &str, params: &[(NodeType, String)]) {
+        self.writeln("");
+        self.write_function_header(ret_type, name, params, ";");
     }
 
     pub fn start_decl_func(
@@ -39,17 +49,8 @@ impl CWriter {
         name: &str,
         params: &[(NodeType, String)],
     ) {
-        let param_str: Vec<String> = params
-            .iter()
-            .map(|(param_type, name)| format!("{} {}", Self::convert_type(param_type), name))
-            .collect();
-        let param_str = param_str.join(",");
-        self.writeln(&format!(
-            "{} {}({}) {{",
-            Self::convert_type(ret_type),
-            name,
-            param_str
-        ));
+        self.writeln("");
+        self.write_function_header(ret_type, name, params, " {");
         self.indent += 1;
     }
 
@@ -59,7 +60,7 @@ impl CWriter {
     }
 
     pub fn decl_var(&mut self, var_type: &NodeType, name: &str) {
-        self.writeln(&format!("{} {};", CWriter::convert_type(var_type), name));
+        self.writeln(&format!("{} {};", self.convert_type(var_type), name));
     }
 
     pub fn start_if_block(&mut self, condition: String) {
@@ -99,13 +100,34 @@ impl CWriter {
         }
     }
 
-    fn convert_type(node_type: &NodeType) -> String {
+    fn write_function_header(&mut self, ret_type: &NodeType, name: &str, params: &[(NodeType, String)], terminator: &str) {
+        let param_str: Vec<String> = params
+            .iter()
+            .map(|(param_type, name)| format!("{} {}", self.convert_type(param_type), name))
+            .collect();
+        let param_str = param_str.join(",");
+        self.writeln(&format!(
+            "{} {}({}){}",
+            self.convert_type(ret_type),
+            name,
+            param_str,
+            terminator
+        ));
+    }
+
+    fn convert_type(&self, node_type: &NodeType) -> String {
         match node_type {
             NodeType::Void => String::from("void"),
             NodeType::Int => String::from("int"),
             NodeType::Bool => String::from("bool"),
             NodeType::StringLiteral => String::from("char *"),
-            NodeType::Type(symbol) => symbol.mangled(),
+            NodeType::Type(symbol) => {
+                if false {
+                    format!("struct {}", symbol.mangled())
+                } else {
+                    symbol.mangled()
+                }
+            },
             other_type => panic!("Can't convert type {}", other_type),
         }
     }
