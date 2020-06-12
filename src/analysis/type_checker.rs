@@ -1,13 +1,12 @@
 use super::symbol_table::*;
 use crate::diagnostic::*;
-use crate::guard_else;
 use crate::lexing::*;
 use crate::parsing::*;
 use crate::source::*;
 use std::rc::Rc;
 use crate::guard;
 
-pub type Result = DiagnosticResult<NodeType>;
+type Result = DiagnosticResult<NodeType>;
 
 struct Scope {
     id: Option<Symbol>,
@@ -53,6 +52,7 @@ impl Scope {
 pub struct TypeChecker {
     reporter: Rc<dyn Reporter>,
     scopes: Vec<Scope>,
+    is_builtin: bool,
 }
 
 pub struct Analysis {
@@ -67,6 +67,7 @@ impl TypeChecker {
         let mut checker = TypeChecker {
             reporter,
             scopes: vec![global_scope],
+            is_builtin: false,
         };
 
         checker.check_list(&program.type_decls);
@@ -202,20 +203,10 @@ impl StmtVisitor for TypeChecker {
         stmt: &Stmt,
         name: &Token,
         params: &[Stmt],
-        return_type_token: &Option<Token>,
+        return_type_expr: &Option<Expr>,
         body: &[Stmt],
     ) -> Analysis {
-        let return_type = if let Some(return_type_token) = return_type_token {
-            match self.resolve_type(return_type_token) {
-                Ok(node_type) => node_type,
-                Err(diagnostic) => {
-                    self.report_error(diagnostic);
-                    NodeType::Void
-                }
-            }
-        } else {
-            NodeType::Void
-        };
+        let return_type = return_type_expr.as_ref().and_then(|r| self.check_expr(r)).unwrap_or(NodeType::Void);
 
         let symbol = self.push_function_scope(name, return_type.clone());
         stmt.symbol.replace(Some(symbol));
@@ -224,10 +215,10 @@ impl StmtVisitor for TypeChecker {
         let analysis = self.check_list(body);
         self.pop_scope();
 
-        if analysis.guarantees_return == false {
+        if analysis.guarantees_return == false && !self.is_builtin {
             let last_param = params.last().map(|p| p.span.clone());
             let span_params = Span::join_opt(name, &last_param);
-            let span = Span::join_opt(&span_params, return_type_token);
+            let span = Span::join_opt(&span_params, return_type_expr);
             self.report_error(Diagnostic::error(&span, "Function may not return"));
         }
 
@@ -357,6 +348,14 @@ impl StmtVisitor for TypeChecker {
             guarantees_return: false,
         }
     }
+
+    fn visit_builtin_stmt(&mut self, _stmt: &Stmt, inner: &Box<Stmt>) -> Self::StmtResult {
+        self.is_builtin = true;
+        let result = inner.accept(self);
+        self.is_builtin = false;
+        result
+    }
+
 }
 
 impl ExprVisitor for TypeChecker {
@@ -551,6 +550,7 @@ pub enum NodeType {
     Void,
     Int,
     Bool,
+    Byte,
     StringLiteral,
     Type(Symbol),
     Pointer(Box<NodeType>),
@@ -565,9 +565,14 @@ impl NodeType {
             "void" => Some(NodeType::Void),
             "int" => Some(NodeType::Int),
             "bool" => Some(NodeType::Bool),
+            "byte" => Some(NodeType::Byte),
             "StringLiteral" => Some(NodeType::StringLiteral),
             _ => None,
         }
+    }
+
+    pub fn pointer_to(pointee: NodeType) -> Self {
+        NodeType::Pointer(Box::new(pointee))
     }
 
     pub fn represented_type(&self) -> &NodeType {
@@ -585,6 +590,7 @@ impl std::fmt::Display for NodeType {
             NodeType::Void => String::from("void"),
             NodeType::Int => String::from("int"),
             NodeType::Bool => String::from("bool"),
+            NodeType::Byte => String::from("byte"),
             NodeType::StringLiteral => String::from("StringLiteral"),
             NodeType::Function(params, ret) => {
                 let mut string = String::from("def(");

@@ -29,17 +29,25 @@ impl Parser {
         }
     }
 
-    pub fn parse(mut self) -> super::ParsedProgram {
+    pub fn parse(mut self, include_stdlib: bool) -> super::ParsedProgram {
         let statements = self.stmt_list(Context::TopLevel, None);
 
-        super::ParsedProgram::new(Rc::clone(&self.tokens[0].span().source), statements)
+        super::ParsedProgram::new(Rc::clone(&self.tokens[0].span().source), statements, include_stdlib)
     }
 
     fn stmt_list(&mut self, context: Context, end: Option<TokenKind>) -> Vec<Stmt> {
         let mut stmts: Vec<Stmt> = Vec::new();
         while !self.is_at_end() && Some(self.peek()) != end {
+            let is_builtin = self.matches(TokenKind::Builtin);
             match self.statement(context) {
-                Ok(stmt) => stmts.push(stmt),
+                Ok(stmt) => {
+                    let stmt = if is_builtin {
+                        Stmt::builtin(stmt)
+                    } else {
+                        stmt
+                    };
+                    stmts.push(stmt)
+                },
                 Err(diagnostic) => {
                     self.reporter.report(diagnostic);
                     self.synchronize();
@@ -196,10 +204,7 @@ impl Parser {
         self.consume(TokenKind::RightParen, "Expect closing ')'")?;
 
         let return_type = if self.matches(TokenKind::Colon) {
-            Some(
-                self.consume(TokenKind::Identifier, "Expect return type after ':'")?
-                    .clone(),
-            )
+            Some(self.parse_explicit_type()?)
         } else {
             None
         };
@@ -406,15 +411,7 @@ impl Parser {
 
         if self.matches(TokenKind::Colon) {
             if allow_type {
-                let modifier = if self.matches(TokenKind::Ptr) {
-                    Some(self.previous().clone())
-                } else {
-                    None
-                };
-
-                let name = self.consume(TokenKind::Identifier, "Expected variable type")?.clone();
-
-                explicit_type = Some(Expr::explicit_type(name, modifier));
+                explicit_type = Some(self.parse_explicit_type()?);
             } else {
                 return Err(Diagnostic::error(
                     self.previous(),
@@ -428,6 +425,18 @@ impl Parser {
         }
 
         Ok((name, explicit_type))
+    }
+
+    fn parse_explicit_type(&mut self) -> Result<Expr> {
+        let modifier = if self.matches(TokenKind::Ptr) {
+            Some(self.previous().clone())
+        } else {
+            None
+        };
+
+        let name = self.consume(TokenKind::Identifier, "Expected variable type")?.clone();
+
+        Ok(Expr::explicit_type(name, modifier))
     }
 
     fn peek(&self) -> TokenKind {

@@ -43,6 +43,8 @@ let look: ptr Adder = &sum;
 let copy = *look;
 print copy.add(3);
 
+let storage = allocate(6);
+
 // -1;
 // !2;
 

@@ -4,6 +4,7 @@ pub mod diagnostic;
 pub mod lexing;
 pub mod parsing;
 pub mod source;
+pub mod stdlib;
 
 use analysis::*;
 use codegen::*;
@@ -20,6 +21,14 @@ pub struct LogOptions {
 }
 
 pub fn run(source: Source) -> Result<(), &'static str> {
+    let (program, symbols) = build_program(source, true)?;
+
+    Codegen::generate(program, symbols);
+
+    Ok(())
+}
+
+pub fn build_program(source: Source, include_stdlib: bool) -> Result<(ParsedProgram, SymbolTable), &'static str> {
     let log_options = LogOptions {
         lexer: false,
         parser: false,
@@ -37,7 +46,7 @@ pub fn run(source: Source) -> Result<(), &'static str> {
     }
 
     let parser = Parser::new(lexed, Rc::clone(&reporter));
-    let parsed = parser.parse();
+    let parsed = parser.parse(include_stdlib);
 
     if log_options.parser {
         let mut printer = ASTPrinter::new();
@@ -66,9 +75,7 @@ pub fn run(source: Source) -> Result<(), &'static str> {
         return Err("Cycle checker failed");
     }
 
-    Codegen::generate(parsed, symbols);
-
-    Ok(())
+    Ok((parsed, symbols))
 }
 
 #[macro_export]

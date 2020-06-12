@@ -5,6 +5,7 @@ use crate::lexing::*;
 use crate::parsing::*;
 use std::fs::{self, File};
 use std::process::Command;
+use super::core;
 
 #[derive(PartialEq)]
 enum CodegenStage {
@@ -19,9 +20,11 @@ pub struct Codegen {
     global_symbols: SymbolTable,
     current_type: Option<Symbol>,
     stage: CodegenStage,
+    is_builtin: bool,
 }
 
 impl Codegen {
+
     pub fn generate(program: ParsedProgram, global_symbols: SymbolTable) {
         fs::create_dir_all("build").unwrap();
         let file = File::create("build/main.c").unwrap();
@@ -31,7 +34,12 @@ impl Codegen {
             global_symbols,
             current_type: None,
             stage: CodegenStage::ForwardStructDecls,
+            is_builtin: false,
         };
+
+        if let Some(lib) = program.stdlib {
+            codegen.gen_stmts(&lib.function_decls);
+        }
 
         codegen.gen_stmts(&program.type_decls);
         codegen.stage = CodegenStage::StructBodies;
@@ -147,7 +155,7 @@ impl StmtVisitor for Codegen {
         stmt: &Stmt,
         _name: &Token,
         params: &[Stmt],
-        _return_type: &Option<Token>,
+        _return_type: &Option<Expr>,
         body: &[Stmt],
     ) -> Self::StmtResult {
         let borrowed_symbol = stmt.symbol.borrow();
@@ -183,7 +191,13 @@ impl StmtVisitor for Codegen {
         } else {
             self.writer
                 .start_decl_func(ret_type, &func_symbol.mangled(), &params);
-            self.gen_stmts(body);
+            if self.is_builtin {
+                let borrowed_symbol = stmt.symbol.borrow();
+                let symbol = borrowed_symbol.as_ref().unwrap();
+                core::write(symbol, &mut self.writer);
+            } else {
+                self.gen_stmts(body);
+            }
             self.writer.end_decl_func();
         }
     }
@@ -247,6 +261,13 @@ impl StmtVisitor for Codegen {
         let line = format!("{};", expr.accept(self));
         self.writer.writeln(&line);
     }
+
+    fn visit_builtin_stmt(&mut self, _stmt: &Stmt, inner: &Box<Stmt>) {
+        self.is_builtin = true;
+        inner.accept(self);
+        self.is_builtin = false;
+    }
+
 }
 
 impl ExprVisitor for Codegen {

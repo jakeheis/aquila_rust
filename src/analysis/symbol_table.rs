@@ -3,6 +3,7 @@ use crate::lexing::*;
 use crate::parsing::*;
 use std::collections::HashMap;
 use crate::guard;
+use crate::source::*;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Symbol {
@@ -36,6 +37,7 @@ impl std::fmt::Display for Symbol {
     }
 }
 
+#[derive(Clone)]
 pub struct SymbolTable {
     type_map: HashMap<Symbol, NodeType>,
 }
@@ -71,7 +73,7 @@ pub struct SymbolTableBuilder {
 impl SymbolTableBuilder {
     pub fn build(program: &ParsedProgram) -> SymbolTable {
         let mut builder = SymbolTableBuilder {
-            table: SymbolTable::new(),
+            table: program.stdlib.as_ref().map(|s| s.symbols.clone()).unwrap_or(SymbolTable::new()),
             context: Vec::new(),
             visit_methods: false,
         };
@@ -161,7 +163,7 @@ impl StmtVisitor for SymbolTableBuilder {
         stmt: &Stmt,
         name: &Token,
         params: &[Stmt],
-        return_type: &Option<Token>,
+        return_type: &Option<Expr>,
         _body: &[Stmt],
     ) -> Self::StmtResult {
         let new_symbol = Symbol::new(self.context.last(), name);
@@ -170,7 +172,7 @@ impl StmtVisitor for SymbolTableBuilder {
 
         let return_type = return_type
             .as_ref()
-            .map(|r| self.resolve_type(r))
+            .map(|r| self.resolve_type_expr(r))
             .unwrap_or(NodeType::Void);
         let new_type = NodeType::Function(param_types, Box::new(return_type));
 
@@ -211,4 +213,9 @@ impl StmtVisitor for SymbolTableBuilder {
     fn visit_expression_stmt(&mut self, _stmt: &Stmt, _expr: &Expr) -> Self::StmtResult {
         NodeType::Void
     }
+
+    fn visit_builtin_stmt(&mut self, _stmt: &Stmt, inner: &Box<Stmt>) -> Self::StmtResult {
+        inner.accept(self)
+    }
+
 }

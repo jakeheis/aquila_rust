@@ -5,12 +5,13 @@ use std::cell::RefCell;
 
 pub enum StmtKind {
     TypeDecl(Token, Vec<Stmt>, Vec<Stmt>),
-    FunctionDecl(Token, Vec<Stmt>, Option<Token>, Vec<Stmt>),
+    FunctionDecl(Token, Vec<Stmt>, Option<Expr>, Vec<Stmt>),
     VariableDecl(Token, Option<Expr>, Option<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
     PrintStmt(Option<Expr>),
     ExpressionStmt(Expr),
+    Builtin(Box<Stmt>),
 }
 
 pub struct Stmt {
@@ -47,6 +48,7 @@ impl Stmt {
             StmtKind::ReturnStmt(expr) => visitor.visit_return_stmt(&self, expr),
             StmtKind::PrintStmt(expr) => visitor.visit_print_stmt(&self, expr),
             StmtKind::ExpressionStmt(expr) => visitor.visit_expression_stmt(&self, expr),
+            StmtKind::Builtin(stmt) => visitor.visit_builtin_stmt(&self, &stmt),
         }
     }
 
@@ -65,7 +67,7 @@ impl Stmt {
         def_span: Span,
         name: Token,
         params: Vec<Stmt>,
-        return_type: Option<Token>,
+        return_type: Option<Expr>,
         body: Vec<Stmt>,
         right_brace_span: Span,
     ) -> Self {
@@ -113,6 +115,12 @@ impl Stmt {
         let span = expr.span.clone();
         Stmt::new(StmtKind::ExpressionStmt(expr), span)
     }
+
+    pub fn builtin(stmt: Stmt) -> Self {
+        let span = stmt.span().clone();
+        Stmt::new(StmtKind::Builtin(Box::new(stmt)), span)
+    }
+    
 }
 
 pub trait StmtVisitor {
@@ -131,7 +139,7 @@ pub trait StmtVisitor {
         stmt: &Stmt,
         name: &Token,
         params: &[Stmt],
-        return_type: &Option<Token>,
+        return_type: &Option<Expr>,
         body: &[Stmt],
     ) -> Self::StmtResult;
 
@@ -156,6 +164,8 @@ pub trait StmtVisitor {
     fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult;
 
     fn visit_expression_stmt(&mut self, stmt: &Stmt, expr: &Expr) -> Self::StmtResult;
+
+    fn visit_builtin_stmt(&mut self, stmt: &Stmt, inner: &Box<Stmt>) -> Self::StmtResult;
 }
 
 // Expr
@@ -372,7 +382,7 @@ impl StmtVisitor for ASTPrinter {
         stmt: &Stmt,
         name: &Token,
         params: &[Stmt],
-        return_type: &Option<Token>,
+        return_type: &Option<Expr>,
         body: &[Stmt],
     ) {
         let symbol = stmt
@@ -483,6 +493,14 @@ impl StmtVisitor for ASTPrinter {
             expr.accept(visitor);
         })
     }
+
+    fn visit_builtin_stmt(&mut self, _stmt: &Stmt, inner: &Box<Stmt>) -> Self::StmtResult {
+        self.write_ln("Builtin");
+        self.indent(|visitor| {
+            inner.accept(visitor);
+        })
+    }
+
 }
 
 impl ExprVisitor for ASTPrinter {

@@ -1,0 +1,1 @@
+builtin def allocate(count: int): ptr byte {}

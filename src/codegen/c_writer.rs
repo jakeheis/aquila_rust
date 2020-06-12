@@ -17,6 +17,7 @@ impl CWriter {
     }
 
     fn write_includes(&mut self) {
+        self.writeln("#include <stdlib.h>");
         self.writeln("#include <stdbool.h>");
         self.writeln("#include <stdio.h>");
     }
@@ -135,6 +136,7 @@ impl CWriter {
             NodeType::Void => String::from("void"),
             NodeType::Int => String::from("int"),
             NodeType::Bool => String::from("bool"),
+            NodeType::Byte => String::from("char"),
             NodeType::StringLiteral => String::from("char *"),
             NodeType::Type(symbol) => {
                 if false {
