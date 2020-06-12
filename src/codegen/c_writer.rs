@@ -1,7 +1,6 @@
 pub use crate::analysis::NodeType;
 use std::fs::File;
 use std::io::Write;
-// use std::io::BufWriter;
 
 pub struct CWriter {
     file: File,
@@ -37,8 +36,13 @@ impl CWriter {
         self.indent -= 1;
         self.writeln(&format!("}} {};", name));
     }
-    
-    pub fn write_function_prototype(&mut self, ret_type: &NodeType, name: &str, params: &[(NodeType, String)]) {
+
+    pub fn write_function_prototype(
+        &mut self,
+        ret_type: &NodeType,
+        name: &str,
+        params: &[(NodeType, String)],
+    ) {
         self.writeln("");
         self.write_function_header(ret_type, name, params, ";");
     }
@@ -100,7 +104,13 @@ impl CWriter {
         }
     }
 
-    fn write_function_header(&mut self, ret_type: &NodeType, name: &str, params: &[(NodeType, String)], terminator: &str) {
+    fn write_function_header(
+        &mut self,
+        ret_type: &NodeType,
+        name: &str,
+        params: &[(NodeType, String)],
+        terminator: &str,
+    ) {
         let param_str: Vec<String> = params
             .iter()
             .map(|(param_type, name)| format!("{} {}", self.convert_type(param_type), name))
@@ -127,7 +137,7 @@ impl CWriter {
                 } else {
                     symbol.mangled()
                 }
-            },
+            }
             other_type => panic!("Can't convert type {}", other_type),
         }
     }

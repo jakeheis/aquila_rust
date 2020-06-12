@@ -1,18 +1,17 @@
 use super::c_writer::*;
 use crate::analysis::*;
+use crate::guard;
 use crate::lexing::*;
 use crate::parsing::*;
 use std::fs::{self, File};
 use std::process::Command;
-use crate::diagnostic::*;
-use std::rc::Rc;
 
 #[derive(PartialEq)]
 enum CodegenStage {
     ForwardStructDecls,
     StructBodies,
     FuncPrototypes,
-    FuncBodies
+    FuncBodies,
 }
 
 pub struct Codegen {
@@ -22,89 +21,8 @@ pub struct Codegen {
     stage: CodegenStage,
 }
 
-macro_rules! guard {
-    ($pattern_path:path[$( $name:ident ), *] = $bound:expr) => {
-        let ($($name), *) = if let $pattern_path($($name), *) = $bound {
-            ($($name), *)
-        } else {
-            unreachable!()
-        };
-    };
-}
-
-#[macro_export]
-macro_rules! guard_else {
-    ($pattern_path:path[$name:ident] = $bound:expr, $else_body:block) => {
-        let $name = if let $pattern_path($name) = $bound {
-            $name
-        } else $else_body;
-    };
-    ($pattern_path:path[$( $name:ident ), *] = $bound:expr, $else_body:block) => {
-        let ($($name), *) = if let $pattern_path($($name), *) = $bound {
-            ($($name), *)
-        } else $else_body;
-    };
-}
-
 impl Codegen {
-
-    pub fn generate(program: ParsedProgram, global_symbols: SymbolTable, reporter: Rc<dyn Reporter>) {
-        let (mut type_decls, function_decls, main) = program.organized();
-
-        type_decls.sort_by(|lhs, rhs| {
-            guard!(StmtKind::TypeDecl[namel, fields_l, _methodsl] = &lhs.kind);
-            guard!(StmtKind::TypeDecl[namer, fields_r, _methodsr] = &rhs.kind);
-
-            let lhs_symbol_borrowed = lhs.symbol.borrow();
-            let lhs_symbol = lhs_symbol_borrowed.as_ref().unwrap();
-            let rhs_symbol_borrowed = rhs.symbol.borrow();
-            let rhs_symbol = rhs_symbol_borrowed.as_ref().unwrap();
-
-            let mut left_contained_right = false;
-
-            for field in fields_l {
-                let borrowed_type = field.stmt_type.borrow();
-                if let NodeType::Type(type_name) = borrowed_type.as_ref().unwrap() {
-                    if type_name == rhs_symbol {
-                        left_contained_right = true;
-                        break
-                    }
-                }
-            }
-
-            let mut right_contained_left = false;
-
-            for field in fields_r {
-                let borrowed_type = field.stmt_type.borrow();
-                if let NodeType::Type(type_name) = borrowed_type.as_ref().unwrap() {
-                    if type_name == lhs_symbol {
-                        right_contained_left = true;
-                        break
-                    }
-                }
-            }
-
-            if left_contained_right && right_contained_left {
-                let message = format!("Circular reference between {} and {}", namel.lexeme(), namer.lexeme());
-                reporter.report(Diagnostic::error(namel, &message));
-                std::cmp::Ordering::Greater
-            } else if left_contained_right {
-                std::cmp::Ordering::Greater
-            } else if right_contained_left {
-                std::cmp::Ordering::Less
-            } else {
-                if lhs_symbol.id < rhs_symbol.id {
-                    std::cmp::Ordering::Less
-                } else {
-                    std::cmp::Ordering::Greater
-                }
-            }
-        });
-
-        if reporter.has_errored() {
-            return;
-        }
-
+    pub fn generate(program: ParsedProgram, global_symbols: SymbolTable) {
         fs::create_dir_all("build").unwrap();
         let file = File::create("build/main.c").unwrap();
 
@@ -115,19 +33,19 @@ impl Codegen {
             stage: CodegenStage::ForwardStructDecls,
         };
 
-        codegen.gen_stmts_ref(&type_decls);
+        codegen.gen_stmts(&program.type_decls);
         codegen.stage = CodegenStage::StructBodies;
-        codegen.gen_stmts_ref(&type_decls);
-    
+        codegen.gen_stmts(&program.type_decls);
+
         codegen.stage = CodegenStage::FuncPrototypes;
-        codegen.gen_stmts_ref(&type_decls);
-        codegen.gen_stmts_ref(&function_decls);
+        codegen.gen_stmts(&program.type_decls);
+        codegen.gen_stmts(&program.function_decls);
 
         codegen.stage = CodegenStage::FuncBodies;
-        codegen.gen_stmts_ref(&type_decls);
-        codegen.gen_stmts_ref(&function_decls);
-        
-        codegen.write_main(&main);
+        codegen.gen_stmts(&program.type_decls);
+        codegen.gen_stmts(&program.function_decls);
+
+        codegen.write_main(&program.main);
 
         Command::new("/usr/local/opt/llvm/bin/clang")
             .args(&[
@@ -144,7 +62,7 @@ impl Codegen {
             .unwrap();
     }
 
-    fn write_main(&mut self, stmts: &[&Stmt]) {
+    fn write_main(&mut self, stmts: &[Stmt]) {
         self.writer.start_decl_func(&NodeType::Int, "main", &[]);
         for stmt in stmts {
             stmt.accept(self);
@@ -158,13 +76,6 @@ impl Codegen {
             stmt.accept(self);
         }
     }
-
-    fn gen_stmts_ref(&mut self, stmts: &[&Stmt]) {
-        for stmt in stmts {
-            stmt.accept(self);
-        }
-    }
-
 }
 
 impl StmtVisitor for Codegen {
@@ -181,23 +92,23 @@ impl StmtVisitor for Codegen {
         let struct_symbol = borrowed_symbol.as_ref().unwrap();
 
         match self.stage {
-            CodegenStage::ForwardStructDecls => {
-                self.writer.write_struct_forward_decl(&struct_symbol.mangled())
-            },
+            CodegenStage::ForwardStructDecls => self
+                .writer
+                .write_struct_forward_decl(&struct_symbol.mangled()),
             CodegenStage::StructBodies => {
                 self.writer.start_decl_struct(&struct_symbol.mangled());
                 for field in fields {
                     field.accept(self);
                 }
                 self.writer.end_decl_struct(&struct_symbol.mangled());
-            },
+            }
             CodegenStage::FuncPrototypes | CodegenStage::FuncBodies => {
                 self.current_type = Some(struct_symbol.clone());
                 for method in methods {
                     method.accept(self);
                 }
                 self.current_type = None;
-            },
+            }
         }
     }
 
@@ -235,9 +146,11 @@ impl StmtVisitor for Codegen {
         }
 
         if self.stage == CodegenStage::FuncPrototypes {
-            self.writer.write_function_prototype(ret_type, &func_symbol.mangled(), &params);
+            self.writer
+                .write_function_prototype(ret_type, &func_symbol.mangled(), &params);
         } else {
-            self.writer.start_decl_func(ret_type, &func_symbol.mangled(), &params);
+            self.writer
+                .start_decl_func(ret_type, &func_symbol.mangled(), &params);
             self.gen_stmts(body);
             self.writer.end_decl_func();
         }

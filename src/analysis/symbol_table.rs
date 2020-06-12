@@ -2,7 +2,6 @@ use super::type_checker::NodeType;
 use crate::lexing::*;
 use crate::parsing::*;
 use std::collections::HashMap;
-use crate::diagnostic::*;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Symbol {
@@ -16,9 +15,7 @@ impl Symbol {
 
     pub fn new_str(parent: Option<&Symbol>, name: &str) -> Self {
         let id = parent.map(|p| p.id.clone() + "$").unwrap_or("".to_string()) + name;
-        Symbol {
-            id,
-        }
+        Symbol { id }
     }
 
     pub fn mangled(&self) -> String {
@@ -71,7 +68,6 @@ pub struct SymbolTableBuilder {
 }
 
 impl SymbolTableBuilder {
-
     pub fn build(program: &ParsedProgram) -> SymbolTable {
         let mut builder = SymbolTableBuilder {
             table: SymbolTable::new(),
@@ -79,14 +75,12 @@ impl SymbolTableBuilder {
             visit_methods: false,
         };
 
-        let (type_decls, function_decls, _) = program.organized();
-
         // Add all top level types before visiting any function and trying to figure out return type
-        builder.build_list_ref(&type_decls);
+        builder.build_list(&program.type_decls);
 
         builder.visit_methods = true;
-        builder.build_list_ref(&type_decls);
-        builder.build_list_ref(&function_decls);
+        builder.build_list(&program.type_decls);
+        builder.build_list(&program.function_decls);
 
         builder.table
     }
@@ -97,26 +91,23 @@ impl SymbolTableBuilder {
         });
     }
 
-    fn build_list_ref(&mut self, stmts: &[&Stmt]) {
-        stmts.iter().for_each(|s| {
-            s.accept(self);
-        });
-    }
-
     fn resolve_type(&self, type_token: &Token) -> NodeType {
         if let Some(primitive) = NodeType::primitive(type_token) {
             primitive
-        } else if let Some(NodeType::Metatype(symbol)) = self.table.get_type(&Symbol::new(None, type_token)) {
+        } else if let Some(NodeType::Metatype(symbol)) =
+            self.table.get_type(&Symbol::new(None, type_token))
+        {
             NodeType::Type(symbol.clone())
-        } else if let Some(NodeType::Metatype(symbol)) = self.table.get_type(&Symbol::new(self.context.last(), type_token)) {
+        } else if let Some(NodeType::Metatype(symbol)) = self
+            .table
+            .get_type(&Symbol::new(self.context.last(), type_token))
+        {
             NodeType::Type(symbol.clone())
         } else {
             // Isn't a real type; make a fake type and type checker will catch the error
-            println!("fake type {}", type_token.lexeme());
             NodeType::Type(Symbol::new(None, type_token))
         }
     }
-
 }
 
 impl StmtVisitor for SymbolTableBuilder {
@@ -156,7 +147,10 @@ impl StmtVisitor for SymbolTableBuilder {
 
         let param_types: Vec<NodeType> = params.iter().map(|p| p.accept(self)).collect();
 
-        let return_type = return_type.as_ref().map(|r| self.resolve_type(r)).unwrap_or(NodeType::Void);
+        let return_type = return_type
+            .as_ref()
+            .map(|r| self.resolve_type(r))
+            .unwrap_or(NodeType::Void);
         let new_type = NodeType::Function(param_types, Box::new(return_type));
 
         self.table.insert(new_symbol, new_type.clone());
@@ -168,7 +162,7 @@ impl StmtVisitor for SymbolTableBuilder {
     fn visit_variable_decl(
         &mut self,
         _stmt: &Stmt,
-        name: &Token,
+        _name: &Token,
         kind: &Option<Token>,
         _value: &Option<Expr>,
     ) -> Self::StmtResult {

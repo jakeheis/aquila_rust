@@ -295,7 +295,9 @@ impl ASTPrinter {
     }
 
     pub fn print(&mut self, program: &super::ParsedProgram) {
-        program.statements.iter().for_each(|s| s.accept(self));
+        program.type_decls.iter().for_each(|s| s.accept(self));
+        program.function_decls.iter().for_each(|s| s.accept(self));
+        program.main.iter().for_each(|s| s.accept(self));
     }
 
     pub fn collected(&self) -> &[String] {

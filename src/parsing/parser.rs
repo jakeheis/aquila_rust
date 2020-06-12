@@ -31,10 +31,7 @@ impl Parser {
     pub fn parse(mut self) -> super::ParsedProgram {
         let statements = self.stmt_list(Context::TopLevel, None);
 
-        super::ParsedProgram {
-            source: Rc::clone(&self.tokens[0].span().source),
-            statements,
-        }
+        super::ParsedProgram::new(Rc::clone(&self.tokens[0].span().source), statements)
     }
 
     fn stmt_list(&mut self, context: Context, end: Option<TokenKind>) -> Vec<Stmt> {

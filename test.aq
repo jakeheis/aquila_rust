@@ -26,21 +26,20 @@
    // lhs + rhs + third
 // }
 
-def hello(fake: Fake): OtherFake {
-  let o: OtherFake;
-      return o;
+type First {
+    let other: Second;
 }
 
-type Fake {
-    let other: OtherFake;
-    def method(): OtherFake {
-      let o: OtherFake;
+type Second {
+  let fake: Third;
+}
+
+type Third {
+  let fake: int;
+      def method(): First {
+      let o: First;
       return o;
     }
-}
-
-type OtherFake {
-  
 }
 
 //type Adder {

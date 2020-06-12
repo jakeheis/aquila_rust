@@ -59,7 +59,6 @@ pub struct Analysis {
 }
 
 impl TypeChecker {
-
     pub fn check(program: &ParsedProgram, reporter: Rc<dyn Reporter>) -> SymbolTable {
         let table = SymbolTableBuilder::build(program);
         let global_scope = Scope::global(table);
@@ -69,7 +68,9 @@ impl TypeChecker {
             scopes: vec![global_scope],
         };
 
-        checker.check_list(&program.statements);
+        checker.check_list(&program.type_decls);
+        checker.check_list(&program.function_decls);
+        checker.check_list(&program.main);
 
         checker.scopes.remove(0).symbols
     }
@@ -171,7 +172,6 @@ impl TypeChecker {
             Err(Diagnostic::error(type_token, "Undefined type"))
         }
     }
-
 }
 
 impl StmtVisitor for TypeChecker {
@@ -247,7 +247,7 @@ impl StmtVisitor for TypeChecker {
                 Ok(explicit_type) => {
                     self.current_scope().define_var(&stmt, name, &explicit_type);
                     Some(explicit_type)
-                },
+                }
                 Err(diagnostic) => {
                     self.report_error(diagnostic);
                     None
@@ -361,11 +361,9 @@ impl StmtVisitor for TypeChecker {
             guarantees_return: false,
         }
     }
-
 }
 
 impl ExprVisitor for TypeChecker {
-
     type ExprResult = Result;
 
     fn visit_assignment_expr(
@@ -508,7 +506,6 @@ impl ExprVisitor for TypeChecker {
             Err(Diagnostic::error(name, "Undefined variable"))
         }
     }
-    
 }
 
 // NodeType

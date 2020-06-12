@@ -61,7 +61,37 @@ pub fn run(source: Source) -> Result<(), &'static str> {
         return Err("Type checker failed");
     }
 
-    Codegen::generate(parsed, symbols, Rc::clone(&reporter));
+    let parsed = CycleChecker::check(parsed, Rc::clone(&reporter));
+    if reporter.has_errored() {
+        return Err("Cycle checker failed");
+    }
+
+    Codegen::generate(parsed, symbols);
 
     Ok(())
+}
+
+#[macro_export]
+macro_rules! guard {
+    ($pattern_path:path[$( $name:ident ), *] = $bound:expr) => {
+        let ($($name), *) = if let $pattern_path($($name), *) = $bound {
+            ($($name), *)
+        } else {
+            unreachable!()
+        };
+    };
+}
+
+#[macro_export]
+macro_rules! guard_else {
+    ($pattern_path:path[$name:ident] = $bound:expr, $else_body:block) => {
+        let $name = if let $pattern_path($name) = $bound {
+            $name
+        } else $else_body;
+    };
+    ($pattern_path:path[$( $name:ident ), *] = $bound:expr, $else_body:block) => {
+        let ($($name), *) = if let $pattern_path($($name), *) = $bound {
+            ($($name), *)
+        } else $else_body;
+    };
 }
