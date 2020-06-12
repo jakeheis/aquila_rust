@@ -35,8 +35,13 @@ type Adder {
   }
 }
 
-let adder = Adder(4, 5);
-print adder.add(6);
+let sum = Adder(4, 5);
+print sum.add(6);
+
+let look: ptr Adder = &sum;
+
+let copy = *look;
+print copy.add(3);
 
 // -1;
 // !2;

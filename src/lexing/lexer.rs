@@ -162,6 +162,7 @@ impl Lexer {
             "def" => self.make_token(TokenKind::Def),
             "return" => self.make_token(TokenKind::Return),
             "print" => self.make_token(TokenKind::Print),
+            "ptr" => self.make_token(TokenKind::Ptr),
             _ => Some(token),
         }
     }

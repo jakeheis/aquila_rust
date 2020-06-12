@@ -6,7 +6,7 @@ use std::cell::RefCell;
 pub enum StmtKind {
     TypeDecl(Token, Vec<Stmt>, Vec<Stmt>),
     FunctionDecl(Token, Vec<Stmt>, Option<Token>, Vec<Stmt>),
-    VariableDecl(Token, Option<Token>, Option<Expr>),
+    VariableDecl(Token, Option<Expr>, Option<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
     PrintStmt(Option<Expr>),
@@ -76,16 +76,16 @@ impl Stmt {
         )
     }
 
-    pub fn variable_decl(name: Token, var_type: Option<Token>, value: Option<Expr>) -> Self {
+    pub fn variable_decl(name: Token, explicit_type: Option<Expr>, value: Option<Expr>) -> Self {
         let end_span: &Span = if let Some(value) = &value {
             value.span()
-        } else if let Some(var_type) = &var_type {
-            var_type.span()
+        } else if let Some(explicit_type) = &explicit_type {
+            explicit_type.span()
         } else {
             name.span()
         };
         let span = Span::join(&name, end_span);
-        Stmt::new(StmtKind::VariableDecl(name, var_type, value), span)
+        Stmt::new(StmtKind::VariableDecl(name, explicit_type, value), span)
     }
 
     pub fn if_stmt(
@@ -139,7 +139,7 @@ pub trait StmtVisitor {
         &mut self,
         stmt: &Stmt,
         name: &Token,
-        kind: &Option<Token>,
+        kind: &Option<Expr>,
         value: &Option<Expr>,
     ) -> Self::StmtResult;
 
@@ -168,6 +168,7 @@ pub enum ExprKind {
     Field(Box<Expr>, Token),
     Literal(Token),
     Variable(Token),
+    ExplicitType(Token, Option<Token>),
 }
 
 pub struct Expr {
@@ -196,6 +197,7 @@ impl Expr {
             ExprKind::Field(target, field) => visitor.visit_field_expr(&self, &target, &field),
             ExprKind::Literal(token) => visitor.visit_literal_expr(&self, &token),
             ExprKind::Variable(name) => visitor.visit_variable_expr(&self, &name),
+            ExprKind::ExplicitType(name, modifier) => visitor.visit_explicit_type_expr(&self, &name, &modifier),
         }
     }
 
@@ -239,6 +241,11 @@ impl Expr {
         Expr::new(ExprKind::Variable(name), span)
     }
 
+    pub fn explicit_type(name: Token, modifier: Option<Token>) -> Self {
+        let span = (&modifier).as_ref().map(|m| Span::join(m, &name)).unwrap_or(name.span().clone());
+        Expr::new(ExprKind::ExplicitType(name, modifier), span) 
+    }
+
     pub fn lexeme(&self) -> &str {
         self.span.lexeme()
     }
@@ -265,6 +272,7 @@ pub trait ExprVisitor {
     fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, field: &Token) -> Self::ExprResult;
     fn visit_literal_expr(&mut self, expr: &Expr, token: &Token) -> Self::ExprResult;
     fn visit_variable_expr(&mut self, expr: &Expr, name: &Token) -> Self::ExprResult;
+    fn visit_explicit_type_expr(&mut self, expr: &Expr, name: &Token, modifier: &Option<Token>) -> Self::ExprResult;
 }
 
 // ASTPrinter
@@ -402,11 +410,9 @@ impl StmtVisitor for ASTPrinter {
         &mut self,
         stmt: &Stmt,
         name: &Token,
-        kind: &Option<Token>,
+        explicit_type: &Option<Expr>,
         value: &Option<Expr>,
     ) {
-        let var_type = kind.as_ref().map(|t| t.lexeme()).unwrap_or("<none>");
-
         let symbol = stmt
             .symbol
             .borrow()
@@ -420,13 +426,15 @@ impl StmtVisitor for ASTPrinter {
             .map(|s| s.to_string())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
-            "VariableDecl(name: {}, explicit_type: {}, symbol: {}, resolved_type: {})",
+            "VariableDecl(name: {}s, symbol: {}, resolved_type: {})",
             name.lexeme(),
-            var_type,
             symbol,
             resolved_type,
         ));
         self.indent(|visitor| {
+            if let Some(e) = explicit_type {
+                e.accept(visitor);
+            }
             if let Some(v) = value {
                 v.accept(visitor);
             }
@@ -551,4 +559,11 @@ impl ExprVisitor for ASTPrinter {
             symbol
         ))
     }
+
+    fn visit_explicit_type_expr(&mut self, _expr: &Expr, name: &Token, modifier: &Option<Token>) {
+        let modifier = modifier.as_ref().map(|t| t.lexeme().to_string()).unwrap_or("<none>".to_string());
+        let line = format!("ExplicitType(name: {}, modifier: {})", name.lexeme(), modifier);
+        self.write_ln(&line);
+    }
+
 }

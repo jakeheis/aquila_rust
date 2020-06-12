@@ -2,6 +2,7 @@ use super::type_checker::NodeType;
 use crate::lexing::*;
 use crate::parsing::*;
 use std::collections::HashMap;
+use crate::guard;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Symbol {
@@ -91,6 +92,17 @@ impl SymbolTableBuilder {
         }).collect()
     }
 
+    fn resolve_type_expr(&self, type_expr: &Expr) -> NodeType {
+        guard!(ExprKind::ExplicitType[name, modifier] = &type_expr.kind);
+
+        let main = self.resolve_type(name);
+        if modifier.is_some() {
+            NodeType::Pointer(Box::new(main))
+        } else {
+            main
+        }
+    }
+
     fn resolve_type(&self, type_token: &Token) -> NodeType {
         if let Some(primitive) = NodeType::primitive(type_token) {
             primitive
@@ -172,10 +184,10 @@ impl StmtVisitor for SymbolTableBuilder {
         &mut self,
         _stmt: &Stmt,
         _name: &Token,
-        kind: &Option<Token>,
+        kind: &Option<Expr>,
         _value: &Option<Expr>,
     ) -> Self::StmtResult {
-        self.resolve_type(kind.as_ref().unwrap())
+        self.resolve_type_expr(kind.as_ref().unwrap())
     }
 
     fn visit_if_stmt(

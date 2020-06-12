@@ -113,7 +113,7 @@ impl TypeChecker {
         given: NodeType,
         expected: NodeType,
     ) -> Diagnostic {
-        let message = format!("Expected {:#?}, got {:#?}", expected, given);
+        let message = format!("Expected {}, got {}", expected, given);
         Diagnostic::error(span, &message)
     }
 
@@ -240,38 +240,35 @@ impl StmtVisitor for TypeChecker {
         &mut self,
         stmt: &Stmt,
         name: &Token,
-        kind: &Option<Token>,
+        kind: &Option<Expr>,
         value: &Option<Expr>,
     ) -> Analysis {
-        let explicit_type = if let Some(explicit) = kind.as_ref() {
-            match self.resolve_type(explicit) {
-                Ok(explicit_type) => {
-                    self.current_scope().define_var(&stmt, name, &explicit_type);
-                    Some(explicit_type)
-                }
+        let explicit_type = kind.as_ref().and_then(|k| {
+            match k.accept(self) {
+                Ok(explicit_type) => Some(explicit_type),
                 Err(diagnostic) => {
                     self.report_error(diagnostic);
                     None
                 }
             }
-        } else {
-            None
-        };
+        });
 
-        if let Some(value) = value.as_ref() {
-            if let Some(value_type) = self.check_expr(value) {
-                if let Some(explicit_type) = explicit_type {
-                    if explicit_type != value_type {
-                        let diagnostic = self.type_mismatch(value, value_type, explicit_type);
-                        self.report_error(diagnostic);
-                    }
-                } else {
-                    self.current_scope().define_var(&stmt, name, &value_type);
+        let implicit_type = value.as_ref().and_then(|v| self.check_expr(v));
+
+        match (explicit_type, implicit_type) {
+            (Some(explicit), Some(implicit)) => {
+                self.current_scope().define_var(&stmt, name, &explicit);
+                if explicit != implicit {
+                    let diagnostic = self.type_mismatch(&value.as_ref().unwrap().span().clone(), implicit, explicit);
+                    self.report_error(diagnostic);
                 }
-            }
-        } else if explicit_type.is_none() {
-            let diag = Diagnostic::error(name, "Can't infer type");
-            self.report_error(diag);
+            },
+            (Some(explicit), None) => self.current_scope().define_var(&stmt, name, &explicit),
+            (None, Some(implicit)) => self.current_scope().define_var(&stmt, name, &implicit),
+            (None, None) => {
+                let diag = Diagnostic::error(name, "Can't infer type");
+                self.report_error(diag);
+            },
         }
 
         Analysis {
@@ -337,16 +334,14 @@ impl StmtVisitor for TypeChecker {
     }
 
     fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Analysis {
-        if let Some(expr) = expr.as_ref() {
-            if let Some(node_type) = self.check_expr(expr) {
-                match node_type {
-                    NodeType::Int | NodeType::Bool | NodeType::StringLiteral => {
-                        stmt.stmt_type.replace(Some(node_type));
-                    }
-                    _ => {
-                        let message = format!("Can't print object of type {}", node_type);
-                        self.report_error(Diagnostic::error(expr, &message));
-                    }
+        if let Some(node_type) = expr.as_ref().and_then(|e| self.check_expr(e)) {
+            match node_type {
+                NodeType::Int | NodeType::Bool | NodeType::StringLiteral => {
+                    stmt.stmt_type.replace(Some(node_type));
+                }
+                _ => {
+                    let message = format!("Can't print object of type {}", node_type);
+                    self.report_error(Diagnostic::error(expr.as_ref().unwrap(), &message));
                 }
             }
         }
@@ -414,7 +409,22 @@ impl ExprVisitor for TypeChecker {
     fn visit_unary_expr(&mut self, _expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
         let operand_type = operand.accept(self)?;
 
-        let entries: &[NodeType] = match op.kind {
+        if let TokenKind::Ampersand = op.kind {
+            let boxed_type = Box::new(operand_type.clone());
+            return Ok(NodeType::Pointer(boxed_type));
+        }
+
+        if let TokenKind::Star = op.kind {
+            return match operand_type {
+                NodeType::Pointer(inner) => Ok((*inner).clone()),
+                _ => {
+                    let message = format!("Cannot dereference object of type {}", operand_type);
+                    Err(Diagnostic::error(operand, &message))
+                }
+            };
+        }
+
+        let entries = match op.kind {
             TokenKind::Minus => &NEGATE_ENTRIES,
             TokenKind::Bang => &INVERT_ENTRIES,
             _ => unreachable!(),
@@ -476,12 +486,16 @@ impl ExprVisitor for TypeChecker {
     fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, field: &Token) -> Self::ExprResult {
         let target_type = target.accept(self)?;
 
-        guard_else!(NodeType::Type[type_symbol] = target_type, {
-            return Err(Diagnostic::error(
-                target,
-                &format!("Cannot access property of a {}", target_type),
-            ));
-        });
+        // let type_symbol = match target_type.represented_type() {
+        let type_symbol = match target_type {
+            NodeType::Type(type_symbol) => Ok(type_symbol),
+            _ => {
+                Err(Diagnostic::error(
+                    target,
+                    &format!("Cannot access property of a {}", target_type),
+                ))
+            }
+        }?;
 
         let field_symbol = Symbol::new(Some(&type_symbol), field);
 
@@ -518,6 +532,16 @@ impl ExprVisitor for TypeChecker {
             Err(Diagnostic::error(name, "Undefined variable"))
         }
     }
+
+    fn visit_explicit_type_expr(&mut self, _expr: &Expr, name: &Token, modifier: &Option<Token>) -> Self::ExprResult {
+        let main = self.resolve_type(name)?;
+        if modifier.is_some() {
+            Ok(NodeType::Pointer(Box::new(main)))
+        } else {
+            Ok(main)
+        }
+    }
+
 }
 
 // NodeType
@@ -529,11 +553,13 @@ pub enum NodeType {
     Bool,
     StringLiteral,
     Type(Symbol),
+    Pointer(Box<NodeType>),
     Function(Vec<NodeType>, Box<NodeType>),
     Metatype(Symbol),
 }
 
 impl NodeType {
+
     pub fn primitive(token: &Token) -> Option<Self> {
         match token.lexeme() {
             "void" => Some(NodeType::Void),
@@ -543,6 +569,14 @@ impl NodeType {
             _ => None,
         }
     }
+
+    pub fn represented_type(&self) -> &NodeType {
+        match self {
+            NodeType::Pointer(inner) => inner.represented_type(),
+            _ => self
+        }
+    }
+
 }
 
 impl std::fmt::Display for NodeType {
@@ -564,6 +598,7 @@ impl std::fmt::Display for NodeType {
                 string += &format!("): {}", ret);
                 string
             }
+            NodeType::Pointer(ty) => format!("ptr<{}>", ty),
             NodeType::Type(ty) => ty.id.clone(),
             NodeType::Metatype(ty) => ty.id.clone() + "_Meta",
         };

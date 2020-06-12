@@ -20,6 +20,7 @@ enum Context {
 }
 
 impl Parser {
+    
     pub fn new(program: LexedProgram, reporter: Rc<dyn Reporter>) -> Self {
         Parser {
             tokens: program.tokens,
@@ -399,16 +400,21 @@ impl Parser {
         &mut self,
         allow_type: bool,
         require_type: bool,
-    ) -> Result<(Token, Option<Token>)> {
+    ) -> Result<(Token, Option<Expr>)> {
         let name = self.previous().clone();
-        let mut var_type: Option<Token> = None;
+        let mut explicit_type: Option<Expr> = None;
 
         if self.matches(TokenKind::Colon) {
             if allow_type {
-                var_type = Some(
-                    self.consume(TokenKind::Identifier, "Expected variable type")?
-                        .clone(),
-                );
+                let modifier = if self.matches(TokenKind::Ptr) {
+                    Some(self.previous().clone())
+                } else {
+                    None
+                };
+
+                let name = self.consume(TokenKind::Identifier, "Expected variable type")?.clone();
+
+                explicit_type = Some(Expr::explicit_type(name, modifier));
             } else {
                 return Err(Diagnostic::error(
                     self.previous(),
@@ -421,7 +427,7 @@ impl Parser {
             }
         }
 
-        Ok((name, var_type))
+        Ok((name, explicit_type))
     }
 
     fn peek(&self) -> TokenKind {
@@ -482,7 +488,7 @@ type InfixFn = fn(&mut Parser, lhs: Expr, can_assign: bool) -> Result<Expr>;
 impl TokenKind {
     fn prefix(&self) -> Option<PrefixFn> {
         match self {
-            TokenKind::Minus | TokenKind::Bang => Some(Parser::unary),
+            TokenKind::Minus | TokenKind::Bang | TokenKind::Ampersand | TokenKind::Star => Some(Parser::unary),
             TokenKind::True | TokenKind::False | TokenKind::Number | TokenKind::StringLiteral => {
                 Some(Parser::literal)
             }

@@ -171,7 +171,9 @@ impl StmtVisitor for Codegen {
         if let Some(current_type) = &self.current_type {
             params.insert(
                 0,
-                (NodeType::Type(current_type.clone()), String::from("self")),
+                (NodeType::Pointer(
+                    Box::new(NodeType::Type(current_type.clone()))
+                ), String::from("self")),
             );
         }
 
@@ -190,7 +192,7 @@ impl StmtVisitor for Codegen {
         &mut self,
         stmt: &Stmt,
         _name: &Token,
-        _kind: &Option<Token>,
+        _kind: &Option<Expr>,
         value: &Option<Expr>,
     ) -> Self::StmtResult {
         let borrowed_symbol = stmt.symbol.borrow();
@@ -279,11 +281,12 @@ impl ExprVisitor for Codegen {
     }
 
     fn visit_call_expr(&mut self, _expr: &Expr, target: &Expr, args: &[Expr]) -> Self::ExprResult {
-        let mut args: Vec<_> = args.iter().map(|a| a.accept(self)).collect();
+        let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
 
         match &target.kind {
             ExprKind::Field(field_target, _) => {
-                args.insert(0, field_target.accept(self));
+                let ptr = format!("&({})", field_target.accept(self));
+                args.insert(0, ptr);
             }
             ExprKind::Variable(_) => (),
             _ => unimplemented!(),
@@ -308,6 +311,9 @@ impl ExprVisitor for Codegen {
         let symbol = borrowed_symbol.as_ref().unwrap();
         match self.global_symbols.get_type(symbol) {
             Some(NodeType::Function(_, _)) => symbol.mangled(),
+            Some(NodeType::Pointer(_)) => {
+                format!("{}->{}", target.accept(self), symbol.mangled())
+            },
             _ => format!("{}.{}", target.accept(self), symbol.mangled()),
         }
     }
@@ -325,9 +331,14 @@ impl ExprVisitor for Codegen {
             .map(|t| t.owns(symbol))
             .unwrap_or(false)
         {
-            format!("self.{}", symbol.mangled())
+            format!("self->{}", symbol.mangled())
         } else {
             symbol.mangled()
         }
     }
+
+    fn visit_explicit_type_expr(&mut self, _expr: &Expr, _name: &Token, _modifier: &Option<Token>) -> Self::ExprResult {
+        unreachable!()
+    }
+
 }

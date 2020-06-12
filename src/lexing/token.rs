@@ -41,6 +41,7 @@ pub enum TokenKind {
     Else,
     Return,
     Print,
+    Ptr,
 
     // Other
     Comma,
