@@ -16,7 +16,7 @@ impl CycleChecker {
         let mut field_map: HashMap<Symbol, (Span, HashSet<Symbol>)> = HashMap::new();
 
         for stmt in &program.type_decls {
-            guard!(StmtKind::TypeDecl[name, fields, _methods] = &stmt.kind);
+            guard!(StmtKind::TypeDecl[name, fields, _methods, _meta_methods] = &stmt.kind);
 
             let borrowed_type_symbol = stmt.symbol.borrow();
             let type_symbol = borrowed_type_symbol.clone().unwrap();

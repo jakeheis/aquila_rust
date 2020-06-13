@@ -5,6 +5,7 @@ use crate::source;
 
 pub struct Stdlib {
     pub function_decls: Vec<Stmt>,
+    pub type_decls: Vec<Stmt>,
     pub symbols: SymbolTable
 }
 
@@ -14,6 +15,7 @@ impl Stdlib {
         let (code, symbols) = crate::build_program(src, false).unwrap();
         Stdlib {
             function_decls: code.function_decls,
+            type_decls: code.type_decls,
             symbols,
         }
     }

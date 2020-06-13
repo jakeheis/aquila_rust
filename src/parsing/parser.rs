@@ -73,11 +73,20 @@ impl Parser {
             }
         } else if self.matches(TokenKind::Def) {
             if context == Context::TopLevel || context == Context::InsideType {
-                self.function_decl()
+                self.function_decl(false)
             } else {
                 Err(Diagnostic::error(
                     self.previous(),
                     "Function declaration not allowed",
+                ))
+            }
+        } else if self.matches(TokenKind::Meta) {
+            if context == Context::InsideType {
+                self.function_decl(true)
+            } else {
+                Err(Diagnostic::error(
+                    self.previous(),
+                    "Meta function declaration not allowed",
                 ))
             }
         } else if self.matches(TokenKind::Let) {
@@ -167,11 +176,18 @@ impl Parser {
 
         let mut fields: Vec<Stmt> = Vec::new();
         let mut methods: Vec<Stmt> = Vec::new();
+        let mut meta_methods: Vec<Stmt> = Vec::new();
 
         for stmt in self.block(Context::InsideType) {
             match stmt.kind {
-                StmtKind::VariableDecl(_, _, _) => fields.push(stmt),
-                StmtKind::FunctionDecl(_, _, _, _) => methods.push(stmt),
+                StmtKind::VariableDecl(..) => fields.push(stmt),
+                StmtKind::FunctionDecl(.., is_meta) => {
+                    if is_meta {
+                        meta_methods.push(stmt)
+                    } else {
+                        methods.push(stmt)
+                    }
+                },
                 _ => panic!(),
             }
         }
@@ -183,12 +199,18 @@ impl Parser {
             name,
             fields,
             methods,
+            meta_methods,
             right_brace,
         ))
     }
 
-    fn function_decl(&mut self) -> Result<Stmt> {
-        let def_span = self.previous().span.clone();
+    fn function_decl(&mut self, meta: bool) -> Result<Stmt> {
+        let start_span = self.previous().span.clone();
+
+        if meta {
+            self.consume(TokenKind::Def, "Expect def after meta")?;
+        }
+
         let name = self
             .consume(TokenKind::Identifier, "Expect function name")?
             .clone();
@@ -217,12 +239,13 @@ impl Parser {
         let right_brace = self.consume(TokenKind::RightBrace, "Expect '}' after function body")?;
 
         Ok(Stmt::function_decl(
-            def_span,
+            start_span,
             name,
             params,
             return_type,
             body,
             right_brace.span().clone(),
+            meta
         ))
     }
 

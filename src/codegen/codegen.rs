@@ -38,9 +38,22 @@ impl Codegen {
         };
 
         if let Some(lib) = program.stdlib {
+            codegen.stage = CodegenStage::FuncPrototypes;
             codegen.gen_stmts(&lib.function_decls);
+            codegen.stage = CodegenStage::FuncBodies;
+            codegen.gen_stmts(&lib.function_decls);
+
+            codegen.stage = CodegenStage::ForwardStructDecls;
+            codegen.gen_stmts(&lib.type_decls);
+            codegen.stage = CodegenStage::StructBodies;
+            codegen.gen_stmts(&lib.type_decls);
+            codegen.stage = CodegenStage::FuncPrototypes;
+            codegen.gen_stmts(&lib.type_decls);
+            codegen.stage = CodegenStage::FuncBodies;
+            codegen.gen_stmts(&lib.type_decls);
         }
 
+        codegen.stage = CodegenStage::ForwardStructDecls;
         codegen.gen_stmts(&program.type_decls);
         codegen.stage = CodegenStage::StructBodies;
         codegen.gen_stmts(&program.type_decls);
@@ -95,6 +108,7 @@ impl StmtVisitor for Codegen {
         _name: &Token,
         fields: &[Stmt],
         methods: &[Stmt],
+        meta_methods: &[Stmt],
     ) -> Self::StmtResult {
         let borrowed_symbol = stmt.symbol.borrow();
         let struct_symbol = borrowed_symbol.as_ref().unwrap();
@@ -113,6 +127,9 @@ impl StmtVisitor for Codegen {
             CodegenStage::FuncPrototypes | CodegenStage::FuncBodies => {
                 self.current_type = Some(struct_symbol.clone());
                 for method in methods {
+                    method.accept(self);
+                }
+                for method in meta_methods {
                     method.accept(self);
                 }
 
@@ -157,6 +174,7 @@ impl StmtVisitor for Codegen {
         params: &[Stmt],
         _return_type: &Option<Expr>,
         body: &[Stmt],
+        is_meta: bool,
     ) -> Self::StmtResult {
         let borrowed_symbol = stmt.symbol.borrow();
         let func_symbol = borrowed_symbol.as_ref().unwrap();
@@ -176,7 +194,7 @@ impl StmtVisitor for Codegen {
             })
             .collect();
 
-        if let Some(current_type) = &self.current_type {
+        if let (Some(current_type), false) = (&self.current_type, is_meta) {
             params.insert(
                 0,
                 (NodeType::Pointer(
@@ -304,17 +322,20 @@ impl ExprVisitor for Codegen {
     fn visit_call_expr(&mut self, _expr: &Expr, target: &Expr, args: &[Expr]) -> Self::ExprResult {
         let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
 
+        let borrowed_symbol = target.symbol.borrow();
+        let mut symbol = borrowed_symbol.as_ref().unwrap().clone();
+        let is_meta = symbol.parent().map(|p| p.last_component() == "Meta").unwrap_or(false);
+
         match &target.kind {
             ExprKind::Field(field_target, _) => {
-                let ptr = format!("&({})", field_target.accept(self));
-                args.insert(0, ptr);
+                if !is_meta {
+                    let ptr = format!("&({})", field_target.accept(self));
+                    args.insert(0, ptr);
+                }
             }
             ExprKind::Variable(_) => (),
             _ => unimplemented!(),
         }
-
-        let borrowed_symbol = target.symbol.borrow();
-        let mut symbol = borrowed_symbol.as_ref().unwrap().clone();
 
         if let Some(NodeType::Metatype(metatype_symbol)) = self.global_symbols.get_type(&symbol) {
             symbol = Symbol::new_str(Some(metatype_symbol), "init");
@@ -330,6 +351,7 @@ impl ExprVisitor for Codegen {
     fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, _field: &Token) -> Self::ExprResult {
         let borrowed_symbol = expr.symbol.borrow();
         let symbol = borrowed_symbol.as_ref().unwrap();
+        println!("accessing field, total symbol is {}", symbol);
         match self.global_symbols.get_type(symbol) {
             Some(NodeType::Function(_, _)) => symbol.mangled(),
             Some(NodeType::Pointer(_)) => {

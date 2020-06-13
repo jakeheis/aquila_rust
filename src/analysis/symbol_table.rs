@@ -3,7 +3,6 @@ use crate::lexing::*;
 use crate::parsing::*;
 use std::collections::HashMap;
 use crate::guard;
-use crate::source::*;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Symbol {
@@ -11,6 +10,7 @@ pub struct Symbol {
 }
 
 impl Symbol {
+
     pub fn new(parent: Option<&Symbol>, name: &Token) -> Self {
         Symbol::new_str(parent, name.lexeme())
     }
@@ -29,6 +29,23 @@ impl Symbol {
         let expected = self.id.clone() + "$" + &name;
         other.id == expected
     }
+
+    pub fn parent(&self) -> Option<Symbol> {
+        let mut comopnents: Vec<_> = self.id.split("$").collect();
+        comopnents.pop();
+        if comopnents.is_empty() {
+            None
+        } else {
+            Some(Symbol { 
+                id: comopnents.join("$")
+            })
+        }
+    }
+
+    pub fn last_component(&self) -> &str {
+        self.id.split("$").last().unwrap()
+    }
+
 }
 
 impl std::fmt::Display for Symbol {
@@ -133,6 +150,7 @@ impl StmtVisitor for SymbolTableBuilder {
         name: &Token,
         fields: &[Stmt],
         methods: &[Stmt],
+        meta_methods: &[Stmt],
     ) -> Self::StmtResult {
         let new_symbol = Symbol::new(self.context.last(), name);
         let new_type = NodeType::Metatype(new_symbol.clone());
@@ -141,14 +159,21 @@ impl StmtVisitor for SymbolTableBuilder {
             self.context.push(new_symbol.clone());
             let field_types = self.build_list(&fields);
 
-            // Init method
-            let init_type = NodeType::Function(
-                field_types, 
-                Box::new(NodeType::Type(new_symbol))
-            );
-            self.table.insert(Symbol::new_str(self.context.last(), "init"), init_type.clone());
+            // TODO: rename to _memberwise; always generate, allow custom init too
+            let init_symbol = Symbol::new_str(self.context.last(), "init");
+            if self.table.get_type(&init_symbol).is_none() {
+                let init_type = NodeType::Function(
+                    field_types, 
+                    Box::new(NodeType::Type(new_symbol))
+                );
+                self.table.insert(Symbol::new_str(self.context.last(), "init"), init_type.clone());
+            }
 
             self.build_list(&methods);
+
+            self.context.push(Symbol::new_str(self.context.last(), "Meta"));
+            self.build_list(&meta_methods);
+            self.context.pop();
             
             self.context.pop();
         } else {
@@ -165,6 +190,7 @@ impl StmtVisitor for SymbolTableBuilder {
         params: &[Stmt],
         return_type: &Option<Expr>,
         _body: &[Stmt],
+        _is_meta: bool,
     ) -> Self::StmtResult {
         let new_symbol = Symbol::new(self.context.last(), name);
 

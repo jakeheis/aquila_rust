@@ -185,12 +185,18 @@ impl StmtVisitor for TypeChecker {
         name: &Token,
         fields: &[Stmt],
         methods: &[Stmt],
+        meta_methods: &[Stmt],
     ) -> Analysis {
         let symbol = self.push_type_scope(name);
         stmt.symbol.replace(Some(symbol));
 
+        self.push_scope_named("Meta");
+        self.check_list(meta_methods);
+        self.pop_scope();
+
         self.check_list(fields);
         self.check_list(methods);
+
         self.pop_scope();
 
         Analysis {
@@ -205,6 +211,7 @@ impl StmtVisitor for TypeChecker {
         params: &[Stmt],
         return_type_expr: &Option<Expr>,
         body: &[Stmt],
+        _is_meta: bool,
     ) -> Analysis {
         let return_type = return_type_expr.as_ref().and_then(|r| self.check_expr(r)).unwrap_or(NodeType::Void);
 
@@ -215,7 +222,7 @@ impl StmtVisitor for TypeChecker {
         let analysis = self.check_list(body);
         self.pop_scope();
 
-        if analysis.guarantees_return == false && !self.is_builtin {
+        if !analysis.guarantees_return && return_type != NodeType::Void && !self.is_builtin {
             let last_param = params.last().map(|p| p.span.clone());
             let span_params = Span::join_opt(name, &last_param);
             let span = Span::join_opt(&span_params, return_type_expr);
@@ -488,6 +495,7 @@ impl ExprVisitor for TypeChecker {
         // let type_symbol = match target_type.represented_type() {
         let type_symbol = match target_type {
             NodeType::Type(type_symbol) => Ok(type_symbol),
+            NodeType::Metatype(type_symbol) => Ok(Symbol::new_str(Some(&type_symbol), "Meta")),
             _ => {
                 Err(Diagnostic::error(
                     target,

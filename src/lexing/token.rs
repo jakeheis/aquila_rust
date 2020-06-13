@@ -43,6 +43,7 @@ pub enum TokenKind {
     Print,
     Ptr,
     Builtin,
+    Meta,
 
     // Other
     Comma,

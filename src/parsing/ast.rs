@@ -4,8 +4,8 @@ use crate::source::*;
 use std::cell::RefCell;
 
 pub enum StmtKind {
-    TypeDecl(Token, Vec<Stmt>, Vec<Stmt>),
-    FunctionDecl(Token, Vec<Stmt>, Option<Expr>, Vec<Stmt>),
+    TypeDecl(Token, Vec<Stmt>, Vec<Stmt>, Vec<Stmt>),
+    FunctionDecl(Token, Vec<Stmt>, Option<Expr>, Vec<Stmt>, bool),
     VariableDecl(Token, Option<Expr>, Option<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
@@ -33,11 +33,11 @@ impl Stmt {
 
     pub fn accept<V: StmtVisitor>(&self, visitor: &mut V) -> V::StmtResult {
         match &self.kind {
-            StmtKind::TypeDecl(name, fields, methods) => {
-                visitor.visit_type_decl(&self, &name, &fields, &methods)
+            StmtKind::TypeDecl(name, fields, methods, meta_methods) => {
+                visitor.visit_type_decl(&self, &name, &fields, &methods, &meta_methods)
             }
-            StmtKind::FunctionDecl(name, params, return_type, body) => {
-                visitor.visit_function_decl(&self, &name, &params, &return_type, &body)
+            StmtKind::FunctionDecl(name, params, return_type, body, is_meta) => {
+                visitor.visit_function_decl(&self, &name, &params, &return_type, &body, *is_meta)
             }
             StmtKind::VariableDecl(name, kind, value) => {
                 visitor.visit_variable_decl(&self, &name, &kind, &value)
@@ -57,23 +57,25 @@ impl Stmt {
         name: Token,
         fields: Vec<Stmt>,
         methods: Vec<Stmt>,
+        meta_methods: Vec<Stmt>,
         right_brace: &Token,
     ) -> Self {
         let span = Span::join(&type_span, right_brace);
-        Stmt::new(StmtKind::TypeDecl(name, fields, methods), span)
+        Stmt::new(StmtKind::TypeDecl(name, fields, methods, meta_methods), span)
     }
 
     pub fn function_decl(
-        def_span: Span,
+        start_span: Span,
         name: Token,
         params: Vec<Stmt>,
         return_type: Option<Expr>,
         body: Vec<Stmt>,
         right_brace_span: Span,
+        is_meta: bool,
     ) -> Self {
-        let span = Span::join(&def_span, &right_brace_span);
+        let span = Span::join(&start_span, &right_brace_span);
         Stmt::new(
-            StmtKind::FunctionDecl(name, params, return_type, body),
+            StmtKind::FunctionDecl(name, params, return_type, body, is_meta),
             span,
         )
     }
@@ -132,6 +134,7 @@ pub trait StmtVisitor {
         name: &Token,
         fields: &[Stmt],
         methods: &[Stmt],
+        meta_methods: &[Stmt],
     ) -> Self::StmtResult;
 
     fn visit_function_decl(
@@ -141,6 +144,7 @@ pub trait StmtVisitor {
         params: &[Stmt],
         return_type: &Option<Expr>,
         body: &[Stmt],
+        is_meta: bool,
     ) -> Self::StmtResult;
 
     fn visit_variable_decl(
@@ -353,7 +357,7 @@ impl ASTPrinter {
 impl StmtVisitor for ASTPrinter {
     type StmtResult = ();
 
-    fn visit_type_decl(&mut self, stmt: &Stmt, name: &Token, fields: &[Stmt], methods: &[Stmt]) {
+    fn visit_type_decl(&mut self, stmt: &Stmt, name: &Token, fields: &[Stmt], methods: &[Stmt], meta_methods: &[Stmt]) {
         let symbol = stmt
             .symbol
             .borrow()
@@ -374,6 +378,10 @@ impl StmtVisitor for ASTPrinter {
             visitor.indent(|visitor| {
                 methods.iter().for_each(|p| p.accept(visitor));
             });
+            visitor.write_ln("MetaMethods");
+            visitor.indent(|visitor| {
+                meta_methods.iter().for_each(|p| p.accept(visitor));
+            });
         });
     }
 
@@ -384,6 +392,7 @@ impl StmtVisitor for ASTPrinter {
         params: &[Stmt],
         return_type: &Option<Expr>,
         body: &[Stmt],
+        is_meta: bool,
     ) {
         let symbol = stmt
             .symbol
@@ -398,11 +407,12 @@ impl StmtVisitor for ASTPrinter {
             .map(|t| t.to_string())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
-            "FunctionDecl(name: {}, return_type: {}, symbol: {}, resolved_type: {})",
+            "FunctionDecl(name: {}, return_type: {}, symbol: {}, resolved_type: {}, meta: {})",
             name.lexeme(),
             return_type.as_ref().map(|r| r.lexeme()).unwrap_or("<void>"),
             symbol,
-            resolved_type
+            resolved_type,
+            is_meta
         ));
         self.indent(|visitor| {
             visitor.write_ln("Params");

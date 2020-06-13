@@ -1,1 +1,13 @@
 builtin def allocate(count: int): ptr byte {}
+
+type HeapStorage {
+
+    let size: int;
+    let location: ptr byte;
+
+    meta def create(size: int): HeapStorage {
+        let location = allocate(size);
+        return HeapStorage(size, location);
+    }
+
+}

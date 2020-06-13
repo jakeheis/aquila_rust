@@ -164,6 +164,7 @@ impl Lexer {
             "print" => self.make_token(TokenKind::Print),
             "ptr" => self.make_token(TokenKind::Ptr),
             "builtin" => self.make_token(TokenKind::Builtin),
+            "meta" => self.make_token(TokenKind::Meta),
             _ => Some(token),
         }
     }

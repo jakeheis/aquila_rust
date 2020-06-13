@@ -33,9 +33,18 @@ type Adder {
   def add(third: int): int {
     return lhs + rhs + third;
   }
+
+  meta def example(): Adder {
+    return Adder(1, 2);
+  }
 }
 
-let sum = Adder(4, 5);
+let my = Adder.example();
+
+
+let block = HeapStorage.create(40);
+
+/*let sum = Adder(4, 5);
 print sum.add(6);
 
 let look: ptr Adder = &sum;
@@ -44,7 +53,7 @@ let copy = *look;
 print copy.add(3);
 
 let storage = allocate(6);
-
+*/
 // -1;
 // !2;
 
