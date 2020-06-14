@@ -46,9 +46,9 @@ let block = FatPointer.heap_alloc(40);
 let my_str = "helloo";
 
 let dyn = String.literal(my_str);
-let dyn2 = String.literal("yo");
+let dyn2 = String.literal(" yo");
 
-print dyn.storage.size;
+print dyn.append_literal(" world").storage.location;
 
 /*let sum = Adder(4, 5);
 print sum.add(6);

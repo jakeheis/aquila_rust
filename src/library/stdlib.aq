@@ -1,5 +1,8 @@
-builtin def allocate(count: int): ptr byte {}
+builtin def malloc(count: int): ptr byte {}
 builtin def strlen(location: ptr byte): int {}
+builtin def memcpy(to: ptr byte, from: ptr byte, length: int): int {}
+
+builtin def ptr_offset(pointer: ptr byte, distance: int): ptr byte {}
 
 type FatPointer {
 
@@ -7,17 +10,31 @@ type FatPointer {
     let location: ptr byte;
 
     meta def heap_alloc(size: int): FatPointer {
-        let location = allocate(size);
+        let location = malloc(size);
         return FatPointer(size, location);
     }
 
 }
 
 type String {
+    
     let storage: FatPointer;
 
     meta def literal(lit: ptr byte): String {
         let pointer = FatPointer(strlen(lit), lit);
         return String(pointer);
     }
+
+    def append_literal(lit: ptr byte): String {
+        let size = storage.size + strlen(lit) + 1;
+        let new_storage = FatPointer.heap_alloc(size);
+        
+        memcpy(new_storage.location, storage.location, storage.size);
+
+        let second = ptr_offset(new_storage.location, storage.size);
+        memcpy(second, lit, strlen(lit) + 1);
+
+        return String(new_storage);
+    }
+
 }

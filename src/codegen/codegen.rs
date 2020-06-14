@@ -366,14 +366,24 @@ impl ExprVisitor for Codegen {
     }
 
     fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, _field: &Token) -> Self::ExprResult {
-        let borrowed_symbol = expr.symbol.borrow();
-        let symbol = borrowed_symbol.as_ref().unwrap();
+        let field_borrowed_symbol = expr.symbol.borrow();
+        let field_symbol = field_borrowed_symbol.as_ref().unwrap();
 
-        match self.lib.resolve_symbol(symbol) {
-            Some(NodeType::Function(_, _)) => symbol.mangled(),
-            Some(NodeType::Pointer(_)) => format!("{}->{}", target.accept(self), symbol.mangled()),
-            _ => format!("{}.{}", target.accept(self), symbol.mangled()),
+        if let Some(NodeType::Function(..)) = self.lib.resolve_symbol(field_symbol) {
+            return field_symbol.mangled();
         }
+
+        // let target_borrowed_symbol = target.symbol.borrow();
+        // let target_symbol = target_borrowed_symbol.as_ref().unwrap();
+
+        // let joiner = match self.lib.resolve_symbol(target_symbol) {
+        //     Some(NodeType::Pointer(_)) => "->",
+        //     _ => ".",
+        // };
+        
+        // format!("{}{}{}", target.accept(self), joiner, field_symbol.mangled())
+
+        format!("{}.{}", target.accept(self), field_symbol.mangled())
     }
 
     fn visit_literal_expr(&mut self, _expr: &Expr, token: &Token) -> Self::ExprResult {
