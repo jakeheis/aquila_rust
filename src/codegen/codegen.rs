@@ -6,6 +6,8 @@ use crate::parsing::*;
 use std::fs::{self, File};
 use std::process::Command;
 use super::core;
+use crate::stdlib::*;
+use std::rc::Rc;
 
 #[derive(PartialEq)]
 enum CodegenStage {
@@ -17,7 +19,7 @@ enum CodegenStage {
 
 pub struct Codegen {
     writer: CWriter,
-    global_symbols: SymbolTable,
+    lib: Rc<Lib>,
     current_type: Option<Symbol>,
     stage: CodegenStage,
     is_builtin: bool,
@@ -25,62 +27,64 @@ pub struct Codegen {
 
 impl Codegen {
 
-    pub fn generate(program: ParsedProgram, global_symbols: SymbolTable) {
+    pub fn generate(lib: Lib) {
         fs::create_dir_all("build").unwrap();
+
+        let lib = Rc::new(lib);
         let file = File::create("build/main.c").unwrap();
+        let writer = CWriter::new(file);
+
+        Codegen::write(lib, writer);
+
+        Command::new("/usr/local/opt/llvm/bin/clang")
+        .args(&[
+            "-g",
+            "-Iinclude",
+            "-I/Library/Developer/CommandLineTools/usr/include/c++/v1",
+            "-O0",
+            "main.c",
+            "-o",
+            "program",
+        ])
+        .current_dir("build")
+        .status()
+        .unwrap();
+    }
+
+    fn write(lib: Rc<Lib>, writer: CWriter) -> CWriter {
+        let mut writer = writer;
+        for dep in &lib.dependencies {
+            writer = Codegen::write(Rc::clone(dep), writer);
+        }
+
+        println!("writing {} {}", lib.name, lib.dependencies.len());
 
         let mut codegen = Codegen {
-            writer: CWriter::new(file),
-            global_symbols,
+            writer: writer,
+            lib: Rc::clone(&lib),
             current_type: None,
             stage: CodegenStage::ForwardStructDecls,
             is_builtin: false,
         };
 
-        if let Some(lib) = program.stdlib {
-            codegen.stage = CodegenStage::FuncPrototypes;
-            codegen.gen_stmts(&lib.function_decls);
-            codegen.stage = CodegenStage::FuncBodies;
-            codegen.gen_stmts(&lib.function_decls);
-
-            codegen.stage = CodegenStage::ForwardStructDecls;
-            codegen.gen_stmts(&lib.type_decls);
-            codegen.stage = CodegenStage::StructBodies;
-            codegen.gen_stmts(&lib.type_decls);
-            codegen.stage = CodegenStage::FuncPrototypes;
-            codegen.gen_stmts(&lib.type_decls);
-            codegen.stage = CodegenStage::FuncBodies;
-            codegen.gen_stmts(&lib.type_decls);
-        }
-
         codegen.stage = CodegenStage::ForwardStructDecls;
-        codegen.gen_stmts(&program.type_decls);
+        codegen.gen_stmts(&lib.type_decls);
         codegen.stage = CodegenStage::StructBodies;
-        codegen.gen_stmts(&program.type_decls);
+        codegen.gen_stmts(&lib.type_decls);
 
         codegen.stage = CodegenStage::FuncPrototypes;
-        codegen.gen_stmts(&program.type_decls);
-        codegen.gen_stmts(&program.function_decls);
+        codegen.gen_stmts(&lib.type_decls);
+        codegen.gen_stmts(&lib.function_decls);
 
         codegen.stage = CodegenStage::FuncBodies;
-        codegen.gen_stmts(&program.type_decls);
-        codegen.gen_stmts(&program.function_decls);
+        codegen.gen_stmts(&lib.type_decls);
+        codegen.gen_stmts(&lib.function_decls);
 
-        codegen.write_main(&program.main);
+        if !lib.other.is_empty() {
+            codegen.write_main(&lib.other);
+        }
 
-        Command::new("/usr/local/opt/llvm/bin/clang")
-            .args(&[
-                "-g",
-                "-Iinclude",
-                "-I/Library/Developer/CommandLineTools/usr/include/c++/v1",
-                "-O0",
-                "main.c",
-                "-o",
-                "program",
-            ])
-            .current_dir("build")
-            .status()
-            .unwrap();
+        codegen.writer
     }
 
     fn write_main(&mut self, stmts: &[Stmt]) {
@@ -133,8 +137,9 @@ impl StmtVisitor for Codegen {
                     method.accept(self);
                 }
 
-                let init_symbol = Symbol::new_str(Some(struct_symbol), "init");
-                let init_type = self.global_symbols.get_type(&init_symbol).unwrap();
+                let meta_symbol = Symbol::new_str(Some(struct_symbol), "Meta");
+                let init_symbol = Symbol::new_str(Some(&meta_symbol), "init");
+                let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
                 guard!(NodeType::Function[field_types, ret_type] = init_type);
                 
                 let field_list: Vec<_> = field_types.iter().zip(fields).map(|(ft, f)| {
@@ -337,8 +342,9 @@ impl ExprVisitor for Codegen {
             _ => unimplemented!(),
         }
 
-        if let Some(NodeType::Metatype(metatype_symbol)) = self.global_symbols.get_type(&symbol) {
-            symbol = Symbol::new_str(Some(metatype_symbol), "init");
+        if let Some(NodeType::Metatype(metatype_symbol)) = self.lib.resolve_symbol(&symbol) {
+            symbol = Symbol::new_str(Some(metatype_symbol), "Meta");
+            symbol = Symbol::new_str(Some(&symbol), "init");
         }
 
         format!(
@@ -351,8 +357,8 @@ impl ExprVisitor for Codegen {
     fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, _field: &Token) -> Self::ExprResult {
         let borrowed_symbol = expr.symbol.borrow();
         let symbol = borrowed_symbol.as_ref().unwrap();
-        println!("accessing field, total symbol is {}", symbol);
-        match self.global_symbols.get_type(symbol) {
+
+        match self.lib.resolve_symbol(symbol) {
             Some(NodeType::Function(_, _)) => symbol.mangled(),
             Some(NodeType::Pointer(_)) => {
                 format!("{}->{}", target.accept(self), symbol.mangled())

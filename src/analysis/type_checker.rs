@@ -5,6 +5,7 @@ use crate::parsing::*;
 use crate::source::*;
 use std::rc::Rc;
 use crate::guard;
+use crate::stdlib::*;
 
 type Result = DiagnosticResult<NodeType>;
 
@@ -15,42 +16,28 @@ struct Scope {
 }
 
 impl Scope {
-    fn new(id: Symbol, return_type: Option<NodeType>) -> Self {
+    fn new(id: Option<Symbol>, return_type: Option<NodeType>) -> Self {
         Scope {
-            id: Some(id),
+            id,
             symbols: SymbolTable::new(),
             function_return_type: return_type,
         }
     }
 
-    fn global(symbols: SymbolTable) -> Self {
-        Scope {
-            id: None,
-            symbols,
-            function_return_type: None,
-        }
-    }
-
     fn define_var(&mut self, decl: &Stmt, name: &Token, var_type: &NodeType) {
         let new_symbol = Symbol::new((&self.id).as_ref(), name);
+
         self.symbols.insert(new_symbol.clone(), var_type.clone());
 
         decl.symbol.replace(Some(new_symbol));
         decl.stmt_type.replace(Some(var_type.clone()));
     }
 
-    fn symbol_named(&self, name: &str) -> Option<Symbol> {
-        let symbol = Symbol::new_str((&self.id).as_ref(), name);
-        if let None = self.symbols.get_type(&symbol) {
-            None
-        } else {
-            Some(symbol)
-        }
-    }
 }
 
 pub struct TypeChecker {
     reporter: Rc<dyn Reporter>,
+    lib: Rc<Lib>,
     scopes: Vec<Scope>,
     is_builtin: bool,
 }
@@ -60,21 +47,23 @@ pub struct Analysis {
 }
 
 impl TypeChecker {
-    pub fn check(program: &ParsedProgram, reporter: Rc<dyn Reporter>) -> SymbolTable {
-        let table = SymbolTableBuilder::build(program);
-        let global_scope = Scope::global(table);
+
+    pub fn check(lib: Rc<Lib>, reporter: Rc<dyn Reporter>) {
+        let top_level = Scope::new(None, None);
 
         let mut checker = TypeChecker {
             reporter,
-            scopes: vec![global_scope],
+            lib: Rc::clone(&lib),
+            scopes: vec![top_level],
             is_builtin: false,
         };
 
-        checker.check_list(&program.type_decls);
-        checker.check_list(&program.function_decls);
-        checker.check_list(&program.main);
+        checker.check_list(&lib.type_decls);
+        checker.check_list(&lib.function_decls);
 
-        checker.scopes.remove(0).symbols
+        checker.push_scope_named("main");
+        checker.check_list(&lib.other);
+        checker.pop_scope();
     }
 
     fn check_list(&mut self, stmt_list: &[Stmt]) -> Analysis {
@@ -123,11 +112,7 @@ impl TypeChecker {
     }
 
     fn current_symbol(&mut self) -> Option<&Symbol> {
-        self.current_scope().id.as_ref()
-    }
-
-    fn global_scope(&mut self) -> &mut Scope {
-        self.scopes.first_mut().unwrap()
+        (&self.current_scope().id).as_ref()
     }
 
     fn push_type_scope(&mut self, name: &Token) -> Symbol {
@@ -136,14 +121,14 @@ impl TypeChecker {
 
     fn push_function_scope(&mut self, name: &Token, ret_type: NodeType) -> Symbol {
         let symbol = Symbol::new(self.current_symbol(), name);
-        self.scopes.push(Scope::new(symbol.clone(), Some(ret_type)));
+        self.scopes.push(Scope::new(Some(symbol.clone()), Some(ret_type)));
         symbol
     }
 
     fn push_scope_named(&mut self, name: &str) -> Symbol {
         let symbol = Symbol::new_str(self.current_symbol(), name);
         let ret_type = self.current_scope().function_return_type.clone();
-        self.scopes.push(Scope::new(symbol.clone(), ret_type));
+        self.scopes.push(Scope::new(Some(symbol.clone()), ret_type));
         symbol
     }
 
@@ -151,20 +136,27 @@ impl TypeChecker {
         self.scopes.pop();
     }
 
-    fn resolve_var(&self, name: &str) -> Option<(&Scope, Symbol)> {
+    fn resolve_var(&self, name: &str) -> Option<(Symbol, &NodeType)> {
         for scope in self.scopes.iter().rev() {
-            if let Some(symbol) = scope.symbol_named(name) {
-                return Some((scope, symbol));
+            let possible_symbol = Symbol::new_str((&scope.id).as_ref(), name);
+            if let Some(node_type) = scope.symbols.get_type(&possible_symbol) {
+                return Some((possible_symbol, node_type));
             }
         }
-        None
+
+        let lib_symbol = Symbol::new_str(None, name);
+        if let Some(node_type) = self.lib.resolve_symbol(&lib_symbol) {
+            Some((lib_symbol, node_type))
+        } else {
+            None
+        }
     }
 
     fn resolve_type(&self, type_token: &Token) -> Result {
         if let Some(primitive) = NodeType::primitive(type_token) {
             Ok(primitive)
-        } else if let Some((scope, type_symbol)) = self.resolve_var(type_token.lexeme()) {
-            if let Some(NodeType::Metatype(type_symbol)) = scope.symbols.get_type(&type_symbol) {
+        } else if let Some((type_symbol, node_type)) = self.resolve_var(type_token.lexeme()) {
+            if let NodeType::Metatype(type_symbol) = node_type {
                 let compound_type = NodeType::Type(type_symbol.clone());
                 Ok(compound_type)
             } else {
@@ -174,6 +166,7 @@ impl TypeChecker {
             Err(Diagnostic::error(type_token, "Undefined type"))
         }
     }
+
 }
 
 impl StmtVisitor for TypeChecker {
@@ -452,8 +445,11 @@ impl ExprVisitor for TypeChecker {
                 Ok((p ,*r))
             },
             NodeType::Metatype(symbol) => {
-                let init_symbol = Symbol::new_str(Some(&symbol), "init");
-                let init_type = self.global_scope().symbols.get_type(&init_symbol).unwrap();
+                let meta_symbol = Symbol::new_str(Some(&symbol), "Meta");
+                let init_symbol = Symbol::new_str(Some(&meta_symbol), "init");
+                println!("Lokoing up symbol {}", init_symbol);
+                
+                let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
                 guard!(NodeType::Function[p, r] = init_type.clone());
                 Ok((p ,*r))
             },
@@ -505,8 +501,9 @@ impl ExprVisitor for TypeChecker {
         }?;
 
         let field_symbol = Symbol::new(Some(&type_symbol), field);
+        println!("assigning symbol {} to filed", field_symbol);
 
-        if let Some(field_type) = self.global_scope().symbols.get_type(&field_symbol) {
+        if let Some(field_type) = self.lib.resolve_symbol(&field_symbol) {
             expr.symbol.replace(Some(field_symbol));
             Ok(field_type.clone())
         } else {
@@ -532,9 +529,9 @@ impl ExprVisitor for TypeChecker {
     }
 
     fn visit_variable_expr(&mut self, expr: &Expr, name: &Token) -> Self::ExprResult {
-        if let Some((scope, symbol)) = self.resolve_var(name.lexeme()) {
-            expr.symbol.replace(Some(symbol.clone()));
-            Ok(scope.symbols.get_type(&symbol).unwrap().clone())
+        if let Some((symbol, node_type)) = self.resolve_var(name.lexeme()) {
+            expr.symbol.replace(Some(symbol));
+            Ok(node_type.clone())
         } else {
             Err(Diagnostic::error(name, "Undefined variable"))
         }

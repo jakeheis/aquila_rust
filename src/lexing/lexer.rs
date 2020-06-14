@@ -22,7 +22,7 @@ impl Lexer {
         }
     }
 
-    pub fn lex(mut self) -> super::LexedProgram {
+    pub fn lex(mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
 
         while !self.is_at_end() {
@@ -36,10 +36,7 @@ impl Lexer {
         self.start = self.current;
         tokens.push(self.make_token(TokenKind::EOF).unwrap());
 
-        super::LexedProgram {
-            source: self.source,
-            tokens,
-        }
+        tokens
     }
 
     fn token(&mut self) -> Option<Token> {

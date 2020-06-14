@@ -21,18 +21,16 @@ enum Context {
 
 impl Parser {
     
-    pub fn new(program: LexedProgram, reporter: Rc<dyn Reporter>) -> Self {
+    pub fn new(tokens: Vec<Token>, reporter: Rc<dyn Reporter>) -> Self {
         Parser {
-            tokens: program.tokens,
+            tokens,
             index: 0,
             reporter,
         }
     }
 
-    pub fn parse(mut self, include_stdlib: bool) -> super::ParsedProgram {
-        let statements = self.stmt_list(Context::TopLevel, None);
-
-        super::ParsedProgram::new(Rc::clone(&self.tokens[0].span().source), statements, include_stdlib)
+    pub fn parse(mut self) -> Vec<Stmt> {
+        self.stmt_list(Context::TopLevel, None)
     }
 
     fn stmt_list(&mut self, context: Context, end: Option<TokenKind>) -> Vec<Stmt> {

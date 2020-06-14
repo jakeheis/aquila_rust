@@ -5,6 +5,7 @@ use crate::parsing::*;
 use crate::source::*;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use crate::stdlib::*;
 
 pub struct CycleChecker {
     field_map: HashMap<Symbol, (Span, HashSet<Symbol>)>,
@@ -12,10 +13,11 @@ pub struct CycleChecker {
 }
 
 impl CycleChecker {
-    pub fn check(program: ParsedProgram, reporter: Rc<dyn Reporter>) -> ParsedProgram {
+
+    pub fn check(lib: &mut Lib, reporter: Rc<dyn Reporter>) {
         let mut field_map: HashMap<Symbol, (Span, HashSet<Symbol>)> = HashMap::new();
 
-        for stmt in &program.type_decls {
+        for stmt in &lib.type_decls {
             guard!(StmtKind::TypeDecl[name, fields, _methods, _meta_methods] = &stmt.kind);
 
             let borrowed_type_symbol = stmt.symbol.borrow();
@@ -38,10 +40,10 @@ impl CycleChecker {
             reporter,
         };
 
-        checker.run(program)
+        checker.run(lib);
     }
 
-    fn run(&mut self, mut program: ParsedProgram) -> ParsedProgram {
+    fn run(&mut self, lib: &mut Lib) {
         let mut visited = HashSet::new();
         for type_symbol in self.field_map.keys() {
             let mut chain = vec![type_symbol.clone()];
@@ -56,7 +58,7 @@ impl CycleChecker {
                 self.post_order(&mut ordered, &mut visited, type_symbol.clone());
             }
 
-            program.type_decls.sort_by(|lhs, rhs| {
+            lib.type_decls.sort_by(|lhs, rhs| {
                 let lhs_symbol_borrowed = lhs.symbol.borrow();
                 let lhs_symbol = lhs_symbol_borrowed.as_ref().unwrap();
                 let rhs_symbol_borrowed = rhs.symbol.borrow();
@@ -67,8 +69,6 @@ impl CycleChecker {
                 lhs_index.cmp(&rhs_index)
             })
         }
-
-        program
     }
 
     fn visit(&self, chain: &mut Vec<Symbol>, visited: &mut HashSet<Symbol>) {

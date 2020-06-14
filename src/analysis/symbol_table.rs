@@ -3,6 +3,8 @@ use crate::lexing::*;
 use crate::parsing::*;
 use std::collections::HashMap;
 use crate::guard;
+use crate::stdlib::*;
+use std::rc::Rc;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Symbol {
@@ -83,32 +85,50 @@ impl std::fmt::Display for SymbolTable {
 
 pub struct SymbolTableBuilder {
     table: SymbolTable,
+    lib: Rc<IncompleteLib>,
     context: Vec<Symbol>,
     visit_methods: bool,
 }
 
 impl SymbolTableBuilder {
-    pub fn build(program: &ParsedProgram) -> SymbolTable {
+    pub fn build_symbols(lib: IncompleteLib) -> Rc<Lib> {
+        let lib = Rc::new(lib);
+
         let mut builder = SymbolTableBuilder {
-            table: program.stdlib.as_ref().map(|s| s.symbols.clone()).unwrap_or(SymbolTable::new()),
+            table: SymbolTable::new(),
+            lib: Rc::clone(&lib),
             context: Vec::new(),
             visit_methods: false,
         };
 
         // Add all top level types before visiting any function and trying to figure out return type
-        builder.build_list(&program.type_decls);
+        builder.build_list(&lib.type_decls);
 
         builder.visit_methods = true;
-        builder.build_list(&program.type_decls);
-        builder.build_list(&program.function_decls);
+        builder.build_list(&lib.type_decls);
+        builder.build_list(&lib.function_decls);
 
-        builder.table
+        let table = std::mem::replace(&mut builder.table, SymbolTable::new());
+        std::mem::drop(builder);
+
+        let lib = Rc::try_unwrap(lib).ok().unwrap();
+        Rc::new(lib.add_symbols(table))
     }
 
     fn build_list(&mut self, stmts: &[Stmt]) -> Vec<NodeType> {
         stmts.iter().map(|s| {
             s.accept(self)
         }).collect()
+    }
+
+    fn resolve_symbol(&self, symbol: &Symbol) -> Option<&NodeType> {
+        if let Some(found) = self.table.get_type(symbol) {
+            Some(found)
+        } else if let Some(found) = self.lib.resolve_symbol(symbol) {
+            Some(found)
+        } else {
+            None
+        }
     }
 
     fn resolve_type_expr(&self, type_expr: &Expr) -> NodeType {
@@ -126,12 +146,11 @@ impl SymbolTableBuilder {
         if let Some(primitive) = NodeType::primitive(type_token) {
             primitive
         } else if let Some(NodeType::Metatype(symbol)) =
-            self.table.get_type(&Symbol::new(None, type_token))
+            self.resolve_symbol(&Symbol::new(None, type_token))
         {
             NodeType::Type(symbol.clone())
         } else if let Some(NodeType::Metatype(symbol)) = self
-            .table
-            .get_type(&Symbol::new(self.context.last(), type_token))
+            .resolve_symbol(&Symbol::new(self.context.last(), type_token))
         {
             NodeType::Type(symbol.clone())
         } else {
@@ -159,7 +178,11 @@ impl StmtVisitor for SymbolTableBuilder {
             self.context.push(new_symbol.clone());
             let field_types = self.build_list(&fields);
 
-            // TODO: rename to _memberwise; always generate, allow custom init too
+            self.build_list(&methods);
+
+            self.context.push(Symbol::new_str(self.context.last(), "Meta"));
+            self.build_list(&meta_methods);
+
             let init_symbol = Symbol::new_str(self.context.last(), "init");
             if self.table.get_type(&init_symbol).is_none() {
                 let init_type = NodeType::Function(
@@ -168,11 +191,7 @@ impl StmtVisitor for SymbolTableBuilder {
                 );
                 self.table.insert(Symbol::new_str(self.context.last(), "init"), init_type.clone());
             }
-
-            self.build_list(&methods);
-
-            self.context.push(Symbol::new_str(self.context.last(), "Meta"));
-            self.build_list(&meta_methods);
+            
             self.context.pop();
             
             self.context.pop();
