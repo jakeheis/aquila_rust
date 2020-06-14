@@ -20,6 +20,7 @@ impl CWriter {
         self.writeln("#include <stdlib.h>");
         self.writeln("#include <stdbool.h>");
         self.writeln("#include <stdio.h>");
+        self.writeln("#include <string.h>");
     }
 
     pub fn write_struct_forward_decl(&mut self, name: &str) {
@@ -95,7 +96,7 @@ impl CWriter {
         if let Some((node_type, expr)) = expr {
             let format_specificer = match node_type {
                 NodeType::Int | NodeType::Bool => "%i",
-                NodeType::StringLiteral => "%s",
+                node_type if node_type.is_pointer_to(NodeType::Byte) => "%s",
                 _ => unreachable!(),
             };
             let line = format!("printf(\"{}\\n\", {});", format_specificer, expr);
@@ -137,7 +138,6 @@ impl CWriter {
             NodeType::Int => String::from("int"),
             NodeType::Bool => String::from("bool"),
             NodeType::Byte => String::from("char"),
-            NodeType::StringLiteral => String::from("char *"),
             NodeType::Type(symbol) => {
                 if false {
                     format!("struct {}", symbol.mangled())

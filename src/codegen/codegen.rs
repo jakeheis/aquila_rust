@@ -56,7 +56,7 @@ impl Codegen {
             writer = Codegen::write(Rc::clone(dep), writer);
         }
 
-        println!("writing {} {}", lib.name, lib.dependencies.len());
+        writer.writeln(&format!("\n// {}", lib.name));
 
         let mut codegen = Codegen {
             writer: writer,
@@ -136,8 +136,8 @@ impl StmtVisitor for Codegen {
                     method.accept(self);
                 }
 
-                let meta_symbol = Symbol::new_str(Some(struct_symbol), "Meta");
-                let init_symbol = Symbol::new_str(Some(&meta_symbol), "init");
+                let meta_symbol = Symbol::meta_symbol(Some(struct_symbol));
+                let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
                 let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
                 guard!(NodeType::Function[field_types, ret_type] = init_type);
 
@@ -211,19 +211,33 @@ impl StmtVisitor for Codegen {
         }
 
         if self.stage == CodegenStage::FuncPrototypes {
-            self.writer
-                .write_function_prototype(ret_type, &func_symbol.mangled(), &params);
-        } else {
-            self.writer
-                .start_decl_func(ret_type, &func_symbol.mangled(), &params);
             if self.is_builtin {
                 let borrowed_symbol = stmt.symbol.borrow();
                 let symbol = borrowed_symbol.as_ref().unwrap();
-                core::write(symbol, &mut self.writer);
+                if core::should_write_builtin(symbol) {
+                    self.writer
+                        .write_function_prototype(ret_type, &symbol.mangled(), &params);
+                }
             } else {
-                self.gen_stmts(body);
+                self.writer
+                    .write_function_prototype(ret_type, &func_symbol.mangled(), &params);
             }
-            self.writer.end_decl_func();
+        } else {
+            if self.is_builtin {
+                let borrowed_symbol = stmt.symbol.borrow();
+                let symbol = borrowed_symbol.as_ref().unwrap();
+                if core::should_write_builtin(symbol) {
+                    self.writer
+                        .start_decl_func(ret_type, &func_symbol.mangled(), &params);
+                    core::write(symbol, &mut self.writer);
+                    self.writer.end_decl_func();
+                }
+            } else {
+                self.writer
+                    .start_decl_func(ret_type, &func_symbol.mangled(), &params);
+                self.gen_stmts(body);
+                self.writer.end_decl_func();
+            }
         }
     }
 
@@ -330,10 +344,7 @@ impl ExprVisitor for Codegen {
 
         let borrowed_symbol = target.symbol.borrow();
         let mut symbol = borrowed_symbol.as_ref().unwrap().clone();
-        let is_meta = symbol
-            .parent()
-            .map(|p| p.last_component() == "Meta")
-            .unwrap_or(false);
+        let is_meta = symbol.parent().map(|p| p.is_meta()).unwrap_or(false);
 
         match &target.kind {
             ExprKind::Field(field_target, _) => {
@@ -347,8 +358,8 @@ impl ExprVisitor for Codegen {
         }
 
         if let Some(NodeType::Metatype(metatype_symbol)) = self.lib.resolve_symbol(&symbol) {
-            symbol = Symbol::new_str(Some(metatype_symbol), "Meta");
-            symbol = Symbol::new_str(Some(&symbol), "init");
+            symbol = Symbol::meta_symbol(Some(metatype_symbol));
+            symbol = Symbol::init_symbol(Some(&symbol));
         }
 
         format!("{}({})", symbol.mangled(), args.join(","))

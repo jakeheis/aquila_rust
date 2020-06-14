@@ -1,13 +1,23 @@
 builtin def allocate(count: int): ptr byte {}
+builtin def strlen(location: ptr byte): int {}
 
-type HeapStorage {
+type FatPointer {
 
     let size: int;
     let location: ptr byte;
 
-    meta def create(size: int): HeapStorage {
+    meta def heap_alloc(size: int): FatPointer {
         let location = allocate(size);
-        return HeapStorage(size, location);
+        return FatPointer(size, location);
     }
 
+}
+
+type String {
+    let storage: FatPointer;
+
+    meta def literal(lit: ptr byte): String {
+        let pointer = FatPointer(strlen(lit), lit);
+        return String(pointer);
+    }
 }

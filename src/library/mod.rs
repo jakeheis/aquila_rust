@@ -14,12 +14,11 @@ pub struct Lib {
     pub dependencies: Vec<Rc<Lib>>,
 }
 
-struct LogOptions {
-    lexer: bool,
-    parser: bool,
-    symbol_maker: bool,
-    type_checker: bool,
-}
+const LOG_LEXER: bool = false;
+const LOG_PARSER: bool = false;
+const LOG_SYMBOL_MAKER: bool = false;
+const LOG_TYPE_CHECKER: bool = false;
+const LOG_STDLIB: bool = false;
 
 impl Lib {
     pub fn from_source(source: Source) -> Result<Lib, &'static str> {
@@ -29,24 +28,21 @@ impl Lib {
 
     pub fn stdlib() -> Lib {
         let src =
-            source::file("/Users/jakeheiser/Desktop/Projects/Rust/aquila/src/stdlib/stdlib.aq");
-        Lib::build_lib(src, "stdlib", false).unwrap()
+            source::file("/Users/jakeheiser/Desktop/Projects/Rust/aquila/src/library/stdlib.aq");
+        let lib = Lib::build_lib(src, "stdlib", false).unwrap();
+        if LOG_STDLIB {
+            println!("std {}", lib.symbols);
+        }
+        lib
     }
 
     fn build_lib(source: Source, name: &str, link_stdlib: bool) -> Result<Lib, &'static str> {
-        let log_options = LogOptions {
-            lexer: false,
-            parser: false,
-            symbol_maker: true,
-            type_checker: true,
-        };
-
         let reporter: Rc<dyn Reporter> = DefaultReporter::new();
 
         let lexer = Lexer::new(source, Rc::clone(&reporter));
         let tokens = lexer.lex();
 
-        if log_options.lexer {
+        if LOG_LEXER {
             let slice: &[Token] = &tokens;
             println!("lexed {}", slice.token_string());
         }
@@ -54,7 +50,7 @@ impl Lib {
         let parser = Parser::new(tokens, Rc::clone(&reporter));
         let stmts = parser.parse();
 
-        if log_options.parser {
+        if LOG_PARSER {
             let mut printer = ASTPrinter::new();
             printer.print(&stmts);
         }
@@ -80,13 +76,13 @@ impl Lib {
 
         let lib = SymbolTableBuilder::build_symbols(lib);
 
-        if log_options.symbol_maker {
+        if LOG_SYMBOL_MAKER {
             println!("Table: {}", lib.symbols);
         }
 
         let lib = TypeChecker::check(lib, Rc::clone(&reporter));
 
-        if log_options.type_checker {
+        if LOG_TYPE_CHECKER {
             let mut printer = ASTPrinter::new();
             printer.print(&lib.type_decls);
             printer.print(&lib.function_decls);

@@ -21,6 +21,14 @@ impl Symbol {
         Symbol { id }
     }
 
+    pub fn meta_symbol(parent: Option<&Symbol>) -> Self {
+        Symbol::new_str(parent, "Meta")
+    }
+
+    pub fn init_symbol(parent: Option<&Symbol>) -> Self {
+        Symbol::new_str(parent, "init")
+    }
+
     pub fn mangled(&self) -> String {
         self.id.replace("$", "__")
     }
@@ -45,6 +53,10 @@ impl Symbol {
 
     pub fn last_component(&self) -> &str {
         self.id.split("$").last().unwrap()
+    }
+
+    pub fn is_meta(&self) -> bool {
+        self.last_component() == "Meta"
     }
 }
 
@@ -128,18 +140,9 @@ impl SymbolTableBuilder {
     }
 
     fn resolve_type_expr(&self, type_expr: &Expr) -> NodeType {
-        guard!(ExprKind::ExplicitType[name, modifier] = &type_expr.kind);
+        guard!(ExprKind::ExplicitType[type_token, modifier] = &type_expr.kind);
 
-        let main = self.resolve_type(name);
-        if modifier.is_some() {
-            NodeType::Pointer(Box::new(main))
-        } else {
-            main
-        }
-    }
-
-    fn resolve_type(&self, type_token: &Token) -> NodeType {
-        if let Some(primitive) = NodeType::primitive(type_token) {
+        let main = if let Some(primitive) = NodeType::primitive(type_token) {
             primitive
         } else if let Some(NodeType::Metatype(symbol)) =
             self.resolve_symbol(&Symbol::new(None, type_token))
@@ -152,6 +155,12 @@ impl SymbolTableBuilder {
         } else {
             // Isn't a real type; make a fake type and type checker will catch the error
             NodeType::Type(Symbol::new(None, type_token))
+        };
+
+        if modifier.is_some() {
+            NodeType::Pointer(Box::new(main))
+        } else {
+            main
         }
     }
 }
@@ -176,18 +185,15 @@ impl StmtVisitor for SymbolTableBuilder {
 
             self.build_list(&methods);
 
-            self.context
-                .push(Symbol::new_str(self.context.last(), "Meta"));
+            self.context.push(Symbol::meta_symbol(self.context.last()));
             self.build_list(&meta_methods);
 
-            let init_symbol = Symbol::new_str(self.context.last(), "init");
+            let init_symbol = Symbol::init_symbol(self.context.last());
             if self.table.get_type(&init_symbol).is_none() {
                 let init_type =
                     NodeType::Function(field_types, Box::new(NodeType::Type(new_symbol)));
-                self.table.insert(
-                    Symbol::new_str(self.context.last(), "init"),
-                    init_type.clone(),
-                );
+                self.table
+                    .insert(Symbol::init_symbol(self.context.last()), init_type.clone());
             }
 
             self.context.pop();
@@ -195,6 +201,14 @@ impl StmtVisitor for SymbolTableBuilder {
             self.context.pop();
         } else {
             self.table.insert(new_symbol.clone(), new_type.clone());
+            self.context.push(new_symbol.clone());
+            for field in fields {
+                guard!(StmtKind::VariableDecl[name, _e1, _e2] = &field.kind);
+                let field_type = field.accept(self);
+                self.table
+                    .insert(Symbol::new(self.context.last(), name), field_type);
+            }
+            self.context.pop();
         }
 
         new_type

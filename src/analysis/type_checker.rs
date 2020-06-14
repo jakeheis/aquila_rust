@@ -137,6 +137,13 @@ impl TypeChecker {
         symbol
     }
 
+    fn push_scope_meta(&mut self) -> Symbol {
+        let symbol = Symbol::meta_symbol(self.current_symbol());
+        let ret_type = self.current_scope().function_return_type.clone();
+        self.scopes.push(Scope::new(Some(symbol.clone()), ret_type));
+        symbol
+    }
+
     fn pop_scope(&mut self) {
         self.scopes.pop();
     }
@@ -187,7 +194,7 @@ impl StmtVisitor for TypeChecker {
         let symbol = self.push_type_scope(name);
         stmt.symbol.replace(Some(symbol));
 
-        self.push_scope_named("Meta");
+        self.push_scope_meta();
         self.check_list(meta_methods);
         self.pop_scope();
 
@@ -336,7 +343,10 @@ impl StmtVisitor for TypeChecker {
     fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Analysis {
         if let Some(node_type) = expr.as_ref().and_then(|e| self.check_expr(e)) {
             match node_type {
-                NodeType::Int | NodeType::Bool | NodeType::StringLiteral => {
+                NodeType::Int | NodeType::Bool => {
+                    stmt.stmt_type.replace(Some(node_type));
+                }
+                node_type if node_type.is_pointer_to(NodeType::Byte) => {
                     stmt.stmt_type.replace(Some(node_type));
                 }
                 _ => {
@@ -451,9 +461,8 @@ impl ExprVisitor for TypeChecker {
         let (params, return_type) = match func_type.clone() {
             NodeType::Function(p, r) => Ok((p, *r)),
             NodeType::Metatype(symbol) => {
-                let meta_symbol = Symbol::new_str(Some(&symbol), "Meta");
-                let init_symbol = Symbol::new_str(Some(&meta_symbol), "init");
-                println!("Lokoing up symbol {}", init_symbol);
+                let meta_symbol = Symbol::meta_symbol(Some(&symbol));
+                let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
 
                 let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
                 guard!(NodeType::Function[p, r] = init_type.clone());
@@ -495,7 +504,7 @@ impl ExprVisitor for TypeChecker {
         // let type_symbol = match target_type.represented_type() {
         let type_symbol = match target_type {
             NodeType::Type(type_symbol) => Ok(type_symbol),
-            NodeType::Metatype(type_symbol) => Ok(Symbol::new_str(Some(&type_symbol), "Meta")),
+            NodeType::Metatype(type_symbol) => Ok(Symbol::meta_symbol(Some(&type_symbol))),
             _ => Err(Diagnostic::error(
                 target,
                 &format!("Cannot access property of a {}", target_type),
@@ -524,7 +533,7 @@ impl ExprVisitor for TypeChecker {
             TokenKind::Number => Ok(NodeType::Int),
             TokenKind::True => Ok(NodeType::Bool),
             TokenKind::False => Ok(NodeType::Bool),
-            TokenKind::StringLiteral => Ok(NodeType::StringLiteral),
+            TokenKind::StringLiteral => Ok(NodeType::pointer_to(NodeType::Byte)),
             _ => panic!(),
         }
     }
@@ -561,7 +570,6 @@ pub enum NodeType {
     Int,
     Bool,
     Byte,
-    StringLiteral,
     Type(Symbol),
     Pointer(Box<NodeType>),
     Function(Vec<NodeType>, Box<NodeType>),
@@ -575,7 +583,6 @@ impl NodeType {
             "int" => Some(NodeType::Int),
             "bool" => Some(NodeType::Bool),
             "byte" => Some(NodeType::Byte),
-            "StringLiteral" => Some(NodeType::StringLiteral),
             _ => None,
         }
     }
@@ -590,6 +597,16 @@ impl NodeType {
             _ => self,
         }
     }
+
+    pub fn is_pointer_to(&self, node_type: NodeType) -> bool {
+        if let NodeType::Pointer(pointee) = self {
+            let reference: &NodeType = &pointee;
+            if &node_type == reference {
+                return true;
+            }
+        }
+        false
+    }
 }
 
 impl std::fmt::Display for NodeType {
@@ -599,7 +616,6 @@ impl std::fmt::Display for NodeType {
             NodeType::Int => String::from("int"),
             NodeType::Bool => String::from("bool"),
             NodeType::Byte => String::from("byte"),
-            NodeType::StringLiteral => String::from("StringLiteral"),
             NodeType::Function(params, ret) => {
                 let mut string = String::from("def(");
                 if let Some(first) = params.first() {
