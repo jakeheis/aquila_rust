@@ -1,12 +1,12 @@
 use super::c_writer::*;
+use super::core;
 use crate::analysis::*;
 use crate::guard;
 use crate::lexing::*;
+use crate::library::*;
 use crate::parsing::*;
 use std::fs::{self, File};
 use std::process::Command;
-use super::core;
-use crate::stdlib::*;
 use std::rc::Rc;
 
 #[derive(PartialEq)]
@@ -26,7 +26,6 @@ pub struct Codegen {
 }
 
 impl Codegen {
-
     pub fn generate(lib: Lib) {
         fs::create_dir_all("build").unwrap();
 
@@ -37,18 +36,18 @@ impl Codegen {
         Codegen::write(lib, writer);
 
         Command::new("/usr/local/opt/llvm/bin/clang")
-        .args(&[
-            "-g",
-            "-Iinclude",
-            "-I/Library/Developer/CommandLineTools/usr/include/c++/v1",
-            "-O0",
-            "main.c",
-            "-o",
-            "program",
-        ])
-        .current_dir("build")
-        .status()
-        .unwrap();
+            .args(&[
+                "-g",
+                "-Iinclude",
+                "-I/Library/Developer/CommandLineTools/usr/include/c++/v1",
+                "-O0",
+                "main.c",
+                "-o",
+                "program",
+            ])
+            .current_dir("build")
+            .status()
+            .unwrap();
     }
 
     fn write(lib: Rc<Lib>, writer: CWriter) -> CWriter {
@@ -141,21 +140,23 @@ impl StmtVisitor for Codegen {
                 let init_symbol = Symbol::new_str(Some(&meta_symbol), "init");
                 let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
                 guard!(NodeType::Function[field_types, ret_type] = init_type);
-                
-                let field_list: Vec<_> = field_types.iter().zip(fields).map(|(ft, f)| {
-                    (ft.clone(), f.symbol.borrow().as_ref().unwrap().mangled(),)
-                }).collect();
+
+                let field_list: Vec<_> = field_types
+                    .iter()
+                    .zip(fields)
+                    .map(|(ft, f)| (ft.clone(), f.symbol.borrow().as_ref().unwrap().mangled()))
+                    .collect();
 
                 if let CodegenStage::FuncPrototypes = self.stage {
                     self.writer.write_function_prototype(
-                        &NodeType::Type(struct_symbol.clone()), 
-                        &init_symbol.mangled(), 
+                        &NodeType::Type(struct_symbol.clone()),
+                        &init_symbol.mangled(),
                         &field_list,
                     );
                 } else {
                     self.writer.start_decl_func(
-                        &NodeType::Type(struct_symbol.clone()), 
-                        &init_symbol.mangled(), 
+                        &NodeType::Type(struct_symbol.clone()),
+                        &init_symbol.mangled(),
                         &field_list,
                     );
                     self.writer.decl_var(&ret_type, "new_item");
@@ -166,7 +167,7 @@ impl StmtVisitor for Codegen {
                     self.writer.write_return(Some(String::from("new_item")));
                     self.writer.end_decl_func();
                 }
-                    
+
                 self.current_type = None;
             }
         }
@@ -202,9 +203,10 @@ impl StmtVisitor for Codegen {
         if let (Some(current_type), false) = (&self.current_type, is_meta) {
             params.insert(
                 0,
-                (NodeType::Pointer(
-                    Box::new(NodeType::Type(current_type.clone()))
-                ), String::from("self")),
+                (
+                    NodeType::Pointer(Box::new(NodeType::Type(current_type.clone()))),
+                    String::from("self"),
+                ),
             );
         }
 
@@ -290,7 +292,6 @@ impl StmtVisitor for Codegen {
         inner.accept(self);
         self.is_builtin = false;
     }
-
 }
 
 impl ExprVisitor for Codegen {
@@ -329,7 +330,10 @@ impl ExprVisitor for Codegen {
 
         let borrowed_symbol = target.symbol.borrow();
         let mut symbol = borrowed_symbol.as_ref().unwrap().clone();
-        let is_meta = symbol.parent().map(|p| p.last_component() == "Meta").unwrap_or(false);
+        let is_meta = symbol
+            .parent()
+            .map(|p| p.last_component() == "Meta")
+            .unwrap_or(false);
 
         match &target.kind {
             ExprKind::Field(field_target, _) => {
@@ -347,11 +351,7 @@ impl ExprVisitor for Codegen {
             symbol = Symbol::new_str(Some(&symbol), "init");
         }
 
-        format!(
-            "{}({})",
-            symbol.mangled(),
-            args.join(",")
-        )
+        format!("{}({})", symbol.mangled(), args.join(","))
     }
 
     fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, _field: &Token) -> Self::ExprResult {
@@ -360,9 +360,7 @@ impl ExprVisitor for Codegen {
 
         match self.lib.resolve_symbol(symbol) {
             Some(NodeType::Function(_, _)) => symbol.mangled(),
-            Some(NodeType::Pointer(_)) => {
-                format!("{}->{}", target.accept(self), symbol.mangled())
-            },
+            Some(NodeType::Pointer(_)) => format!("{}->{}", target.accept(self), symbol.mangled()),
             _ => format!("{}.{}", target.accept(self), symbol.mangled()),
         }
     }
@@ -386,8 +384,12 @@ impl ExprVisitor for Codegen {
         }
     }
 
-    fn visit_explicit_type_expr(&mut self, _expr: &Expr, _name: &Token, _modifier: &Option<Token>) -> Self::ExprResult {
+    fn visit_explicit_type_expr(
+        &mut self,
+        _expr: &Expr,
+        _name: &Token,
+        _modifier: &Option<Token>,
+    ) -> Self::ExprResult {
         unreachable!()
     }
-
 }

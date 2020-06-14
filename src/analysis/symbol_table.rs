@@ -1,9 +1,9 @@
 use super::type_checker::NodeType;
+use crate::guard;
 use crate::lexing::*;
+use crate::library::*;
 use crate::parsing::*;
 use std::collections::HashMap;
-use crate::guard;
-use crate::stdlib::*;
 use std::rc::Rc;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -12,7 +12,6 @@ pub struct Symbol {
 }
 
 impl Symbol {
-
     pub fn new(parent: Option<&Symbol>, name: &Token) -> Self {
         Symbol::new_str(parent, name.lexeme())
     }
@@ -38,8 +37,8 @@ impl Symbol {
         if comopnents.is_empty() {
             None
         } else {
-            Some(Symbol { 
-                id: comopnents.join("$")
+            Some(Symbol {
+                id: comopnents.join("$"),
             })
         }
     }
@@ -47,7 +46,6 @@ impl Symbol {
     pub fn last_component(&self) -> &str {
         self.id.split("$").last().unwrap()
     }
-
 }
 
 impl std::fmt::Display for Symbol {
@@ -91,7 +89,7 @@ pub struct SymbolTableBuilder {
 }
 
 impl SymbolTableBuilder {
-    pub fn build_symbols(lib: IncompleteLib) -> Rc<Lib> {
+    pub fn build_symbols(lib: IncompleteLib) -> Lib {
         let lib = Rc::new(lib);
 
         let mut builder = SymbolTableBuilder {
@@ -112,13 +110,11 @@ impl SymbolTableBuilder {
         std::mem::drop(builder);
 
         let lib = Rc::try_unwrap(lib).ok().unwrap();
-        Rc::new(lib.add_symbols(table))
+        lib.add_symbols(table)
     }
 
     fn build_list(&mut self, stmts: &[Stmt]) -> Vec<NodeType> {
-        stmts.iter().map(|s| {
-            s.accept(self)
-        }).collect()
+        stmts.iter().map(|s| s.accept(self)).collect()
     }
 
     fn resolve_symbol(&self, symbol: &Symbol) -> Option<&NodeType> {
@@ -149,8 +145,8 @@ impl SymbolTableBuilder {
             self.resolve_symbol(&Symbol::new(None, type_token))
         {
             NodeType::Type(symbol.clone())
-        } else if let Some(NodeType::Metatype(symbol)) = self
-            .resolve_symbol(&Symbol::new(self.context.last(), type_token))
+        } else if let Some(NodeType::Metatype(symbol)) =
+            self.resolve_symbol(&Symbol::new(self.context.last(), type_token))
         {
             NodeType::Type(symbol.clone())
         } else {
@@ -180,20 +176,22 @@ impl StmtVisitor for SymbolTableBuilder {
 
             self.build_list(&methods);
 
-            self.context.push(Symbol::new_str(self.context.last(), "Meta"));
+            self.context
+                .push(Symbol::new_str(self.context.last(), "Meta"));
             self.build_list(&meta_methods);
 
             let init_symbol = Symbol::new_str(self.context.last(), "init");
             if self.table.get_type(&init_symbol).is_none() {
-                let init_type = NodeType::Function(
-                    field_types, 
-                    Box::new(NodeType::Type(new_symbol))
+                let init_type =
+                    NodeType::Function(field_types, Box::new(NodeType::Type(new_symbol)));
+                self.table.insert(
+                    Symbol::new_str(self.context.last(), "init"),
+                    init_type.clone(),
                 );
-                self.table.insert(Symbol::new_str(self.context.last(), "init"), init_type.clone());
             }
-            
+
             self.context.pop();
-            
+
             self.context.pop();
         } else {
             self.table.insert(new_symbol.clone(), new_type.clone());
@@ -262,5 +260,4 @@ impl StmtVisitor for SymbolTableBuilder {
     fn visit_builtin_stmt(&mut self, _stmt: &Stmt, inner: &Box<Stmt>) -> Self::StmtResult {
         inner.accept(self)
     }
-
 }

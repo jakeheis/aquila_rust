@@ -144,7 +144,7 @@ impl CWriter {
                 } else {
                     symbol.mangled()
                 }
-            },
+            }
             NodeType::Pointer(ty) => format!("{}*", self.convert_type(ty)),
             other_type => panic!("Can't convert type {}", other_type),
         }

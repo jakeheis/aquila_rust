@@ -2,10 +2,10 @@ use super::c_writer::CWriter;
 use crate::analysis::*;
 
 pub fn write(symbol: &Symbol, writer: &mut CWriter) {
-    let id_ref: &str = &symbol.id; 
+    let id_ref: &str = &symbol.id;
     match id_ref {
         "allocate" => write_allocate(writer),
-        _ => panic!()
+        _ => panic!(),
     }
 }
 

@@ -1,8 +1,8 @@
 use crate::analysis::*;
+use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::parsing::*;
 use crate::source::{self, Source};
-use crate::diagnostic::*;
 use std::rc::Rc;
 
 pub struct Lib {
@@ -14,7 +14,7 @@ pub struct Lib {
     pub dependencies: Vec<Rc<Lib>>,
 }
 
-pub struct LogOptions {
+struct LogOptions {
     lexer: bool,
     parser: bool,
     symbol_maker: bool,
@@ -22,14 +22,14 @@ pub struct LogOptions {
 }
 
 impl Lib {
-
     pub fn from_source(source: Source) -> Result<Lib, &'static str> {
         let name = source.name().to_string();
         Lib::build_lib(source, &name, true)
     }
-    
+
     pub fn stdlib() -> Lib {
-        let src = source::file("/Users/jakeheiser/Desktop/Projects/Rust/aquila/src/stdlib/stdlib.aq");
+        let src =
+            source::file("/Users/jakeheiser/Desktop/Projects/Rust/aquila/src/stdlib/stdlib.aq");
         Lib::build_lib(src, "stdlib", false).unwrap()
     }
 
@@ -40,25 +40,25 @@ impl Lib {
             symbol_maker: true,
             type_checker: true,
         };
-    
+
         let reporter: Rc<dyn Reporter> = DefaultReporter::new();
-    
+
         let lexer = Lexer::new(source, Rc::clone(&reporter));
         let tokens = lexer.lex();
-    
+
         if log_options.lexer {
             let slice: &[Token] = &tokens;
             println!("lexed {}", slice.token_string());
         }
-    
+
         let parser = Parser::new(tokens, Rc::clone(&reporter));
         let stmts = parser.parse();
-    
+
         if log_options.parser {
             let mut printer = ASTPrinter::new();
             printer.print(&stmts);
         }
-    
+
         if reporter.has_errored() {
             return Err("Parsing failed");
         }
@@ -83,27 +83,26 @@ impl Lib {
         if log_options.symbol_maker {
             println!("Table: {}", lib.symbols);
         }
-    
-        TypeChecker::check(Rc::clone(&lib), Rc::clone(&reporter));
-    
-        if log_options.type_checker {    
+
+        let lib = TypeChecker::check(lib, Rc::clone(&reporter));
+
+        if log_options.type_checker {
             let mut printer = ASTPrinter::new();
             printer.print(&lib.type_decls);
             printer.print(&lib.function_decls);
             printer.print(&lib.other);
         }
-    
+
         if reporter.has_errored() {
             return Err("Type checker failed");
         }
-    
-        let mut lib = Rc::try_unwrap(lib).ok().unwrap();
-        CycleChecker::check(&mut lib, Rc::clone(&reporter));
+
+        let lib = CycleChecker::check(lib, Rc::clone(&reporter));
 
         if reporter.has_errored() {
             return Err("Cycle checker failed");
         }
-    
+
         Ok(lib)
     }
 
@@ -128,19 +127,16 @@ impl Lib {
             match &stmt.kind {
                 StmtKind::TypeDecl(..) => type_decls.push(stmt),
                 StmtKind::FunctionDecl(..) => function_decls.push(stmt),
-                StmtKind::Builtin(builtin) => {
-                    match &builtin.kind {
-                        StmtKind::TypeDecl(..) => type_decls.push(stmt),
-                        StmtKind::FunctionDecl(..) => function_decls.push(stmt),
-                        _ => other.push(stmt),
-                    }
-                }
+                StmtKind::Builtin(builtin) => match &builtin.kind {
+                    StmtKind::TypeDecl(..) => type_decls.push(stmt),
+                    StmtKind::FunctionDecl(..) => function_decls.push(stmt),
+                    _ => other.push(stmt),
+                },
                 _ => other.push(stmt),
             }
         }
         (type_decls, function_decls, other)
     }
-
 }
 
 // IncompleteLib
@@ -154,7 +150,6 @@ pub struct IncompleteLib {
 }
 
 impl IncompleteLib {
-
     pub fn add_symbols(self, symbols: SymbolTable) -> Lib {
         Lib {
             name: self.name,
@@ -174,5 +169,4 @@ impl IncompleteLib {
         }
         None
     }
-
 }

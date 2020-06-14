@@ -1,11 +1,11 @@
 use super::*;
 use crate::diagnostic::*;
 use crate::guard;
+use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
-use crate::stdlib::*;
 
 pub struct CycleChecker {
     field_map: HashMap<Symbol, (Span, HashSet<Symbol>)>,
@@ -13,8 +13,7 @@ pub struct CycleChecker {
 }
 
 impl CycleChecker {
-
-    pub fn check(lib: &mut Lib, reporter: Rc<dyn Reporter>) {
+    pub fn check(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Lib {
         let mut field_map: HashMap<Symbol, (Span, HashSet<Symbol>)> = HashMap::new();
 
         for stmt in &lib.type_decls {
@@ -40,7 +39,9 @@ impl CycleChecker {
             reporter,
         };
 
-        checker.run(lib);
+        checker.run(&mut lib);
+
+        lib
     }
 
     fn run(&mut self, lib: &mut Lib) {

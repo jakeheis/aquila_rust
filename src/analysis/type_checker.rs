@@ -1,11 +1,11 @@
 use super::symbol_table::*;
 use crate::diagnostic::*;
+use crate::guard;
 use crate::lexing::*;
+use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
 use std::rc::Rc;
-use crate::guard;
-use crate::stdlib::*;
 
 type Result = DiagnosticResult<NodeType>;
 
@@ -32,7 +32,6 @@ impl Scope {
         decl.symbol.replace(Some(new_symbol));
         decl.stmt_type.replace(Some(var_type.clone()));
     }
-
 }
 
 pub struct TypeChecker {
@@ -47,9 +46,10 @@ pub struct Analysis {
 }
 
 impl TypeChecker {
-
-    pub fn check(lib: Rc<Lib>, reporter: Rc<dyn Reporter>) {
+    pub fn check(lib: Lib, reporter: Rc<dyn Reporter>) -> Lib {
         let top_level = Scope::new(None, None);
+
+        let lib = Rc::new(lib);
 
         let mut checker = TypeChecker {
             reporter,
@@ -64,6 +64,10 @@ impl TypeChecker {
         checker.push_scope_named("main");
         checker.check_list(&lib.other);
         checker.pop_scope();
+
+        std::mem::drop(checker);
+
+        Rc::try_unwrap(lib).ok().unwrap()
     }
 
     fn check_list(&mut self, stmt_list: &[Stmt]) -> Analysis {
@@ -121,7 +125,8 @@ impl TypeChecker {
 
     fn push_function_scope(&mut self, name: &Token, ret_type: NodeType) -> Symbol {
         let symbol = Symbol::new(self.current_symbol(), name);
-        self.scopes.push(Scope::new(Some(symbol.clone()), Some(ret_type)));
+        self.scopes
+            .push(Scope::new(Some(symbol.clone()), Some(ret_type)));
         symbol
     }
 
@@ -155,7 +160,7 @@ impl TypeChecker {
     fn resolve_type(&self, type_token: &Token) -> Result {
         if let Some(primitive) = NodeType::primitive(type_token) {
             Ok(primitive)
-        } else if let Some((type_symbol, node_type)) = self.resolve_var(type_token.lexeme()) {
+        } else if let Some((_, node_type)) = self.resolve_var(type_token.lexeme()) {
             if let NodeType::Metatype(type_symbol) = node_type {
                 let compound_type = NodeType::Type(type_symbol.clone());
                 Ok(compound_type)
@@ -166,7 +171,6 @@ impl TypeChecker {
             Err(Diagnostic::error(type_token, "Undefined type"))
         }
     }
-
 }
 
 impl StmtVisitor for TypeChecker {
@@ -206,7 +210,10 @@ impl StmtVisitor for TypeChecker {
         body: &[Stmt],
         _is_meta: bool,
     ) -> Analysis {
-        let return_type = return_type_expr.as_ref().and_then(|r| self.check_expr(r)).unwrap_or(NodeType::Void);
+        let return_type = return_type_expr
+            .as_ref()
+            .and_then(|r| self.check_expr(r))
+            .unwrap_or(NodeType::Void);
 
         let symbol = self.push_function_scope(name, return_type.clone());
         stmt.symbol.replace(Some(symbol));
@@ -234,13 +241,11 @@ impl StmtVisitor for TypeChecker {
         kind: &Option<Expr>,
         value: &Option<Expr>,
     ) -> Analysis {
-        let explicit_type = kind.as_ref().and_then(|k| {
-            match k.accept(self) {
-                Ok(explicit_type) => Some(explicit_type),
-                Err(diagnostic) => {
-                    self.report_error(diagnostic);
-                    None
-                }
+        let explicit_type = kind.as_ref().and_then(|k| match k.accept(self) {
+            Ok(explicit_type) => Some(explicit_type),
+            Err(diagnostic) => {
+                self.report_error(diagnostic);
+                None
             }
         });
 
@@ -250,16 +255,20 @@ impl StmtVisitor for TypeChecker {
             (Some(explicit), Some(implicit)) => {
                 self.current_scope().define_var(&stmt, name, &explicit);
                 if explicit != implicit {
-                    let diagnostic = self.type_mismatch(&value.as_ref().unwrap().span().clone(), implicit, explicit);
+                    let diagnostic = self.type_mismatch(
+                        &value.as_ref().unwrap().span().clone(),
+                        implicit,
+                        explicit,
+                    );
                     self.report_error(diagnostic);
                 }
-            },
+            }
             (Some(explicit), None) => self.current_scope().define_var(&stmt, name, &explicit),
             (None, Some(implicit)) => self.current_scope().define_var(&stmt, name, &implicit),
             (None, None) => {
                 let diag = Diagnostic::error(name, "Can't infer type");
                 self.report_error(diag);
-            },
+            }
         }
 
         Analysis {
@@ -355,7 +364,6 @@ impl StmtVisitor for TypeChecker {
         self.is_builtin = false;
         result
     }
-
 }
 
 impl ExprVisitor for TypeChecker {
@@ -441,24 +449,20 @@ impl ExprVisitor for TypeChecker {
         let func_type = target.accept(self)?;
 
         let (params, return_type) = match func_type.clone() {
-            NodeType::Function(p, r) => {
-                Ok((p ,*r))
-            },
+            NodeType::Function(p, r) => Ok((p, *r)),
             NodeType::Metatype(symbol) => {
                 let meta_symbol = Symbol::new_str(Some(&symbol), "Meta");
                 let init_symbol = Symbol::new_str(Some(&meta_symbol), "init");
                 println!("Lokoing up symbol {}", init_symbol);
-                
+
                 let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
                 guard!(NodeType::Function[p, r] = init_type.clone());
-                Ok((p ,*r))
-            },
-            _ => {
-                Err(Diagnostic::error(
-                    target,
-                    &format!("Cannot call type {}", func_type),
-                ))
+                Ok((p, *r))
             }
+            _ => Err(Diagnostic::error(
+                target,
+                &format!("Cannot call type {}", func_type),
+            )),
         }?;
 
         let arg_types: DiagnosticResult<Vec<NodeType>> =
@@ -492,16 +496,13 @@ impl ExprVisitor for TypeChecker {
         let type_symbol = match target_type {
             NodeType::Type(type_symbol) => Ok(type_symbol),
             NodeType::Metatype(type_symbol) => Ok(Symbol::new_str(Some(&type_symbol), "Meta")),
-            _ => {
-                Err(Diagnostic::error(
-                    target,
-                    &format!("Cannot access property of a {}", target_type),
-                ))
-            }
+            _ => Err(Diagnostic::error(
+                target,
+                &format!("Cannot access property of a {}", target_type),
+            )),
         }?;
 
         let field_symbol = Symbol::new(Some(&type_symbol), field);
-        println!("assigning symbol {} to filed", field_symbol);
 
         if let Some(field_type) = self.lib.resolve_symbol(&field_symbol) {
             expr.symbol.replace(Some(field_symbol));
@@ -537,7 +538,12 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_explicit_type_expr(&mut self, _expr: &Expr, name: &Token, modifier: &Option<Token>) -> Self::ExprResult {
+    fn visit_explicit_type_expr(
+        &mut self,
+        _expr: &Expr,
+        name: &Token,
+        modifier: &Option<Token>,
+    ) -> Self::ExprResult {
         let main = self.resolve_type(name)?;
         if modifier.is_some() {
             Ok(NodeType::Pointer(Box::new(main)))
@@ -545,7 +551,6 @@ impl ExprVisitor for TypeChecker {
             Ok(main)
         }
     }
-
 }
 
 // NodeType
@@ -564,7 +569,6 @@ pub enum NodeType {
 }
 
 impl NodeType {
-
     pub fn primitive(token: &Token) -> Option<Self> {
         match token.lexeme() {
             "void" => Some(NodeType::Void),
@@ -583,10 +587,9 @@ impl NodeType {
     pub fn represented_type(&self) -> &NodeType {
         match self {
             NodeType::Pointer(inner) => inner.represented_type(),
-            _ => self
+            _ => self,
         }
     }
-
 }
 
 impl std::fmt::Display for NodeType {

@@ -20,7 +20,6 @@ enum Context {
 }
 
 impl Parser {
-    
     pub fn new(tokens: Vec<Token>, reporter: Rc<dyn Reporter>) -> Self {
         Parser {
             tokens,
@@ -45,7 +44,7 @@ impl Parser {
                         stmt
                     };
                     stmts.push(stmt)
-                },
+                }
                 Err(diagnostic) => {
                     self.reporter.report(diagnostic);
                     self.synchronize();
@@ -185,7 +184,7 @@ impl Parser {
                     } else {
                         methods.push(stmt)
                     }
-                },
+                }
                 _ => panic!(),
             }
         }
@@ -243,7 +242,7 @@ impl Parser {
             return_type,
             body,
             right_brace.span().clone(),
-            meta
+            meta,
         ))
     }
 
@@ -422,11 +421,7 @@ impl Parser {
         }
     }
 
-    fn parse_var(
-        &mut self,
-        allow_type: bool,
-        require_type: bool,
-    ) -> Result<(Token, Option<Expr>)> {
+    fn parse_var(&mut self, allow_type: bool, require_type: bool) -> Result<(Token, Option<Expr>)> {
         let name = self.previous().clone();
         let mut explicit_type: Option<Expr> = None;
 
@@ -455,7 +450,9 @@ impl Parser {
             None
         };
 
-        let name = self.consume(TokenKind::Identifier, "Expected variable type")?.clone();
+        let name = self
+            .consume(TokenKind::Identifier, "Expected variable type")?
+            .clone();
 
         Ok(Expr::explicit_type(name, modifier))
     }
@@ -518,7 +515,9 @@ type InfixFn = fn(&mut Parser, lhs: Expr, can_assign: bool) -> Result<Expr>;
 impl TokenKind {
     fn prefix(&self) -> Option<PrefixFn> {
         match self {
-            TokenKind::Minus | TokenKind::Bang | TokenKind::Ampersand | TokenKind::Star => Some(Parser::unary),
+            TokenKind::Minus | TokenKind::Bang | TokenKind::Ampersand | TokenKind::Star => {
+                Some(Parser::unary)
+            }
             TokenKind::True | TokenKind::False | TokenKind::Number | TokenKind::StringLiteral => {
                 Some(Parser::literal)
             }

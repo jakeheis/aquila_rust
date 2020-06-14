@@ -61,7 +61,10 @@ impl Stmt {
         right_brace: &Token,
     ) -> Self {
         let span = Span::join(&type_span, right_brace);
-        Stmt::new(StmtKind::TypeDecl(name, fields, methods, meta_methods), span)
+        Stmt::new(
+            StmtKind::TypeDecl(name, fields, methods, meta_methods),
+            span,
+        )
     }
 
     pub fn function_decl(
@@ -122,7 +125,6 @@ impl Stmt {
         let span = stmt.span().clone();
         Stmt::new(StmtKind::Builtin(Box::new(stmt)), span)
     }
-    
 }
 
 pub trait StmtVisitor {
@@ -211,7 +213,9 @@ impl Expr {
             ExprKind::Field(target, field) => visitor.visit_field_expr(&self, &target, &field),
             ExprKind::Literal(token) => visitor.visit_literal_expr(&self, &token),
             ExprKind::Variable(name) => visitor.visit_variable_expr(&self, &name),
-            ExprKind::ExplicitType(name, modifier) => visitor.visit_explicit_type_expr(&self, &name, &modifier),
+            ExprKind::ExplicitType(name, modifier) => {
+                visitor.visit_explicit_type_expr(&self, &name, &modifier)
+            }
         }
     }
 
@@ -256,8 +260,11 @@ impl Expr {
     }
 
     pub fn explicit_type(name: Token, modifier: Option<Token>) -> Self {
-        let span = (&modifier).as_ref().map(|m| Span::join(m, &name)).unwrap_or(name.span().clone());
-        Expr::new(ExprKind::ExplicitType(name, modifier), span) 
+        let span = (&modifier)
+            .as_ref()
+            .map(|m| Span::join(m, &name))
+            .unwrap_or(name.span().clone());
+        Expr::new(ExprKind::ExplicitType(name, modifier), span)
     }
 
     pub fn lexeme(&self) -> &str {
@@ -286,7 +293,12 @@ pub trait ExprVisitor {
     fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, field: &Token) -> Self::ExprResult;
     fn visit_literal_expr(&mut self, expr: &Expr, token: &Token) -> Self::ExprResult;
     fn visit_variable_expr(&mut self, expr: &Expr, name: &Token) -> Self::ExprResult;
-    fn visit_explicit_type_expr(&mut self, expr: &Expr, name: &Token, modifier: &Option<Token>) -> Self::ExprResult;
+    fn visit_explicit_type_expr(
+        &mut self,
+        expr: &Expr,
+        name: &Token,
+        modifier: &Option<Token>,
+    ) -> Self::ExprResult;
 }
 
 // ASTPrinter
@@ -355,7 +367,14 @@ impl ASTPrinter {
 impl StmtVisitor for ASTPrinter {
     type StmtResult = ();
 
-    fn visit_type_decl(&mut self, stmt: &Stmt, name: &Token, fields: &[Stmt], methods: &[Stmt], meta_methods: &[Stmt]) {
+    fn visit_type_decl(
+        &mut self,
+        stmt: &Stmt,
+        name: &Token,
+        fields: &[Stmt],
+        methods: &[Stmt],
+        meta_methods: &[Stmt],
+    ) {
         let symbol = stmt
             .symbol
             .borrow()
@@ -508,7 +527,6 @@ impl StmtVisitor for ASTPrinter {
             inner.accept(visitor);
         })
     }
-
 }
 
 impl ExprVisitor for ASTPrinter {
@@ -587,9 +605,15 @@ impl ExprVisitor for ASTPrinter {
     }
 
     fn visit_explicit_type_expr(&mut self, _expr: &Expr, name: &Token, modifier: &Option<Token>) {
-        let modifier = modifier.as_ref().map(|t| t.lexeme().to_string()).unwrap_or("<none>".to_string());
-        let line = format!("ExplicitType(name: {}, modifier: {})", name.lexeme(), modifier);
+        let modifier = modifier
+            .as_ref()
+            .map(|t| t.lexeme().to_string())
+            .unwrap_or("<none>".to_string());
+        let line = format!(
+            "ExplicitType(name: {}, modifier: {})",
+            name.lexeme(),
+            modifier
+        );
         self.write_ln(&line);
     }
-
 }

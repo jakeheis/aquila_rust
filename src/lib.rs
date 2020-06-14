@@ -2,13 +2,13 @@ pub mod analysis;
 pub mod codegen;
 pub mod diagnostic;
 pub mod lexing;
+pub mod library;
 pub mod parsing;
 pub mod source;
-pub mod stdlib;
 
-pub use source::*;
-use stdlib::Lib;
 use codegen::Codegen;
+use library::Lib;
+pub use source::*;
 
 pub fn run(source: Source) -> Result<(), &'static str> {
     let lib = Lib::from_source(source)?;
