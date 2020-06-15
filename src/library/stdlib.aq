@@ -26,7 +26,7 @@ type String {
     }
 
     def append_literal(lit: ptr byte): String {
-        let size = storage.size + strlen(lit) + 1;
+        let size = storage.size + strlen(lit);
         let new_storage = FatPointer.heap_alloc(size);
         
         memcpy(new_storage.location, storage.location, storage.size);

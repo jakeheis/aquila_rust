@@ -24,6 +24,7 @@ pub struct Codegen {
     current_type: Option<Symbol>,
     stage: CodegenStage,
     is_builtin: bool,
+    temp_count: u32,
 }
 
 impl Codegen {
@@ -65,6 +66,7 @@ impl Codegen {
             current_type: None,
             stage: CodegenStage::ForwardStructDecls,
             is_builtin: false,
+            temp_count: 0,
         };
 
         codegen.stage = CodegenStage::ForwardStructDecls;
@@ -116,6 +118,17 @@ impl Codegen {
             },
             _ => panic!(),
         }
+    }
+
+    fn new_temp(&mut self, temp_type: &NodeType, value: String) -> (String, String) {
+        let temp_name = format!("_temp_{}", self.temp_count);
+        self.temp_count += 1;
+
+        let temp_type = self.writer.convert_type(temp_type);
+
+        let temp = format!("{} {} = {};", temp_type, temp_name, value);
+
+        (temp, temp_name)
     }
 }
 
@@ -416,11 +429,9 @@ impl ExprVisitor for Codegen {
                 let first_called_symbol = first_called.get_symbol().unwrap();
                 let first_called_type = self.lib.resolve_symbol(&first_called_symbol).unwrap();
                 guard!(NodeType::Function[_params, first_called_ret_type] = first_called_type);
-                let ret_type = self.writer.convert_type(first_called_ret_type);
-
-                let temp_name = format!("temp__{}", method_symbol.mangled());
-
-                let temp = format!("{} {} = {};", ret_type, temp_name, breakdown.main);
+                let first_called_ret_type = (**first_called_ret_type).clone();
+                
+                let (temp, temp_name) = self.new_temp(&first_called_ret_type, breakdown.main);
                 breakdown.temps.push(temp);
                 breakdown.main = temp_name;
             },
@@ -449,11 +460,9 @@ impl ExprVisitor for Codegen {
                 let target_symbol = function.get_symbol().unwrap();
                 let target_type = self.lib.resolve_symbol(&target_symbol).unwrap();
                 guard!(NodeType::Function[_params, ret_type] = target_type);
-                let ret_type = self.writer.convert_type(ret_type);
-
-                let temp_name = format!("temp__{}", target_symbol.mangled());
-
-                let temp = format!("{} {} = {};", ret_type, temp_name, target_breakdown.main);
+                let ret_type = (**ret_type).clone();
+                
+                let (temp, temp_name) = self.new_temp(&ret_type, target_breakdown.main);
                 target_breakdown.temps.push(temp);
 
                 let line = format!("{}.{}", temp_name, field_symbol.mangled());
