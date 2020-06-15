@@ -41,4 +41,8 @@ type String {
         return append_literal(string.storage.location);
     }
 
+    def print_str() {
+        print storage.location;
+    }
+
 }

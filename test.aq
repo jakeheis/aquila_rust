@@ -48,8 +48,14 @@ let my_str = "helloo";
 let dyn = String.literal(my_str);
 let dyn2 = String.literal(" yo");
 
+let combo1 = dyn.append_literal(" world");
+combo1.print_str();
+
 print dyn.append_literal(" world").storage.location;
-print dyn.append(dyn2).storage.location;
+dyn.append_literal(" world").print_str();
+
+let combo2 = dyn.append(dyn2);
+combo2.print_str();
 
 /*let sum = Adder(4, 5);
 print sum.add(6);

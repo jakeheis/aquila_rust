@@ -104,8 +104,8 @@ impl TypeChecker {
     fn type_mismatch<T: ContainsSpan>(
         &self,
         span: &T,
-        given: NodeType,
-        expected: NodeType,
+        given: &NodeType,
+        expected: &NodeType,
     ) -> Diagnostic {
         let message = format!("Expected {}, got {}", expected, given);
         Diagnostic::error(span, &message)
@@ -164,19 +164,29 @@ impl TypeChecker {
         }
     }
 
-    fn resolve_type(&self, type_token: &Token) -> Result {
-        if let Some(primitive) = NodeType::primitive(type_token) {
-            Ok(primitive)
-        } else if let Some((_, node_type)) = self.resolve_var(type_token.lexeme()) {
-            if let NodeType::Metatype(type_symbol) = node_type {
-                let compound_type = NodeType::Type(type_symbol.clone());
-                Ok(compound_type)
-            } else {
-                Err(Diagnostic::error(type_token, "Not a type"))
-            }
-        } else {
-            Err(Diagnostic::error(type_token, "Undefined type"))
+    fn check_function_arguments(&mut self, expr: &Expr, param_types: &[NodeType], args: &[Expr]) -> DiagnosticResult<()> {
+        let arg_types: DiagnosticResult<Vec<NodeType>> =
+            args.iter().map(|a| a.accept(self)).collect();
+        let arg_types = arg_types?;
+
+        if param_types.len() != arg_types.len() {
+            return Err(Diagnostic::error(
+                expr,
+                &format!(
+                    "Expected {} argument(s), got {}",
+                    param_types.len(),
+                    arg_types.len()
+                ),
+            ));
         }
+
+        for ((index, param), arg) in param_types.iter().enumerate().zip(arg_types) {
+            if param != &arg {
+                return Err(self.type_mismatch(&args[index], &arg, param));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -273,8 +283,8 @@ impl StmtVisitor for TypeChecker {
                 if explicit != implicit {
                     let diagnostic = self.type_mismatch(
                         &value.as_ref().unwrap().span().clone(),
-                        implicit,
-                        explicit,
+                        &implicit,
+                        &explicit,
                     );
                     self.report_error(diagnostic);
                 }
@@ -301,7 +311,7 @@ impl StmtVisitor for TypeChecker {
     ) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
             if cond_type != NodeType::Bool {
-                self.report_error(self.type_mismatch(condition, cond_type, NodeType::Bool));
+                self.report_error(self.type_mismatch(condition, &cond_type, &NodeType::Bool));
             }
         }
 
@@ -397,7 +407,7 @@ impl ExprVisitor for TypeChecker {
         let target_type = target.accept(self)?;
         let value_type = value.accept(self)?;
         if target_type != value_type {
-            self.report_error(self.type_mismatch(value, value_type, target_type));
+            self.report_error(self.type_mismatch(value, &value_type, &target_type));
         }
         Ok(NodeType::Void)
     }
@@ -464,50 +474,88 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_call_expr(&mut self, expr: &Expr, target: &Expr, args: &[Expr]) -> Self::ExprResult {
-        let func_type = target.accept(self)?;
+    fn visit_function_call_expr(&mut self, expr: &Expr, function: &ResolvedToken, args: &[Expr]) -> Self::ExprResult {
+        if let Some((found_symbol, node_type)) = self.resolve_var(function.span().lexeme()) {
+            let (params, return_type) = match node_type {
+                NodeType::Function(params, ret) => {
+                    function.set_symbol(found_symbol);
+                    Ok((params, ret))
+                },
+                NodeType::Metatype(symbol) => {
+                    let meta_symbol = Symbol::meta_symbol(Some(&symbol));
+                    let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
+    
+                    function.set_symbol(init_symbol.clone());
 
-        let (params, return_type) = match func_type.clone() {
-            NodeType::Function(p, r) => Ok((p, *r)),
-            NodeType::Metatype(symbol) => {
-                let meta_symbol = Symbol::meta_symbol(Some(&symbol));
-                let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
+                    let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
+                    guard!(NodeType::Function[p, r] = init_type);
+                    Ok((p, r))
+                },
+                _ => Err(Diagnostic::error(
+                    function,
+                    &format!("Cannot call type {}", node_type),
+                )),
+            }?;
 
-                let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
-                guard!(NodeType::Function[p, r] = init_type.clone());
-                Ok((p, *r))
-            }
+            let params = params.clone();
+            let return_type: NodeType = (**return_type).clone();
+
+            self.check_function_arguments(expr, &params, args)?;
+
+            Ok(return_type)
+        } else {
+            Err(Diagnostic::error(function, "Undefined function"))
+        }
+    }
+
+    fn visit_method_call_expr(&mut self, expr: &Expr, object: &Expr, method: &ResolvedToken, args: &[Expr]) -> Self::ExprResult {
+        let object_type = object.accept(self)?;
+
+        let object_symbol = match object_type {
+            NodeType::Type(type_symbol) => Ok(type_symbol),
+            NodeType::Metatype(type_symbol) => Ok(Symbol::meta_symbol(Some(&type_symbol))),
             _ => Err(Diagnostic::error(
-                target,
-                &format!("Cannot call type {}", func_type),
+                expr,
+                &format!("Cannot call method on a {}", object_type),
             )),
         }?;
 
-        let arg_types: DiagnosticResult<Vec<NodeType>> =
-            args.iter().map(|a| a.accept(self)).collect();
-        let arg_types = arg_types?;
+        let method_symbol = Symbol::new(Some(&object_symbol), &method.token);
 
-        if params.len() != arg_types.len() {
-            return Err(Diagnostic::error(
-                expr,
-                &format!(
-                    "Expected {} argument(s), got {}",
-                    params.len(),
-                    arg_types.len()
-                ),
-            ));
-        }
+        match self.lib.resolve_symbol(&method_symbol) {
+            Some(NodeType::Function(params, ret_val)) => {
+                method.set_symbol(method_symbol);
 
-        for ((index, param), arg) in params.into_iter().enumerate().zip(arg_types) {
-            if param != arg {
-                return Err(self.type_mismatch(&args[index], arg, param));
+                let params = params.clone();
+                let ret_val = (**ret_val).clone();
+
+                self.check_function_arguments(expr, &params, args)?;
+                Ok(ret_val)
+            },
+            Some(_) => {
+                Err(Diagnostic::error(
+                    &Span::join(object, method),
+                    &format!(
+                        "'{}' is a property, not a method of {}",
+                        method.span().lexeme(),
+                        object_symbol.id,
+                    ),
+                ))  
+            },
+            None => {
+                Err(Diagnostic::error(
+                    &Span::join(object, method),
+                    &format!(
+                        "Type '{}' does not has method '{}'",
+                        object_symbol.id,
+                        method.span().lexeme()
+                    ),
+                ))   
             }
         }
-
-        Ok(return_type)
     }
 
-    fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, field: &Token) -> Self::ExprResult {
+    fn visit_field_expr(&mut self, _expr: &Expr, target: &Expr, field: &ResolvedToken) -> Self::ExprResult {
         let target_type = target.accept(self)?;
 
         // let type_symbol = match target_type.represented_type() {
@@ -520,10 +568,10 @@ impl ExprVisitor for TypeChecker {
             )),
         }?;
 
-        let field_symbol = Symbol::new(Some(&type_symbol), field);
+        let field_symbol = Symbol::new(Some(&type_symbol), &field.token);
 
         if let Some(field_type) = self.lib.resolve_symbol(&field_symbol) {
-            expr.symbol.replace(Some(field_symbol));
+            field.set_symbol(field_symbol);
             Ok(field_type.clone())
         } else {
             Err(Diagnostic::error(
@@ -531,7 +579,7 @@ impl ExprVisitor for TypeChecker {
                 &format!(
                     "Type '{}' does not has field '{}'",
                     type_symbol.id,
-                    field.lexeme()
+                    field.span().lexeme()
                 ),
             ))
         }
@@ -547,9 +595,9 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_variable_expr(&mut self, expr: &Expr, name: &Token) -> Self::ExprResult {
-        if let Some((symbol, node_type)) = self.resolve_var(name.lexeme()) {
-            expr.symbol.replace(Some(symbol));
+    fn visit_variable_expr(&mut self, _expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
+        if let Some((found_symbol, node_type)) = self.resolve_var(name.span().lexeme()) {
+            name.set_symbol(found_symbol);
             Ok(node_type.clone())
         } else {
             Err(Diagnostic::error(name, "Undefined variable"))
@@ -562,7 +610,19 @@ impl ExprVisitor for TypeChecker {
         name: &Token,
         modifier: &Option<Token>,
     ) -> Self::ExprResult {
-        let main = self.resolve_type(name)?;
+        let main = if let Some(primitive) = NodeType::primitive(name) {
+            Ok(primitive)
+        } else if let Some((_, node_type)) = self.resolve_var(name.lexeme()) {
+            if let NodeType::Metatype(type_symbol) = node_type {
+                let compound_type = NodeType::Type(type_symbol.clone());
+                Ok(compound_type)
+            } else {
+                Err(Diagnostic::error(name, "Not a type"))
+            }
+        } else {
+            Err(Diagnostic::error(name, "Undefined type"))
+        }?;
+        
         if modifier.is_some() {
             Ok(NodeType::Pointer(Box::new(main)))
         } else {

@@ -132,7 +132,7 @@ impl CWriter {
         self.writeln(&line);
     }
 
-    fn convert_type(&self, node_type: &NodeType) -> String {
+    pub fn convert_type(&self, node_type: &NodeType) -> String {
         match node_type {
             NodeType::Void => String::from("void"),
             NodeType::Int => String::from("int"),

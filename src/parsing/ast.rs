@@ -176,21 +176,49 @@ pub trait StmtVisitor {
 
 // Expr
 
+pub struct ResolvedToken {
+    pub token: Token,
+    symbol: RefCell<Option<Symbol>>
+}
+
+impl ResolvedToken {
+    fn new(token: Token) -> Self {
+        ResolvedToken {
+            token,
+            symbol: RefCell::new(None),
+        }
+    }
+
+    pub fn set_symbol(&self, symbol: Symbol) {
+        self.symbol.replace(Some(symbol));
+    }
+
+    pub fn get_symbol(&self) -> Option<Symbol> {
+        self.symbol.borrow().as_ref().map(|s| s.clone())
+    }
+}
+
+impl ContainsSpan for ResolvedToken {
+    fn span(&self) -> &Span {
+        &self.token.span
+    }
+}
+
 pub enum ExprKind {
     Assignment(Box<Expr>, Box<Expr>),
     Binary(Box<Expr>, Token, Box<Expr>),
     Unary(Token, Box<Expr>),
-    Call(Box<Expr>, Vec<Expr>),
-    Field(Box<Expr>, Token),
+    FunctionCall(ResolvedToken, Vec<Expr>),
+    MethodCall(Box<Expr>, ResolvedToken, Vec<Expr>),
+    Field(Box<Expr>, ResolvedToken),
     Literal(Token),
-    Variable(Token),
+    Variable(ResolvedToken),
     ExplicitType(Token, Option<Token>),
 }
 
 pub struct Expr {
     pub kind: ExprKind,
     pub span: Span,
-    pub symbol: RefCell<Option<Symbol>>,
 }
 
 impl Expr {
@@ -198,7 +226,6 @@ impl Expr {
         Expr {
             kind,
             span,
-            symbol: RefCell::new(None),
         }
     }
 
@@ -209,7 +236,8 @@ impl Expr {
             }
             ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&self, &lhs, &op, &rhs),
             ExprKind::Unary(op, expr) => visitor.visit_unary_expr(&self, &op, &expr),
-            ExprKind::Call(target, args) => visitor.visit_call_expr(&self, &target, &args),
+            ExprKind::FunctionCall(function, args) => visitor.visit_function_call_expr(&self, &function, &args),
+            ExprKind::MethodCall(object, method, args) => visitor.visit_method_call_expr(&self, &object, &method, &args),
             ExprKind::Field(target, field) => visitor.visit_field_expr(&self, &target, &field),
             ExprKind::Literal(token) => visitor.visit_literal_expr(&self, &token),
             ExprKind::Variable(name) => visitor.visit_variable_expr(&self, &name),
@@ -240,14 +268,20 @@ impl Expr {
         Expr::new(ExprKind::Unary(op, Box::new(expr)), span)
     }
 
-    pub fn call(target: Expr, args: Vec<Expr>, right_paren: &Token) -> Self {
-        let span = Span::join(&target, right_paren);
-        Expr::new(ExprKind::Call(Box::new(target), args), span)
+    pub fn function_call(function: ResolvedToken, args: Vec<Expr>, right_paren: &Token) -> Self {
+        let span = Span::join(&function, right_paren);
+        Expr::new(ExprKind::FunctionCall(function, args), span)
+    }
+
+    pub fn method_call(object: Box<Expr>, method: ResolvedToken, args: Vec<Expr>, right_paren: &Token) -> Self {
+        let object_ref: &Expr = &object;
+        let span = Span::join(object_ref, right_paren);
+        Expr::new(ExprKind::MethodCall(object, method, args), span)
     }
 
     pub fn field(target: Expr, name: &Token) -> Self {
         let span = Span::join(&target, name);
-        Expr::new(ExprKind::Field(Box::new(target), name.clone()), span)
+        Expr::new(ExprKind::Field(Box::new(target), ResolvedToken::new(name.clone())), span)
     }
 
     pub fn literal(token: &Token) -> Self {
@@ -256,7 +290,7 @@ impl Expr {
 
     pub fn variable(name: Token) -> Self {
         let span = name.span().clone();
-        Expr::new(ExprKind::Variable(name), span)
+        Expr::new(ExprKind::Variable(ResolvedToken::new(name)), span)
     }
 
     pub fn explicit_type(name: Token, modifier: Option<Token>) -> Self {
@@ -289,10 +323,11 @@ pub trait ExprVisitor {
         rhs: &Expr,
     ) -> Self::ExprResult;
     fn visit_unary_expr(&mut self, expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult;
-    fn visit_call_expr(&mut self, expr: &Expr, target: &Expr, args: &[Expr]) -> Self::ExprResult;
-    fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, field: &Token) -> Self::ExprResult;
+    fn visit_function_call_expr(&mut self, expr: &Expr, function: &ResolvedToken, args: &[Expr]) -> Self::ExprResult;
+    fn visit_method_call_expr(&mut self, expr: &Expr, object: &Expr, method: &ResolvedToken, args: &[Expr]) -> Self::ExprResult;
+    fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, field: &ResolvedToken) -> Self::ExprResult;
     fn visit_literal_expr(&mut self, expr: &Expr, token: &Token) -> Self::ExprResult;
-    fn visit_variable_expr(&mut self, expr: &Expr, name: &Token) -> Self::ExprResult;
+    fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult;
     fn visit_explicit_type_expr(
         &mut self,
         expr: &Expr,
@@ -555,12 +590,30 @@ impl ExprVisitor for ASTPrinter {
         })
     }
 
-    fn visit_call_expr(&mut self, _expr: &Expr, target: &Expr, args: &[Expr]) {
-        self.write_ln("Call");
+    fn visit_function_call_expr(&mut self, _expr: &Expr, function: &ResolvedToken, args: &[Expr]) -> Self::ExprResult {
+        let symbol = function
+            .get_symbol()
+            .map(|s| s.id.clone())
+            .unwrap_or(String::from("<none>"));
+        self.write_ln(&format!("FunctionCall(name: {}, symbol: {})", function.token.lexeme(), symbol));
         self.indent(|visitor| {
-            visitor.write_ln("Target");
+            visitor.write_ln("Arguments");
             visitor.indent(|visitor| {
-                target.accept(visitor);
+                args.iter().for_each(|a| a.accept(visitor));
+            });
+        })
+    }
+
+    fn visit_method_call_expr(&mut self, _expr: &Expr, object: &Expr, method: &ResolvedToken, args: &[Expr]) -> Self::ExprResult {
+        let symbol = method
+            .get_symbol()
+            .map(|s| s.id.clone())
+            .unwrap_or(String::from("<none>"));
+        self.write_ln(&format!("MethodCall(name: {}, symbol: {})", method.token.lexeme(), symbol));
+        self.indent(|visitor| {
+            visitor.write_ln("Object");
+            visitor.indent(|visitor| {
+                object.accept(visitor);
             });
             visitor.write_ln("Arguments");
             visitor.indent(|visitor| {
@@ -569,16 +622,14 @@ impl ExprVisitor for ASTPrinter {
         })
     }
 
-    fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, field: &Token) {
-        let symbol = expr
-            .symbol
-            .borrow()
-            .as_ref()
+    fn visit_field_expr(&mut self, _expr: &Expr, target: &Expr, field: &ResolvedToken) {
+        let symbol = field
+            .get_symbol()
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "Field(name: {}, symbol: {})",
-            field.lexeme(),
+            field.span().lexeme(),
             symbol
         ));
         self.indent(|visitor| {
@@ -590,16 +641,14 @@ impl ExprVisitor for ASTPrinter {
         self.write_ln(&format!("Literal({})", token.lexeme()))
     }
 
-    fn visit_variable_expr(&mut self, expr: &Expr, name: &Token) {
-        let symbol = expr
-            .symbol
-            .borrow()
-            .as_ref()
+    fn visit_variable_expr(&mut self, _expr: &Expr, name: &ResolvedToken) {
+        let symbol = name
+            .get_symbol()
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "Variable(name: {}, symbol: {})",
-            name.lexeme(),
+            name.span().lexeme(),
             symbol
         ))
     }

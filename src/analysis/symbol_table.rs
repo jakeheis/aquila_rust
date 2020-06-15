@@ -58,6 +58,10 @@ impl Symbol {
     pub fn is_meta(&self) -> bool {
         self.last_component() == "Meta"
     }
+
+    pub fn is_meta_owned(&self) -> bool {
+        self.parent().map(|p| p.is_meta()).unwrap_or(false)
+    }
 }
 
 impl std::fmt::Display for Symbol {
@@ -243,10 +247,10 @@ impl StmtVisitor for SymbolTableBuilder {
         &mut self,
         _stmt: &Stmt,
         _name: &Token,
-        kind: &Option<Expr>,
+        explicit_type: &Option<Expr>,
         _value: &Option<Expr>,
     ) -> Self::StmtResult {
-        self.resolve_type_expr(kind.as_ref().unwrap())
+        self.resolve_type_expr(explicit_type.as_ref().unwrap())
     }
 
     fn visit_if_stmt(

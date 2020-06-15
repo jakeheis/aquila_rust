@@ -385,17 +385,29 @@ impl Parser {
                 self.consume(TokenKind::Comma, "Expect ',' between arguments")?;
             }
         }
+
         let right_paren = self.consume(TokenKind::RightParen, "Expect ')' after arguments")?;
-        Ok(Expr::call(lhs, args, right_paren))
+
+        match lhs.kind {
+            ExprKind::Field(object, field) => {
+                Ok(Expr::method_call(object, field, args, right_paren))
+            },
+            ExprKind::Variable(name) => {
+                Ok(Expr::function_call(name, args, right_paren))
+            },
+            _ => {
+                let span = Span::join(&lhs, right_paren);
+                Err(Diagnostic::error(&span, "Cannot call this"))
+            }
+        }
     }
 
     fn field(&mut self, lhs: Expr, can_assign: bool) -> Result<Expr> {
         let field_name = self.consume(TokenKind::Identifier, "Expect field name after '.'")?;
 
-        let target_is_call = if let ExprKind::Call(..) = &lhs.kind {
-            true
-        } else {
-            false
+        let target_is_call = match &lhs.kind {
+            ExprKind::FunctionCall(..) | ExprKind::MethodCall(..) => true,
+            _ => false,
         };
 
         let field = Expr::field(lhs, field_name);

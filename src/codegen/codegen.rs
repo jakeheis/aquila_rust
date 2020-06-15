@@ -100,6 +100,13 @@ impl Codegen {
             stmt.accept(self);
         }
     }
+
+    fn handle_expr_breakdown(&mut self, breakdown: ExprBreakdown) -> String {
+        for temp in breakdown.temps {
+            self.writer.writeln(&temp);
+        }
+        breakdown.main
+    }
 }
 
 impl StmtVisitor for Codegen {
@@ -258,6 +265,7 @@ impl StmtVisitor for Codegen {
 
         if let Some(value) = value.as_ref() {
             let value = value.accept(self);
+            let value = self.handle_expr_breakdown(value);
             self.writer.write_assignment(var_symbol.mangled(), value);
         }
     }
@@ -270,6 +278,7 @@ impl StmtVisitor for Codegen {
         else_body: &[Stmt],
     ) -> Self::StmtResult {
         let condition = condition.accept(self);
+        let condition = self.handle_expr_breakdown(condition);
         self.writer.start_if_block(condition);
         self.gen_stmts(body);
         if !else_body.is_empty() {
@@ -280,7 +289,10 @@ impl StmtVisitor for Codegen {
     }
 
     fn visit_return_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult {
-        let val = expr.as_ref().map(|e| e.accept(self));
+        let val = expr.as_ref().map(|e| {
+            let val = e.accept(self);
+            self.handle_expr_breakdown(val)
+        });
         self.writer.write_return(val)
     }
 
@@ -288,7 +300,8 @@ impl StmtVisitor for Codegen {
         let borrowed_type = stmt.stmt_type.borrow();
 
         if let Some(expr) = expr.as_ref() {
-            let expr_str = expr.accept(self);
+            let expr = expr.accept(self);
+            let expr_str = self.handle_expr_breakdown(expr);
             self.writer
                 .write_print(Some((borrowed_type.as_ref().unwrap(), expr_str)));
         } else {
@@ -297,7 +310,9 @@ impl StmtVisitor for Codegen {
     }
 
     fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) -> Self::StmtResult {
-        let line = format!("{};", expr.accept(self));
+        let expr = expr.accept(self);
+        let expr = self.handle_expr_breakdown(expr);
+        let line = format!("{};", expr);
         self.writer.writeln(&line);
     }
 
@@ -308,8 +323,36 @@ impl StmtVisitor for Codegen {
     }
 }
 
+pub struct ExprBreakdown {
+    temps: Vec<String>,
+    main: String
+}
+
+impl ExprBreakdown {
+    fn new(temps: Vec<String>, main: String) -> Self {
+        ExprBreakdown {
+            temps,
+            main,
+        }
+    }
+
+    fn atom(simple: String) -> Self {
+        ExprBreakdown {
+            temps: Vec::new(),
+            main: simple,
+        }
+    }
+
+    fn parent(simple: String, children: Vec<ExprBreakdown>) -> Self {
+        ExprBreakdown {
+            temps: children.into_iter().flat_map(|c| c.temps).collect(),
+            main: simple,
+        }
+    }
+}
+
 impl ExprVisitor for Codegen {
-    type ExprResult = String;
+    type ExprResult = ExprBreakdown;
 
     fn visit_assignment_expr(
         &mut self,
@@ -317,7 +360,9 @@ impl ExprVisitor for Codegen {
         target: &Expr,
         value: &Expr,
     ) -> Self::ExprResult {
-        format!("{} = {}", target.accept(self), value.accept(self))
+        let (lhs, rhs) = (target.accept(self), value.accept(self));
+        let line = format!("{} = {}", lhs.main, rhs. main);
+        ExprBreakdown::parent(line, vec![lhs, rhs])
     }
 
     fn visit_binary_expr(
@@ -327,69 +372,114 @@ impl ExprVisitor for Codegen {
         op: &Token,
         rhs: &Expr,
     ) -> Self::ExprResult {
-        format!(
+        let (lhs, rhs) = (lhs.accept(self), rhs.accept(self));
+        let line = format!(
             "({}) {} ({})",
-            lhs.accept(self),
+            lhs.main,
             op.lexeme(),
-            rhs.accept(self)
-        )
+            rhs.main
+        );
+        ExprBreakdown::parent(line, vec![lhs, rhs])
     }
 
     fn visit_unary_expr(&mut self, _expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
-        format!("{}({})", op.lexeme(), operand.accept(self))
+        let operand = operand.accept(self);
+        let line = format!("{}({})", op.lexeme(), operand.main);
+        ExprBreakdown::parent(line, vec![operand])
     }
 
-    fn visit_call_expr(&mut self, _expr: &Expr, target: &Expr, args: &[Expr]) -> Self::ExprResult {
-        let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
+    fn visit_function_call_expr(&mut self, _expr: &Expr, function: &ResolvedToken, args: &[Expr]) -> Self::ExprResult {
+        let args: Vec<ExprBreakdown> = args.iter().map(|a| a.accept(self)).collect();
+        let mut arg_strs: Vec<String> = args.iter().map(|a| a.main.clone()).collect();
 
-        let borrowed_symbol = target.symbol.borrow();
-        let mut symbol = borrowed_symbol.as_ref().unwrap().clone();
-
-        let parent_type = symbol.parent().and_then(|p| self.lib.resolve_symbol(&p));
-        if let Some(NodeType::Metatype(_)) = parent_type {
-            let resolved_target = match &target.kind {
-                ExprKind::Field(field_target, _) => format!("&({})", field_target.accept(self)),
-                ExprKind::Variable(_) => String::from("self"),
-                _ => panic!(),
-            };
-            args.insert(0, resolved_target);
+        let function_symbol = function.get_symbol().unwrap();
+        if let Some(parent_symbol) = function_symbol.parent() {
+            if let Some(NodeType::Metatype(_)) = self.lib.resolve_symbol(&parent_symbol) {
+                arg_strs.insert(0, String::from("self"));
+            }
         }
 
-        if let Some(NodeType::Metatype(metatype_symbol)) = self.lib.resolve_symbol(&symbol) {
-            symbol = Symbol::meta_symbol(Some(metatype_symbol));
-            symbol = Symbol::init_symbol(Some(&symbol));
-        }
-
-        format!("{}({})", symbol.mangled(), args.join(","))
+        let line = format!("{}({})", function.get_symbol().unwrap().mangled(), arg_strs.join(","));
+        ExprBreakdown::parent(line, args)
     }
 
-    fn visit_field_expr(&mut self, expr: &Expr, target: &Expr, _field: &Token) -> Self::ExprResult {
-        let field_borrowed_symbol = expr.symbol.borrow();
-        let field_symbol = field_borrowed_symbol.as_ref().unwrap();
+    fn visit_method_call_expr(&mut self, _expr: &Expr, object: &Expr, method: &ResolvedToken, args: &[Expr]) -> Self::ExprResult {
+        let mut args: Vec<ExprBreakdown> = args.iter().map(|a| a.accept(self)).collect();
 
-        if let Some(NodeType::Function(..)) = self.lib.resolve_symbol(field_symbol) {
-            return field_symbol.mangled();
+        let method_symbol = method.get_symbol().unwrap();
+
+        let mut breakdown = object.accept(self);
+
+        match &object.kind {
+            ExprKind::FunctionCall(first_called, _) | ExprKind::MethodCall(_, first_called, _) => {
+                let first_called_symbol = first_called.get_symbol().unwrap();
+                let first_called_type = self.lib.resolve_symbol(&first_called_symbol).unwrap();
+                guard!(NodeType::Function[_params, first_called_ret_type] = first_called_type);
+                let ret_type = self.writer.convert_type(first_called_ret_type);
+
+                let temp_name = format!("temp__{}", method_symbol.mangled());
+
+                let temp = format!("{} {} = {};", ret_type, temp_name, breakdown.main);
+                breakdown.temps.push(temp);
+                breakdown.main = temp_name;
+            },
+            _ => (),
         }
 
-        format!("{}.{}", target.accept(self), field_symbol.mangled())
+        if !method_symbol.is_meta_owned() {
+            let main = format!("&({})", breakdown.main);
+            let object = ExprBreakdown::new(breakdown.temps, main);
+            args.insert(0, object);
+        }
+
+        let arg_strs: Vec<String> = args.iter().map(|a| a.main.clone()).collect();
+
+        let line = format!("{}({})", method_symbol.mangled(), arg_strs.join(","));
+        ExprBreakdown::parent(line, args)
+    }
+
+    fn visit_field_expr(&mut self, _whole_expr: &Expr, target: &Expr, field: &ResolvedToken) -> Self::ExprResult {
+        let mut target_breakdown = target.accept(self);
+
+        let field_symbol = field.get_symbol().unwrap();
+
+        match &target.kind {
+            ExprKind::FunctionCall(function, _) | ExprKind::MethodCall(_, function, _) => {
+                let target_symbol = function.get_symbol().unwrap();
+                let target_type = self.lib.resolve_symbol(&target_symbol).unwrap();
+                guard!(NodeType::Function[_params, ret_type] = target_type);
+                let ret_type = self.writer.convert_type(ret_type);
+
+                let temp_name = format!("temp__{}", target_symbol.mangled());
+
+                let temp = format!("{} {} = {};", ret_type, temp_name, target_breakdown.main);
+                target_breakdown.temps.push(temp);
+
+                let line = format!("{}.{}", temp_name, field_symbol.mangled());
+                ExprBreakdown::new(target_breakdown.temps, line)
+            },
+            _ => {
+                let line = format!("{}.{}", target_breakdown.main, field_symbol.mangled());
+                ExprBreakdown::new(target_breakdown.temps, line)
+            }
+        }
     }
 
     fn visit_literal_expr(&mut self, _expr: &Expr, token: &Token) -> Self::ExprResult {
-        String::from(token.lexeme())
+        ExprBreakdown::atom(String::from(token.lexeme()))
     }
 
-    fn visit_variable_expr(&mut self, expr: &Expr, _name: &Token) -> Self::ExprResult {
-        let borrowed_symbol = expr.symbol.borrow();
-        let symbol = borrowed_symbol.as_ref().unwrap();
+    fn visit_variable_expr(&mut self, _expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
+        let symbol = name.get_symbol().unwrap();
         if self
             .current_type
             .as_ref()
-            .map(|t| t.owns(symbol))
+            .map(|t| t.owns(&symbol))
             .unwrap_or(false)
         {
-            format!("self->{}", symbol.mangled())
+            ExprBreakdown::atom(format!("self->{}", symbol.mangled()))
         } else {
-            symbol.mangled()
+            ExprBreakdown::atom(symbol.mangled())
         }
     }
 
