@@ -5,8 +5,8 @@ use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::rc::Rc;
 
 type Result = DiagnosticResult<NodeType>;
 
@@ -165,7 +165,12 @@ impl TypeChecker {
         }
     }
 
-    fn check_function_arguments(&mut self, expr: &Expr, param_types: &[NodeType], args: &[Expr]) -> DiagnosticResult<()> {
+    fn check_function_arguments(
+        &mut self,
+        expr: &Expr,
+        param_types: &[NodeType],
+        args: &[Expr],
+    ) -> DiagnosticResult<()> {
         let arg_types: DiagnosticResult<Vec<NodeType>> =
             args.iter().map(|a| a.accept(self)).collect();
         let arg_types = arg_types?;
@@ -360,15 +365,20 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
-    fn visit_print_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>, print_type: &RefCell<Option<NodeType>>) -> Analysis {
+    fn visit_print_stmt(
+        &mut self,
+        _stmt: &Stmt,
+        expr: &Option<Expr>,
+        print_type: &RefCell<Option<NodeType>>,
+    ) -> Analysis {
         if let Some(node_type) = expr.as_ref().and_then(|e| self.check_expr(e)) {
             match node_type {
                 NodeType::Int | NodeType::Bool => {
                     print_type.replace(Some(node_type));
-                },
+                }
                 node_type if node_type.is_pointer_to(NodeType::Byte) => {
                     print_type.replace(Some(node_type));
-                },
+                }
                 _ => {
                     let message = format!("Can't print object of type {}", node_type);
                     self.report_error(Diagnostic::error(expr.as_ref().unwrap(), &message));
@@ -475,23 +485,28 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_function_call_expr(&mut self, expr: &Expr, function: &ResolvedToken, args: &[Expr]) -> Self::ExprResult {
+    fn visit_function_call_expr(
+        &mut self,
+        expr: &Expr,
+        function: &ResolvedToken,
+        args: &[Expr],
+    ) -> Self::ExprResult {
         if let Some((found_symbol, node_type)) = self.resolve_var(function.span().lexeme()) {
             let (params, return_type) = match node_type {
                 NodeType::Function(params, ret) => {
                     function.set_symbol(found_symbol);
                     Ok((params, ret))
-                },
+                }
                 NodeType::Metatype(symbol) => {
                     let meta_symbol = Symbol::meta_symbol(Some(&symbol));
                     let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
-    
+
                     function.set_symbol(init_symbol.clone());
 
                     let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
                     guard!(NodeType::Function[p, r] = init_type);
                     Ok((p, r))
-                },
+                }
                 _ => Err(Diagnostic::error(
                     function,
                     &format!("Cannot call type {}", node_type),
@@ -509,7 +524,13 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_method_call_expr(&mut self, expr: &Expr, object: &Expr, method: &ResolvedToken, args: &[Expr]) -> Self::ExprResult {
+    fn visit_method_call_expr(
+        &mut self,
+        expr: &Expr,
+        object: &Expr,
+        method: &ResolvedToken,
+        args: &[Expr],
+    ) -> Self::ExprResult {
         let object_type = object.accept(self)?;
 
         let object_symbol = match object_type {
@@ -532,31 +553,32 @@ impl ExprVisitor for TypeChecker {
 
                 self.check_function_arguments(expr, &params, args)?;
                 Ok(ret_val)
-            },
-            Some(_) => {
-                Err(Diagnostic::error(
-                    &Span::join(object, method),
-                    &format!(
-                        "'{}' is a property, not a method of {}",
-                        method.span().lexeme(),
-                        object_symbol.id,
-                    ),
-                ))  
-            },
-            None => {
-                Err(Diagnostic::error(
-                    &Span::join(object, method),
-                    &format!(
-                        "Type '{}' does not has method '{}'",
-                        object_symbol.id,
-                        method.span().lexeme()
-                    ),
-                ))   
             }
+            Some(_) => Err(Diagnostic::error(
+                &Span::join(object, method),
+                &format!(
+                    "'{}' is a property, not a method of {}",
+                    method.span().lexeme(),
+                    object_symbol.id,
+                ),
+            )),
+            None => Err(Diagnostic::error(
+                &Span::join(object, method),
+                &format!(
+                    "Type '{}' does not has method '{}'",
+                    object_symbol.id,
+                    method.span().lexeme()
+                ),
+            )),
         }
     }
 
-    fn visit_field_expr(&mut self, _expr: &Expr, target: &Expr, field: &ResolvedToken) -> Self::ExprResult {
+    fn visit_field_expr(
+        &mut self,
+        _expr: &Expr,
+        target: &Expr,
+        field: &ResolvedToken,
+    ) -> Self::ExprResult {
         let target_type = target.accept(self)?;
 
         // let type_symbol = match target_type.represented_type() {
@@ -623,7 +645,7 @@ impl ExprVisitor for TypeChecker {
         } else {
             Err(Diagnostic::error(name, "Undefined type"))
         }?;
-        
+
         if modifier.is_some() {
             Ok(NodeType::Pointer(Box::new(main)))
         } else {

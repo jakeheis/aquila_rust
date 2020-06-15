@@ -3,9 +3,9 @@ use crate::guard;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Symbol {
@@ -268,7 +268,12 @@ impl StmtVisitor for SymbolTableBuilder {
         NodeType::Void
     }
 
-    fn visit_print_stmt(&mut self, _stmt: &Stmt, _expr: &Option<Expr>, _print_type: &RefCell<Option<NodeType>>) -> Self::StmtResult {
+    fn visit_print_stmt(
+        &mut self,
+        _stmt: &Stmt,
+        _expr: &Option<Expr>,
+        _print_type: &RefCell<Option<NodeType>>,
+    ) -> Self::StmtResult {
         NodeType::Void
     }
 

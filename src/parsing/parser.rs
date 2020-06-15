@@ -391,10 +391,8 @@ impl Parser {
         match lhs.kind {
             ExprKind::Field(object, field) => {
                 Ok(Expr::method_call(object, field, args, right_paren))
-            },
-            ExprKind::Variable(name) => {
-                Ok(Expr::function_call(name, args, right_paren))
-            },
+            }
+            ExprKind::Variable(name) => Ok(Expr::function_call(name, args, right_paren)),
             _ => {
                 let span = Span::join(&lhs, right_paren);
                 Err(Diagnostic::error(&span, "Cannot call this"))
