@@ -8,6 +8,7 @@ use crate::parsing::*;
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
+use std::cell::RefCell;
 
 #[derive(PartialEq)]
 enum CodegenStage {
@@ -124,7 +125,7 @@ impl StmtVisitor for Codegen {
     fn visit_type_decl(
         &mut self,
         _stmt: &Stmt,
-        name: &ResolvedToken,
+        name: &TypedToken,
         fields: &[Stmt],
         methods: &[Stmt],
         meta_methods: &[Stmt],
@@ -190,19 +191,18 @@ impl StmtVisitor for Codegen {
 
     fn visit_function_decl(
         &mut self,
-        stmt: &Stmt,
-        name: &ResolvedToken,
+        _stmt: &Stmt,
+        name: &TypedToken,
         params: &[Stmt],
         _return_type: &Option<Expr>,
         body: &[Stmt],
         is_meta: bool,
     ) -> Self::StmtResult {
         let func_symbol = name.get_symbol().unwrap();
-
-        let borrowed_type = stmt.stmt_type.borrow();
-        let func_type = borrowed_type.as_ref().unwrap();
+        let func_type = name.get_type().unwrap();
 
         guard!(NodeType::Function[param_types, ret_type] = func_type);
+        let ret_type: &NodeType = &ret_type;
 
         let mut params: Vec<(NodeType, String)> = param_types
             .iter()
@@ -254,17 +254,15 @@ impl StmtVisitor for Codegen {
 
     fn visit_variable_decl(
         &mut self,
-        stmt: &Stmt,
-        name: &ResolvedToken,
+        _stmt: &Stmt,
+        name: &TypedToken,
         _kind: &Option<Expr>,
         value: &Option<Expr>,
     ) -> Self::StmtResult {
         let var_symbol = name.get_symbol().unwrap();
+        let var_type = name.get_type().unwrap();
 
-        let borrowed_type = stmt.stmt_type.borrow();
-        let var_type = borrowed_type.as_ref().unwrap();
-
-        self.writer.decl_var(var_type, &var_symbol.mangled());
+        self.writer.decl_var(&var_type, &var_symbol.mangled());
 
         if let Some(value) = value.as_ref() {
             let value = value.accept(self);
@@ -299,8 +297,8 @@ impl StmtVisitor for Codegen {
         self.writer.write_return(val)
     }
 
-    fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult {
-        let borrowed_type = stmt.stmt_type.borrow();
+    fn visit_print_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>, print_type: &RefCell<Option<NodeType>>) -> Self::StmtResult {
+        let borrowed_type = print_type.borrow();
 
         if let Some(expr) = expr.as_ref() {
             let expr = expr.accept(self);

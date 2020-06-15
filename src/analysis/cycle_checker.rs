@@ -24,8 +24,8 @@ impl CycleChecker {
             let mut field_set: HashSet<Symbol> = HashSet::new();
 
             for field in fields {
-                let borrowed_field_type = field.stmt_type.borrow();
-                if let NodeType::Type(field_type) = borrowed_field_type.as_ref().unwrap() {
+                guard!(StmtKind::VariableDecl[name, _explicit_type, _init_value] = &field.kind);
+                if let NodeType::Type(field_type) = name.get_type().unwrap() {
                     field_set.insert(field_type.clone());
                 }
             }

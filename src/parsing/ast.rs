@@ -4,12 +4,12 @@ use crate::source::*;
 use std::cell::RefCell;
 
 pub enum StmtKind {
-    TypeDecl(ResolvedToken, Vec<Stmt>, Vec<Stmt>, Vec<Stmt>),
-    FunctionDecl(ResolvedToken, Vec<Stmt>, Option<Expr>, Vec<Stmt>, bool),
-    VariableDecl(ResolvedToken, Option<Expr>, Option<Expr>),
+    TypeDecl(TypedToken, Vec<Stmt>, Vec<Stmt>, Vec<Stmt>),
+    FunctionDecl(TypedToken, Vec<Stmt>, Option<Expr>, Vec<Stmt>, bool),
+    VariableDecl(TypedToken, Option<Expr>, Option<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
-    PrintStmt(Option<Expr>),
+    PrintStmt(Option<Expr>, RefCell<Option<NodeType>>),
     ExpressionStmt(Expr),
     Builtin(Box<Stmt>),
 }
@@ -17,7 +17,6 @@ pub enum StmtKind {
 pub struct Stmt {
     pub kind: StmtKind,
     pub span: Span,
-    pub stmt_type: RefCell<Option<NodeType>>,
 }
 
 impl Stmt {
@@ -25,7 +24,6 @@ impl Stmt {
         Stmt {
             kind,
             span,
-            stmt_type: RefCell::new(None),
         }
     }
 
@@ -44,7 +42,7 @@ impl Stmt {
                 visitor.visit_if_stmt(&self, &condition, &body, &else_body)
             }
             StmtKind::ReturnStmt(expr) => visitor.visit_return_stmt(&self, expr),
-            StmtKind::PrintStmt(expr) => visitor.visit_print_stmt(&self, expr),
+            StmtKind::PrintStmt(expr, print_type) => visitor.visit_print_stmt(&self, expr, print_type),
             StmtKind::ExpressionStmt(expr) => visitor.visit_expression_stmt(&self, expr),
             StmtKind::Builtin(stmt) => visitor.visit_builtin_stmt(&self, &stmt),
         }
@@ -60,7 +58,7 @@ impl Stmt {
     ) -> Self {
         let span = Span::join(&type_span, right_brace);
         Stmt::new(
-            StmtKind::TypeDecl(ResolvedToken::new(name), fields, methods, meta_methods),
+            StmtKind::TypeDecl(TypedToken::new(name), fields, methods, meta_methods),
             span,
         )
     }
@@ -76,7 +74,7 @@ impl Stmt {
     ) -> Self {
         let span = Span::join(&start_span, &right_brace_span);
         Stmt::new(
-            StmtKind::FunctionDecl(ResolvedToken::new(name), params, return_type, body, is_meta),
+            StmtKind::FunctionDecl(TypedToken::new(name), params, return_type, body, is_meta),
             span,
         )
     }
@@ -90,7 +88,7 @@ impl Stmt {
             name.span()
         };
         let span = Span::join(&name, end_span);
-        Stmt::new(StmtKind::VariableDecl(ResolvedToken::new(name), explicit_type, value), span)
+        Stmt::new(StmtKind::VariableDecl(TypedToken::new(name), explicit_type, value), span)
     }
 
     pub fn if_stmt(
@@ -111,7 +109,7 @@ impl Stmt {
 
     pub fn print_stmt(print_keyword: Span, expr: Option<Expr>) -> Self {
         let span = Span::join_opt(&print_keyword, &expr);
-        Stmt::new(StmtKind::PrintStmt(expr), span)
+        Stmt::new(StmtKind::PrintStmt(expr, RefCell::new(None)), span)
     }
 
     pub fn expression(expr: Expr) -> Self {
@@ -131,7 +129,7 @@ pub trait StmtVisitor {
     fn visit_type_decl(
         &mut self,
         stmt: &Stmt,
-        name: &ResolvedToken,
+        name: &TypedToken,
         fields: &[Stmt],
         methods: &[Stmt],
         meta_methods: &[Stmt],
@@ -140,7 +138,7 @@ pub trait StmtVisitor {
     fn visit_function_decl(
         &mut self,
         stmt: &Stmt,
-        name: &ResolvedToken,
+        name: &TypedToken,
         params: &[Stmt],
         return_type: &Option<Expr>,
         body: &[Stmt],
@@ -150,7 +148,7 @@ pub trait StmtVisitor {
     fn visit_variable_decl(
         &mut self,
         stmt: &Stmt,
-        name: &ResolvedToken,
+        name: &TypedToken,
         kind: &Option<Expr>,
         value: &Option<Expr>,
     ) -> Self::StmtResult;
@@ -165,7 +163,7 @@ pub trait StmtVisitor {
 
     fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult;
 
-    fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult;
+    fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>, print_type: &RefCell<Option<NodeType>>) -> Self::StmtResult;
 
     fn visit_expression_stmt(&mut self, stmt: &Stmt, expr: &Expr) -> Self::StmtResult;
 
@@ -173,6 +171,44 @@ pub trait StmtVisitor {
 }
 
 // Expr
+
+pub struct TypedToken {
+    pub token: Token,
+    symbol: RefCell<Option<Symbol>>,
+    token_type: RefCell<Option<NodeType>>
+}
+
+impl TypedToken {
+    fn new(token: Token) -> Self {
+        TypedToken {
+            token,
+            symbol: RefCell::new(None),
+            token_type: RefCell::new(None),
+        }
+    }
+    
+    pub fn set_symbol(&self, symbol: Symbol) {
+        self.symbol.replace(Some(symbol));
+    }
+
+    pub fn get_symbol(&self) -> Option<Symbol> {
+        self.symbol.borrow().as_ref().map(|s| s.clone())
+    }
+
+    pub fn set_type(&self, token_type: NodeType) {
+        self.token_type.replace(Some(token_type));
+    }
+
+    pub fn get_type(&self) -> Option<NodeType> {
+        self.token_type.borrow().as_ref().map(|s| s.clone())
+    }
+}
+
+impl ContainsSpan for TypedToken {
+    fn span(&self) -> &Span {
+        &self.token.span
+    }
+}
 
 pub struct ResolvedToken {
     pub token: Token,
@@ -403,7 +439,7 @@ impl StmtVisitor for ASTPrinter {
     fn visit_type_decl(
         &mut self,
         _stmt: &Stmt,
-        name: &ResolvedToken,
+        name: &TypedToken,
         fields: &[Stmt],
         methods: &[Stmt],
         meta_methods: &[Stmt],
@@ -435,8 +471,8 @@ impl StmtVisitor for ASTPrinter {
 
     fn visit_function_decl(
         &mut self,
-        stmt: &Stmt,
-        name: &ResolvedToken,
+        _stmt: &Stmt,
+        name: &TypedToken,
         params: &[Stmt],
         return_type: &Option<Expr>,
         body: &[Stmt],
@@ -446,10 +482,8 @@ impl StmtVisitor for ASTPrinter {
             .get_symbol()
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
-        let resolved_type = stmt
-            .stmt_type
-            .borrow()
-            .as_ref()
+        let resolved_type = name
+            .get_type()
             .map(|t| t.to_string())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
@@ -474,8 +508,8 @@ impl StmtVisitor for ASTPrinter {
 
     fn visit_variable_decl(
         &mut self,
-        stmt: &Stmt,
-        name: &ResolvedToken,
+        _stmt: &Stmt,
+        name: &TypedToken,
         explicit_type: &Option<Expr>,
         value: &Option<Expr>,
     ) {
@@ -483,10 +517,8 @@ impl StmtVisitor for ASTPrinter {
             .get_symbol()
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
-        let resolved_type = stmt
-            .stmt_type
-            .borrow()
-            .as_ref()
+        let resolved_type = name
+            .get_type()
             .map(|s| s.to_string())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
@@ -532,7 +564,7 @@ impl StmtVisitor for ASTPrinter {
         }
     }
 
-    fn visit_print_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) {
+    fn visit_print_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>, _print_type: &RefCell<Option<NodeType>>) {
         self.write_ln("PrintStmt");
         if let Some(expr) = expr.as_ref() {
             self.indent(|visitor| {

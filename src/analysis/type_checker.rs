@@ -6,6 +6,7 @@ use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
 use std::rc::Rc;
+use std::cell::RefCell;
 
 type Result = DiagnosticResult<NodeType>;
 
@@ -24,13 +25,13 @@ impl Scope {
         }
     }
 
-    fn define_var(&mut self, decl: &Stmt, name: &ResolvedToken, var_type: &NodeType) {
+    fn define_var(&mut self, name: &TypedToken, var_type: &NodeType) {
         let new_symbol = Symbol::new((&self.id).as_ref(), &name.token);
 
         self.symbols.insert(new_symbol.clone(), var_type.clone());
 
         name.set_symbol(new_symbol);
-        decl.stmt_type.replace(Some(var_type.clone()));
+        name.set_type(var_type.clone());
     }
 }
 
@@ -119,11 +120,11 @@ impl TypeChecker {
         self.scopes.last().unwrap().id.as_ref()
     }
 
-    fn push_type_scope(&mut self, name: &ResolvedToken) -> Symbol {
+    fn push_type_scope(&mut self, name: &TypedToken) -> Symbol {
         self.push_scope_named(name.span().lexeme())
     }
 
-    fn push_function_scope(&mut self, name: &ResolvedToken, ret_type: NodeType) -> Symbol {
+    fn push_function_scope(&mut self, name: &TypedToken, ret_type: NodeType) -> Symbol {
         let symbol = Symbol::new(self.current_symbol(), &name.token);
         self.scopes
             .push(Scope::new(Some(symbol.clone()), Some(ret_type)));
@@ -196,7 +197,7 @@ impl StmtVisitor for TypeChecker {
     fn visit_type_decl(
         &mut self,
         _stmt: &Stmt,
-        name: &ResolvedToken,
+        name: &TypedToken,
         fields: &[Stmt],
         methods: &[Stmt],
         meta_methods: &[Stmt],
@@ -215,7 +216,7 @@ impl StmtVisitor for TypeChecker {
             let name = name.clone();
             let symbol = Symbol::new(self.current_symbol(), &name.token);
             let function_type = self.lib.resolve_symbol(&symbol).unwrap().clone();
-            self.current_scope().define_var(method, &name, &function_type);
+            self.current_scope().define_var(&name, &function_type);
         }
 
         self.check_list(methods);
@@ -230,7 +231,7 @@ impl StmtVisitor for TypeChecker {
     fn visit_function_decl(
         &mut self,
         _stmt: &Stmt,
-        name: &ResolvedToken,
+        name: &TypedToken,
         params: &[Stmt],
         return_type_expr: &Option<Expr>,
         body: &[Stmt],
@@ -262,8 +263,8 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_variable_decl(
         &mut self,
-        stmt: &Stmt,
-        name: &ResolvedToken,
+        _stmt: &Stmt,
+        name: &TypedToken,
         kind: &Option<Expr>,
         value: &Option<Expr>,
     ) -> Analysis {
@@ -279,7 +280,7 @@ impl StmtVisitor for TypeChecker {
 
         match (explicit_type, implicit_type) {
             (Some(explicit), Some(implicit)) => {
-                self.current_scope().define_var(&stmt, name, &explicit);
+                self.current_scope().define_var(name, &explicit);
                 if explicit != implicit {
                     let diagnostic = self.type_mismatch(
                         &value.as_ref().unwrap().span().clone(),
@@ -289,8 +290,8 @@ impl StmtVisitor for TypeChecker {
                     self.report_error(diagnostic);
                 }
             }
-            (Some(explicit), None) => self.current_scope().define_var(&stmt, name, &explicit),
-            (None, Some(implicit)) => self.current_scope().define_var(&stmt, name, &implicit),
+            (Some(explicit), None) => self.current_scope().define_var(name, &explicit),
+            (None, Some(implicit)) => self.current_scope().define_var(name, &implicit),
             (None, None) => {
                 let diag = Diagnostic::error(name, "Can't infer type");
                 self.report_error(diag);
@@ -359,15 +360,15 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
-    fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Analysis {
+    fn visit_print_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>, print_type: &RefCell<Option<NodeType>>) -> Analysis {
         if let Some(node_type) = expr.as_ref().and_then(|e| self.check_expr(e)) {
             match node_type {
                 NodeType::Int | NodeType::Bool => {
-                    stmt.stmt_type.replace(Some(node_type));
-                }
+                    print_type.replace(Some(node_type));
+                },
                 node_type if node_type.is_pointer_to(NodeType::Byte) => {
-                    stmt.stmt_type.replace(Some(node_type));
-                }
+                    print_type.replace(Some(node_type));
+                },
                 _ => {
                     let message = format!("Can't print object of type {}", node_type);
                     self.report_error(Diagnostic::error(expr.as_ref().unwrap(), &message));

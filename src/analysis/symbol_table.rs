@@ -5,6 +5,7 @@ use crate::library::*;
 use crate::parsing::*;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::cell::RefCell;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Symbol {
@@ -175,7 +176,7 @@ impl StmtVisitor for SymbolTableBuilder {
     fn visit_type_decl(
         &mut self,
         _stmt: &Stmt,
-        name: &ResolvedToken,
+        name: &TypedToken,
         fields: &[Stmt],
         methods: &[Stmt],
         meta_methods: &[Stmt],
@@ -220,8 +221,8 @@ impl StmtVisitor for SymbolTableBuilder {
 
     fn visit_function_decl(
         &mut self,
-        stmt: &Stmt,
-        name: &ResolvedToken,
+        _stmt: &Stmt,
+        name: &TypedToken,
         params: &[Stmt],
         return_type: &Option<Expr>,
         _body: &[Stmt],
@@ -238,7 +239,7 @@ impl StmtVisitor for SymbolTableBuilder {
         let new_type = NodeType::Function(param_types, Box::new(return_type));
 
         self.table.insert(new_symbol, new_type.clone());
-        stmt.stmt_type.replace(Some(new_type.clone()));
+        name.set_type(new_type.clone());
 
         new_type
     }
@@ -246,7 +247,7 @@ impl StmtVisitor for SymbolTableBuilder {
     fn visit_variable_decl(
         &mut self,
         _stmt: &Stmt,
-        _name: &ResolvedToken,
+        _name: &TypedToken,
         explicit_type: &Option<Expr>,
         _value: &Option<Expr>,
     ) -> Self::StmtResult {
@@ -267,7 +268,7 @@ impl StmtVisitor for SymbolTableBuilder {
         NodeType::Void
     }
 
-    fn visit_print_stmt(&mut self, _stmt: &Stmt, _expr: &Option<Expr>) -> Self::StmtResult {
+    fn visit_print_stmt(&mut self, _stmt: &Stmt, _expr: &Option<Expr>, _print_type: &RefCell<Option<NodeType>>) -> Self::StmtResult {
         NodeType::Void
     }
 
