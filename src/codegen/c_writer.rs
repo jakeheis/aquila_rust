@@ -127,7 +127,7 @@ impl CWriter {
         ));
     }
 
-    pub fn write_assignment(&mut self, target: String, value: String) {
+    pub fn write_assignment(&mut self, target: &str, value: &str) {
         let line = format!("{} = {};", target, value);
         self.writeln(&line);
     }

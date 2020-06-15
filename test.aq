@@ -39,7 +39,10 @@ type Adder {
   }
 }
 
-let dyn = String.literal("hello");
+let input = read_line();
+String.from("Got: ").append(input).print_str();
+
+let dyn = String.from("hello");
 
 let combo1 = dyn.append_literal(" world");
 combo1.print_str();
@@ -48,6 +51,11 @@ let combo2 = combo1.append_literal(" ag");
 combo2.print_str();
 
 dyn.append_literal(" world").append_literal(" again").print_str();
+
+print dyn.append_literal(" world").append_literal(" again 2").storage.location;
+
+let here = dyn.append_literal(" world").append_literal(" again 3");
+print here.storage.location;
 
 /*let sum = Adder(4, 5);
 print sum.add(6);

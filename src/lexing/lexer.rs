@@ -69,7 +69,7 @@ impl Lexer {
             '(' => self.make_token(TokenKind::LeftParen),
             ')' => self.make_token(TokenKind::RightParen),
             '0'..='9' => self.number(),
-            'a'..='z' | 'A'..='Z' => self.identifier(),
+            'a'..='z' | 'A'..='Z' | '_' => self.identifier(),
             '"' => self.string(),
             ',' => self.make_token(TokenKind::Comma),
             '.' => self.make_token(TokenKind::Period),

@@ -185,7 +185,7 @@ impl StmtVisitor for Codegen {
                     self.writer.decl_var(&ret_type, "new_item");
                     for (_, f) in field_list {
                         let target = format!("new_item.{}", f);
-                        self.writer.write_assignment(target, f);
+                        self.writer.write_assignment(&target, &f);
                     }
                     self.writer.write_return(Some(String::from("new_item")));
                     self.writer.end_decl_func();
@@ -270,7 +270,7 @@ impl StmtVisitor for Codegen {
 
         if let Some(value) = value.as_ref() {
             let value = value.accept(self);
-            self.writer.write_assignment(var_symbol.mangled(), value);
+            self.writer.write_assignment(&var_symbol.mangled(), &value);
         }
     }
 
