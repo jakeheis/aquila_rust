@@ -175,12 +175,12 @@ impl StmtVisitor for SymbolTableBuilder {
     fn visit_type_decl(
         &mut self,
         _stmt: &Stmt,
-        name: &Token,
+        name: &ResolvedToken,
         fields: &[Stmt],
         methods: &[Stmt],
         meta_methods: &[Stmt],
     ) -> Self::StmtResult {
-        let new_symbol = Symbol::new(self.context.last(), name);
+        let new_symbol = Symbol::new(self.context.last(), &name.token);
         let new_type = NodeType::Metatype(new_symbol.clone());
 
         if self.visit_methods {
@@ -210,7 +210,7 @@ impl StmtVisitor for SymbolTableBuilder {
                 guard!(StmtKind::VariableDecl[name, _e1, _e2] = &field.kind);
                 let field_type = field.accept(self);
                 self.table
-                    .insert(Symbol::new(self.context.last(), name), field_type);
+                    .insert(Symbol::new(self.context.last(), &name.token), field_type);
             }
             self.context.pop();
         }
@@ -221,13 +221,13 @@ impl StmtVisitor for SymbolTableBuilder {
     fn visit_function_decl(
         &mut self,
         stmt: &Stmt,
-        name: &Token,
+        name: &ResolvedToken,
         params: &[Stmt],
         return_type: &Option<Expr>,
         _body: &[Stmt],
         _is_meta: bool,
     ) -> Self::StmtResult {
-        let new_symbol = Symbol::new(self.context.last(), name);
+        let new_symbol = Symbol::new(self.context.last(), &name.token);
 
         let param_types: Vec<NodeType> = params.iter().map(|p| p.accept(self)).collect();
 
@@ -246,7 +246,7 @@ impl StmtVisitor for SymbolTableBuilder {
     fn visit_variable_decl(
         &mut self,
         _stmt: &Stmt,
-        _name: &Token,
+        _name: &ResolvedToken,
         explicit_type: &Option<Expr>,
         _value: &Option<Expr>,
     ) -> Self::StmtResult {

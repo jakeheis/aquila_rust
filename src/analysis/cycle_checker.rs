@@ -19,8 +19,7 @@ impl CycleChecker {
         for stmt in &lib.type_decls {
             guard!(StmtKind::TypeDecl[name, fields, _methods, _meta_methods] = &stmt.kind);
 
-            let borrowed_type_symbol = stmt.symbol.borrow();
-            let type_symbol = borrowed_type_symbol.clone().unwrap();
+            let type_symbol = name.get_symbol().unwrap();
 
             let mut field_set: HashSet<Symbol> = HashSet::new();
 
@@ -60,13 +59,14 @@ impl CycleChecker {
             }
 
             lib.type_decls.sort_by(|lhs, rhs| {
-                let lhs_symbol_borrowed = lhs.symbol.borrow();
-                let lhs_symbol = lhs_symbol_borrowed.as_ref().unwrap();
-                let rhs_symbol_borrowed = rhs.symbol.borrow();
-                let rhs_symbol = rhs_symbol_borrowed.as_ref().unwrap();
+                guard!(StmtKind::TypeDecl[lhs, _fields, _methods, _meta_methods] = &lhs.kind);
+                guard!(StmtKind::TypeDecl[rhs, _fields, _methods, _meta_methods] = &rhs.kind);
 
-                let lhs_index = ordered.iter().position(|s| s == lhs_symbol).unwrap();
-                let rhs_index = ordered.iter().position(|s| s == rhs_symbol).unwrap();
+                let lhs_symbol = lhs.get_symbol().unwrap();
+                let rhs_symbol = rhs.get_symbol().unwrap();
+
+                let lhs_index = ordered.iter().position(|s| s == &lhs_symbol).unwrap();
+                let rhs_index = ordered.iter().position(|s| s == &rhs_symbol).unwrap();
                 lhs_index.cmp(&rhs_index)
             })
         }

@@ -107,6 +107,15 @@ impl Codegen {
         }
         breakdown.main
     }
+
+    fn decl_symbol(&self, decl: &Stmt) -> Symbol {
+        match &decl.kind {
+            StmtKind::TypeDecl(name, ..) | StmtKind::FunctionDecl(name, ..) | StmtKind::VariableDecl(name, ..) => {
+                name.get_symbol().unwrap()
+            },
+            _ => panic!(),
+        }
+    }
 }
 
 impl StmtVisitor for Codegen {
@@ -114,14 +123,13 @@ impl StmtVisitor for Codegen {
 
     fn visit_type_decl(
         &mut self,
-        stmt: &Stmt,
-        _name: &Token,
+        _stmt: &Stmt,
+        name: &ResolvedToken,
         fields: &[Stmt],
         methods: &[Stmt],
         meta_methods: &[Stmt],
     ) -> Self::StmtResult {
-        let borrowed_symbol = stmt.symbol.borrow();
-        let struct_symbol = borrowed_symbol.as_ref().unwrap();
+        let struct_symbol = name.get_symbol().unwrap();
 
         match self.stage {
             CodegenStage::ForwardStructDecls => self
@@ -143,7 +151,7 @@ impl StmtVisitor for Codegen {
                     method.accept(self);
                 }
 
-                let meta_symbol = Symbol::meta_symbol(Some(struct_symbol));
+                let meta_symbol = Symbol::meta_symbol(Some(&struct_symbol));
                 let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
                 let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
                 guard!(NodeType::Function[field_types, ret_type] = init_type);
@@ -151,7 +159,7 @@ impl StmtVisitor for Codegen {
                 let field_list: Vec<_> = field_types
                     .iter()
                     .zip(fields)
-                    .map(|(ft, f)| (ft.clone(), f.symbol.borrow().as_ref().unwrap().mangled()))
+                    .map(|(ft, f)| (ft.clone(), self.decl_symbol(f).mangled()))
                     .collect();
 
                 if let CodegenStage::FuncPrototypes = self.stage {
@@ -183,14 +191,14 @@ impl StmtVisitor for Codegen {
     fn visit_function_decl(
         &mut self,
         stmt: &Stmt,
-        _name: &Token,
+        name: &ResolvedToken,
         params: &[Stmt],
         _return_type: &Option<Expr>,
         body: &[Stmt],
         is_meta: bool,
     ) -> Self::StmtResult {
-        let borrowed_symbol = stmt.symbol.borrow();
-        let func_symbol = borrowed_symbol.as_ref().unwrap();
+        let func_symbol = name.get_symbol().unwrap();
+
         let borrowed_type = stmt.stmt_type.borrow();
         let func_type = borrowed_type.as_ref().unwrap();
 
@@ -202,7 +210,7 @@ impl StmtVisitor for Codegen {
             .map(|(param_type, param_stmt)| {
                 (
                     param_type.clone(),
-                    param_stmt.symbol.borrow().as_ref().unwrap().mangled(),
+                    self.decl_symbol(param_stmt).mangled(),
                 )
             })
             .collect();
@@ -219,11 +227,9 @@ impl StmtVisitor for Codegen {
 
         if self.stage == CodegenStage::FuncPrototypes {
             if self.is_builtin {
-                let borrowed_symbol = stmt.symbol.borrow();
-                let symbol = borrowed_symbol.as_ref().unwrap();
-                if core::should_write_builtin(symbol) {
+                if core::should_write_builtin(&func_symbol) {
                     self.writer
-                        .write_function_prototype(ret_type, &symbol.mangled(), &params);
+                        .write_function_prototype(ret_type, &func_symbol.mangled(), &params);
                 }
             } else {
                 self.writer
@@ -231,12 +237,10 @@ impl StmtVisitor for Codegen {
             }
         } else {
             if self.is_builtin {
-                let borrowed_symbol = stmt.symbol.borrow();
-                let symbol = borrowed_symbol.as_ref().unwrap();
-                if core::should_write_builtin(symbol) {
+                if core::should_write_builtin(&func_symbol) {
                     self.writer
                         .start_decl_func(ret_type, &func_symbol.mangled(), &params);
-                    core::write(symbol, &mut self.writer);
+                    core::write(&func_symbol, &mut self.writer);
                     self.writer.end_decl_func();
                 }
             } else {
@@ -251,12 +255,11 @@ impl StmtVisitor for Codegen {
     fn visit_variable_decl(
         &mut self,
         stmt: &Stmt,
-        _name: &Token,
+        name: &ResolvedToken,
         _kind: &Option<Expr>,
         value: &Option<Expr>,
     ) -> Self::StmtResult {
-        let borrowed_symbol = stmt.symbol.borrow();
-        let var_symbol = borrowed_symbol.as_ref().unwrap();
+        let var_symbol = name.get_symbol().unwrap();
 
         let borrowed_type = stmt.stmt_type.borrow();
         let var_type = borrowed_type.as_ref().unwrap();

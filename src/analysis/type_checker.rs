@@ -24,12 +24,12 @@ impl Scope {
         }
     }
 
-    fn define_var(&mut self, decl: &Stmt, name: &Token, var_type: &NodeType) {
-        let new_symbol = Symbol::new((&self.id).as_ref(), name);
+    fn define_var(&mut self, decl: &Stmt, name: &ResolvedToken, var_type: &NodeType) {
+        let new_symbol = Symbol::new((&self.id).as_ref(), &name.token);
 
         self.symbols.insert(new_symbol.clone(), var_type.clone());
 
-        decl.symbol.replace(Some(new_symbol));
+        name.set_symbol(new_symbol);
         decl.stmt_type.replace(Some(var_type.clone()));
     }
 }
@@ -119,12 +119,12 @@ impl TypeChecker {
         self.scopes.last().unwrap().id.as_ref()
     }
 
-    fn push_type_scope(&mut self, name: &Token) -> Symbol {
-        self.push_scope_named(name.lexeme())
+    fn push_type_scope(&mut self, name: &ResolvedToken) -> Symbol {
+        self.push_scope_named(name.span().lexeme())
     }
 
-    fn push_function_scope(&mut self, name: &Token, ret_type: NodeType) -> Symbol {
-        let symbol = Symbol::new(self.current_symbol(), name);
+    fn push_function_scope(&mut self, name: &ResolvedToken, ret_type: NodeType) -> Symbol {
+        let symbol = Symbol::new(self.current_symbol(), &name.token);
         self.scopes
             .push(Scope::new(Some(symbol.clone()), Some(ret_type)));
         symbol
@@ -195,14 +195,14 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_type_decl(
         &mut self,
-        stmt: &Stmt,
-        name: &Token,
+        _stmt: &Stmt,
+        name: &ResolvedToken,
         fields: &[Stmt],
         methods: &[Stmt],
         meta_methods: &[Stmt],
     ) -> Analysis {
         let symbol = self.push_type_scope(name);
-        stmt.symbol.replace(Some(symbol));
+        name.set_symbol(symbol);
 
         self.push_scope_meta();
         self.check_list(meta_methods);
@@ -213,7 +213,7 @@ impl StmtVisitor for TypeChecker {
         for method in methods {
             guard!(StmtKind::FunctionDecl[name, _one, _two, _three, _four] = &method.kind);
             let name = name.clone();
-            let symbol = Symbol::new(self.current_symbol(), &name);
+            let symbol = Symbol::new(self.current_symbol(), &name.token);
             let function_type = self.lib.resolve_symbol(&symbol).unwrap().clone();
             self.current_scope().define_var(method, &name, &function_type);
         }
@@ -229,8 +229,8 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_function_decl(
         &mut self,
-        stmt: &Stmt,
-        name: &Token,
+        _stmt: &Stmt,
+        name: &ResolvedToken,
         params: &[Stmt],
         return_type_expr: &Option<Expr>,
         body: &[Stmt],
@@ -242,7 +242,7 @@ impl StmtVisitor for TypeChecker {
             .unwrap_or(NodeType::Void);
 
         let symbol = self.push_function_scope(name, return_type.clone());
-        stmt.symbol.replace(Some(symbol));
+        name.set_symbol(symbol);
 
         self.check_list(params);
         let analysis = self.check_list(body);
@@ -263,7 +263,7 @@ impl StmtVisitor for TypeChecker {
     fn visit_variable_decl(
         &mut self,
         stmt: &Stmt,
-        name: &Token,
+        name: &ResolvedToken,
         kind: &Option<Expr>,
         value: &Option<Expr>,
     ) -> Analysis {
