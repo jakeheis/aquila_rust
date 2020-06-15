@@ -115,8 +115,8 @@ impl TypeChecker {
         self.scopes.last_mut().unwrap()
     }
 
-    fn current_symbol(&mut self) -> Option<&Symbol> {
-        (&self.current_scope().id).as_ref()
+    fn current_symbol(&self) -> Option<&Symbol> {
+        self.scopes.last().unwrap().id.as_ref()
     }
 
     fn push_type_scope(&mut self, name: &Token) -> Symbol {
@@ -199,6 +199,15 @@ impl StmtVisitor for TypeChecker {
         self.pop_scope();
 
         self.check_list(fields);
+
+        for method in methods {
+            guard!(StmtKind::FunctionDecl[name, _one, _two, _three, _four] = &method.kind);
+            let name = name.clone();
+            let symbol = Symbol::new(self.current_symbol(), &name);
+            let function_type = self.lib.resolve_symbol(&symbol).unwrap().clone();
+            self.current_scope().define_var(method, &name, &function_type);
+        }
+
         self.check_list(methods);
 
         self.pop_scope();

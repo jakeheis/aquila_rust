@@ -37,4 +37,8 @@ type String {
         return String(new_storage);
     }
 
+    def append(string: String): String {
+        return append_literal(string.storage.location);
+    }
+
 }

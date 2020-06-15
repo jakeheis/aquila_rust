@@ -49,6 +49,7 @@ let dyn = String.literal(my_str);
 let dyn2 = String.literal(" yo");
 
 print dyn.append_literal(" world").storage.location;
+print dyn.append(dyn2).storage.location;
 
 /*let sum = Adder(4, 5);
 print sum.add(6);

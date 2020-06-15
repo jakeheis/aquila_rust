@@ -344,17 +344,15 @@ impl ExprVisitor for Codegen {
 
         let borrowed_symbol = target.symbol.borrow();
         let mut symbol = borrowed_symbol.as_ref().unwrap().clone();
-        let is_meta = symbol.parent().map(|p| p.is_meta()).unwrap_or(false);
 
-        match &target.kind {
-            ExprKind::Field(field_target, _) => {
-                if !is_meta {
-                    let ptr = format!("&({})", field_target.accept(self));
-                    args.insert(0, ptr);
-                }
-            }
-            ExprKind::Variable(_) => (),
-            _ => unimplemented!(),
+        let parent_type = symbol.parent().and_then(|p| self.lib.resolve_symbol(&p));
+        if let Some(NodeType::Metatype(_)) = parent_type {
+            let resolved_target = match &target.kind {
+                ExprKind::Field(field_target, _) => format!("&({})", field_target.accept(self)),
+                ExprKind::Variable(_) => String::from("self"),
+                _ => panic!(),
+            };
+            args.insert(0, resolved_target);
         }
 
         if let Some(NodeType::Metatype(metatype_symbol)) = self.lib.resolve_symbol(&symbol) {
@@ -372,16 +370,6 @@ impl ExprVisitor for Codegen {
         if let Some(NodeType::Function(..)) = self.lib.resolve_symbol(field_symbol) {
             return field_symbol.mangled();
         }
-
-        // let target_borrowed_symbol = target.symbol.borrow();
-        // let target_symbol = target_borrowed_symbol.as_ref().unwrap();
-
-        // let joiner = match self.lib.resolve_symbol(target_symbol) {
-        //     Some(NodeType::Pointer(_)) => "->",
-        //     _ => ".",
-        // };
-        
-        // format!("{}{}{}", target.accept(self), joiner, field_symbol.mangled())
 
         format!("{}.{}", target.accept(self), field_symbol.mangled())
     }
