@@ -26,6 +26,8 @@
    // lhs + rhs + third
 // }
 
+let numbers =  [1,2,3];
+
 type Adder {
   let lhs: int;
   let rhs: int;
@@ -39,8 +41,17 @@ type Adder {
   }
 }
 
-let input = read_line();
-String.from("Got: ").append(input).print_str();
+let adders = [Adder(1, 2), Adder(3,4)];
+
+/*
+enum Hello {
+  case one;
+  case two;
+}
+*/
+
+// let input = read_line();
+// String.from("Got: ").append(input).print_str();
 
 let dyn = String.from("hello");
 

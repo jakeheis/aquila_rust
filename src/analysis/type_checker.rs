@@ -627,6 +627,19 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
+    fn visit_array_expr(&mut self, _expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
+        let first = elements.first().unwrap().accept(self)?;
+
+        for element in elements.iter().skip(1) {
+            let element_type = element.accept(self)?;
+            if element_type != first {
+                return Err(self.type_mismatch(element, &element_type, &first));
+            }
+        }
+
+        Ok(NodeType::Array(Box::new(first)))
+    }
+
     fn visit_explicit_type_expr(
         &mut self,
         _expr: &Expr,
@@ -664,6 +677,7 @@ pub enum NodeType {
     Byte,
     Type(Symbol),
     Pointer(Box<NodeType>),
+    Array(Box<NodeType>),
     Function(Vec<NodeType>, Box<NodeType>),
     Metatype(Symbol),
 }
@@ -721,6 +735,7 @@ impl std::fmt::Display for NodeType {
                 string
             }
             NodeType::Pointer(ty) => format!("ptr<{}>", ty),
+            NodeType::Array(ty) => format!("Array<{}>", ty),
             NodeType::Type(ty) => ty.id.clone(),
             NodeType::Metatype(ty) => ty.id.clone() + "_Meta",
         };

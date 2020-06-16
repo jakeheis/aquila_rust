@@ -24,9 +24,8 @@ fn write_ptr_offset(writer: &mut CWriter) {
 }
 
 fn write_read_line(writer: &mut CWriter) {
-    writer.decl_var(&NodeType::pointer_to(NodeType::Byte), "line");
-    writer.write_assignment("line", "NULL");
-    writer.decl_var(&NodeType::Int, "size");
+    writer.decl_var(&NodeType::pointer_to(NodeType::Byte), "line", Some(String::from("NULL")));
+    writer.decl_var(&NodeType::Int, "size", None);
     writer.writeln("getline(&line, &size, stdin);");
     writer.write_return(Some(String::from("line")));
 }

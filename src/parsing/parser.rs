@@ -431,6 +431,19 @@ impl Parser {
         }
     }
 
+    fn array(&mut self, _can_assign: bool) -> Result<Expr> {
+        let left_bracket = self.previous().span.clone();
+        let mut elements: Vec<Expr> = Vec::new();
+        while !self.is_at_end() && self.peek() != TokenKind::RightBracket {
+            elements.push(self.expression()?);
+            if self.peek() != TokenKind::RightBracket {
+                self.consume(TokenKind::Comma, "Expect ',' between array elements")?;
+            }
+        }
+        let right_bracket = self.consume(TokenKind::RightBracket, "Expect ']' after array elements")?;
+        Ok(Expr::array(left_bracket, elements, right_bracket))
+    }
+
     fn parse_var(&mut self, allow_type: bool, require_type: bool) -> Result<(Token, Option<Expr>)> {
         let name = self.previous().clone();
         let mut explicit_type: Option<Expr> = None;
@@ -532,6 +545,7 @@ impl TokenKind {
                 Some(Parser::literal)
             }
             TokenKind::Identifier => Some(Parser::variable),
+            TokenKind::LeftBracket => Some(Parser::array),
             _ => None,
         }
     }

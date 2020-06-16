@@ -30,6 +30,8 @@ pub enum TokenKind {
     RightBrace,
     LeftParen,
     RightParen,
+    LeftBracket,
+    RightBracket,
 
     // Keywords
     True,

@@ -254,6 +254,7 @@ pub enum ExprKind {
     Field(Box<Expr>, ResolvedToken),
     Literal(Token),
     Variable(ResolvedToken),
+    Array(Vec<Expr>),
     ExplicitType(Token, Option<Token>),
 }
 
@@ -283,6 +284,7 @@ impl Expr {
             ExprKind::Field(target, field) => visitor.visit_field_expr(&self, &target, &field),
             ExprKind::Literal(token) => visitor.visit_literal_expr(&self, &token),
             ExprKind::Variable(name) => visitor.visit_variable_expr(&self, &name),
+            ExprKind::Array(elements) => visitor.visit_array_expr(&self, elements),
             ExprKind::ExplicitType(name, modifier) => {
                 visitor.visit_explicit_type_expr(&self, &name, &modifier)
             }
@@ -343,6 +345,11 @@ impl Expr {
         Expr::new(ExprKind::Variable(ResolvedToken::new(name)), span)
     }
 
+    pub fn array(left_bracket: Span, elements: Vec<Expr>, right_bracket: &Token) -> Self {
+        let span = Span::join(&left_bracket, right_bracket);
+        Expr::new(ExprKind::Array(elements), span)
+    }
+
     pub fn explicit_type(name: Token, modifier: Option<Token>) -> Self {
         let span = (&modifier)
             .as_ref()
@@ -394,6 +401,7 @@ pub trait ExprVisitor {
     ) -> Self::ExprResult;
     fn visit_literal_expr(&mut self, expr: &Expr, token: &Token) -> Self::ExprResult;
     fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult;
+    fn visit_array_expr(&mut self, expr: &Expr, elements: &[Expr]) -> Self::ExprResult;
     fn visit_explicit_type_expr(
         &mut self,
         expr: &Expr,
@@ -731,6 +739,13 @@ impl ExprVisitor for ASTPrinter {
             name.span().lexeme(),
             symbol
         ))
+    }
+
+    fn visit_array_expr(&mut self, _expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
+        self.write_ln("Array");
+        self.indent(|writer| {
+            elements.iter().for_each(|e| e.accept(writer));
+        })
     }
 
     fn visit_explicit_type_expr(&mut self, _expr: &Expr, name: &Token, modifier: &Option<Token>) {

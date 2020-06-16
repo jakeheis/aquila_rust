@@ -182,7 +182,7 @@ impl StmtVisitor for Codegen {
                         &init_symbol.mangled(),
                         &field_list,
                     );
-                    self.writer.decl_var(&ret_type, "new_item");
+                    self.writer.decl_var(&ret_type, "new_item", None);
                     for (_, f) in field_list {
                         let target = format!("new_item.{}", f);
                         self.writer.write_assignment(&target, &f);
@@ -266,12 +266,14 @@ impl StmtVisitor for Codegen {
         let var_symbol = name.get_symbol().unwrap();
         let var_type = name.get_type().unwrap();
 
-        self.writer.decl_var(&var_type, &var_symbol.mangled());
+        let decl_name = if let NodeType::Array(_) = var_type {
+            format!("{}[]", var_symbol.mangled())
+        } else {
+            var_symbol.mangled()
+        };
 
-        if let Some(value) = value.as_ref() {
-            let value = value.accept(self);
-            self.writer.write_assignment(&var_symbol.mangled(), &value);
-        }
+        let value = value.as_ref().map(|v| v.accept(self));
+        self.writer.decl_var(&var_type, &decl_name, value);
     }
 
     fn visit_if_stmt(
@@ -453,6 +455,11 @@ impl ExprVisitor for Codegen {
         } else {
             symbol.mangled()
         }
+    }
+
+    fn visit_array_expr(&mut self, _expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
+        let elements: Vec<String> = elements.iter().map(|e| e.accept(self)).collect();
+        format!("{{ {} }}", elements.join(","))
     }
 
     fn visit_explicit_type_expr(

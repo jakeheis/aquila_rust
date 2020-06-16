@@ -65,8 +65,14 @@ impl CWriter {
         self.writeln("}");
     }
 
-    pub fn decl_var(&mut self, var_type: &NodeType, name: &str) {
-        self.writeln(&format!("{} {};", self.convert_type(var_type), name));
+    pub fn decl_var(&mut self, var_type: &NodeType, name: &str, initial_value: Option<String>) {
+        let start = format!("{} {}", self.convert_type(var_type), name);
+        let whole = if let Some(initial_value) = initial_value {
+            format!("{} = {}", start, initial_value)
+        } else {
+            start
+        };
+        self.writeln(&(whole + ";"));
     }
 
     pub fn start_if_block(&mut self, condition: String) {
@@ -146,6 +152,7 @@ impl CWriter {
                 }
             }
             NodeType::Pointer(ty) => format!("{}*", self.convert_type(ty)),
+            NodeType::Array(ty) => self.convert_type(ty),
             other_type => panic!("Can't convert type {}", other_type),
         }
     }

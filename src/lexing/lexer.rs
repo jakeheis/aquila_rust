@@ -68,6 +68,8 @@ impl Lexer {
             '}' => self.make_token(TokenKind::RightBrace),
             '(' => self.make_token(TokenKind::LeftParen),
             ')' => self.make_token(TokenKind::RightParen),
+            '[' => self.make_token(TokenKind::LeftBracket),
+            ']' => self.make_token(TokenKind::RightBracket),
             '0'..='9' => self.number(),
             'a'..='z' | 'A'..='Z' | '_' => self.identifier(),
             '"' => self.string(),
