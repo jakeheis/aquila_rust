@@ -5,6 +5,7 @@ use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
+use super::node_type::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -153,11 +154,11 @@ impl TypeChecker {
         self.scopes.pop();
     }
 
-    fn resolve_var(&self, name: &str) -> Option<(Symbol, &NodeType)> {
+    fn resolve_var(&self, name: &str) -> Option<(Symbol, NodeType)> {
         for scope in self.scopes.iter().rev() {
             let possible_symbol = Symbol::new_str((&scope.id).as_ref(), name);
             if let Some(node_type) = scope.symbols.get_type(&possible_symbol) {
-                return Some((possible_symbol, node_type));
+                return Some((possible_symbol, node_type.clone()));
             }
         }
 
@@ -546,8 +547,7 @@ impl ExprVisitor for TypeChecker {
                 )),
             }?;
 
-            let params = params.clone();
-            let return_type: NodeType = (**return_type).clone();
+            let return_type: NodeType = (*return_type).clone();
 
             self.check_function_arguments(expr, &params, args)?;
 
@@ -581,8 +581,7 @@ impl ExprVisitor for TypeChecker {
             Some(NodeType::Function(params, ret_val)) => {
                 method.set_symbol(method_symbol);
 
-                let params = params.clone();
-                let ret_val = (**ret_val).clone();
+                let ret_val = (*ret_val).clone();
 
                 self.check_function_arguments(expr, &params, args)?;
                 expr.set_type(ret_val)
@@ -678,7 +677,7 @@ impl ExprVisitor for TypeChecker {
         };
 
         for (index, element_type) in element_types.iter().enumerate() {
-            if !element_type.tolerant_match(&expected_type) {
+            if !element_type.matches(&expected_type) {
                 return Err(self.type_mismatch(&elements[index], &element_type, &expected_type))
             }
         }
@@ -701,218 +700,15 @@ impl ExprVisitor for TypeChecker {
     fn visit_explicit_type_expr(
         &mut self,
         expr: &Expr,
-        category: &ExplicitTypeCategory,
+        _category: &ExplicitTypeCategory,
     ) -> Self::ExprResult {
-        let resolved_type = match category {
-            ExplicitTypeCategory::Simple(token) => {
-                if let Some(primitive) = NodeType::primitive(&token.token) {
-                    token.set_symbol(Symbol::new(None, &token.token));
-                    Ok(primitive)
-                } else if let Some((_, node_type)) = self.resolve_var(token.token.lexeme()) {
-                    if let NodeType::Metatype(type_symbol) = node_type {
-                        token.set_symbol(type_symbol.clone());
-                        Ok(NodeType::Type(type_symbol.clone()))
-                    } else {
-                        Err(Diagnostic::error(token, "Not a type"))
-                    }
-                } else {
-                    Err(Diagnostic::error(token, "Undefined type"))
-                }
-            }
-            ExplicitTypeCategory::Array(of, count_token) => {
-                let of = of.accept(self)?;
-                match count_token.lexeme().parse::<usize>() {
-                    Ok(count) => {
-                        let size = ArraySize::Known(count);
-                        Ok(NodeType::Array(Box::new(of), size))
-                    }
-                    Err(..) => Err(Diagnostic::error(
-                        count_token,
-                        "Array count must be an integer",
-                    )),
-                }
-            }
-            ExplicitTypeCategory::Pointer(to) => {
-                let to = to.accept(self)?;
-                Ok(NodeType::pointer_to(to))
-            }
-        }?;
-
-        expr.set_type(resolved_type)
-    }
-}
-
-// NodeType
-
-#[derive(Clone, Debug)]
-pub enum NodeType {
-    Void,
-    Int,
-    Bool,
-    Byte,
-    Type(Symbol),
-    Pointer(Box<NodeType>),
-    Array(Box<NodeType>, ArraySize),
-    Function(Vec<NodeType>, Box<NodeType>),
-    Metatype(Symbol),
-    Ambiguous,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum ArraySize {
-    Known(usize),
-    Unknown,
-}
-
-impl std::fmt::Display for ArraySize {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            ArraySize::Known(size) => write!(f, "{}", size),
-            ArraySize::Unknown => write!(f, "<unknown>"),
-        }
-    }
-}
-
-impl NodeType {
-    pub fn matches(&self, unambiguous: &NodeType) -> bool {
-        match (self, unambiguous) {
-            (NodeType::Void, NodeType::Void)
-            | (NodeType::Int, NodeType::Int)
-            | (NodeType::Bool, NodeType::Bool)
-            | (NodeType::Byte, NodeType::Byte) => true,
-            (NodeType::Type(lhs), NodeType::Type(rhs))
-            | (NodeType::Metatype(lhs), NodeType::Metatype(rhs))
-                if lhs == rhs =>
-            {
-                true
-            }
-            (NodeType::Pointer(lhs), NodeType::Pointer(rhs)) => lhs.matches(&rhs),
-            (NodeType::Function(lhs_params, lhs_ret), NodeType::Function(rhs_params, rhs_ret))
-                if lhs_params.len() == rhs_params.len() =>
-            {
-                if !lhs_ret.matches(&rhs_ret) {
-                    return false;
-                }
-
-                for (lhs_param, rhs_param) in lhs_params.iter().zip(rhs_params) {
-                    if !lhs_param.matches(&rhs_param) {
-                        return false;
-                    }
-                }
-                
-                true
-            }
-            (NodeType::Array(lhs_kind, lhs_size), NodeType::Array(rhs_kind, rhs_size)) => {
-                if !lhs_kind.matches(rhs_kind) {
-                    return false;
-                }
-
-                if let (ArraySize::Known(k1), ArraySize::Known(k2)) = (lhs_size, rhs_size) {
-                    if k1 != k2 {
-                        return false;
-                    }
-                }
-
-                true
-            },
-            (NodeType::Ambiguous, _) => true,
-            _ => false,
-        }
-    }
-
-    pub fn tolerant_match(&self, rhs: &NodeType) -> bool {
-        if self.matches(rhs) {
-            true
+        let context: Vec<Symbol> = self.scopes.iter().flat_map(|s| s.id.as_ref().map(|id| id.clone())).collect();
+        
+        if let Some(deduced) = NodeType::deduce_from(expr, &self.lib, &context) {
+            Ok(deduced)
         } else {
-            match (self, rhs) {
-                (NodeType::Array(l_inner, l_size), NodeType::Array(r_inner, r_size)) => {
-                    match (l_size, r_size) {
-                        (ArraySize::Known(k1), ArraySize::Known(k2)) if k1 != k2 => return false,
-                        (ArraySize::Unknown, ArraySize::Unknown) => return false,
-                        _ => (),
-                    }
-
-                    let l_inner: &NodeType = &l_inner;
-                    let r_inner: &NodeType = &r_inner;
-                    
-                    if let (NodeType::Ambiguous, NodeType::Ambiguous) = (l_inner, r_inner) {
-                        return true;
-                    }
-
-                    l_inner.tolerant_match(r_inner)
-                },
-                _ => false
-            }
+            Err(Diagnostic::error(expr, "Undefined type"))
         }
-    }
-
-    pub fn primitive(token: &Token) -> Option<Self> {
-        match token.lexeme() {
-            "void" => Some(NodeType::Void),
-            "int" => Some(NodeType::Int),
-            "bool" => Some(NodeType::Bool),
-            "byte" => Some(NodeType::Byte),
-            _ => None,
-        }
-    }
-
-    pub fn pointer_to(pointee: NodeType) -> Self {
-        NodeType::Pointer(Box::new(pointee))
-    }
-
-    pub fn contains_ambiguity(&self) -> bool {
-        match self {
-            NodeType::Ambiguous => true,
-            NodeType::Pointer(ptr) => ptr.contains_ambiguity(),
-            NodeType::Array(of, count) => of.contains_ambiguity() || count == &ArraySize::Unknown,
-            NodeType::Function(params, ret) => {
-                for param in params {
-                    if param.contains_ambiguity() {
-                        return true;
-                    }
-                }
-                ret.contains_ambiguity()
-            },
-            _ => false,
-        }
-    }
-
-    pub fn is_pointer_to(&self, node_type: NodeType) -> bool {
-        if let NodeType::Pointer(pointee) = self {
-            if pointee.matches(&node_type) {
-                return true;
-            }
-        }
-        false
-    }
-}
-
-impl std::fmt::Display for NodeType {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let kind = match self {
-            NodeType::Void => String::from("void"),
-            NodeType::Int => String::from("int"),
-            NodeType::Bool => String::from("bool"),
-            NodeType::Byte => String::from("byte"),
-            NodeType::Function(params, ret) => {
-                let mut string = String::from("def(");
-                if let Some(first) = params.first() {
-                    string += &first.to_string()
-                }
-                params
-                    .iter()
-                    .skip(1)
-                    .for_each(|p| string += &format!(", {}", p));
-                string += &format!("): {}", ret);
-                string
-            }
-            NodeType::Pointer(ty) => format!("ptr<{}>", ty),
-            NodeType::Array(ty, size) => format!("Array<{}, count={}>", ty, size),
-            NodeType::Type(ty) => ty.id.clone(),
-            NodeType::Metatype(ty) => ty.id.clone() + "_Meta",
-            NodeType::Ambiguous => String::from("<ambiguous>"),
-        };
-        write!(f, "{}", kind)
     }
 }
 

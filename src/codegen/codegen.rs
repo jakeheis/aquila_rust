@@ -411,7 +411,6 @@ impl ExprVisitor for Codegen {
                 let first_called_symbol = first_called.get_symbol().unwrap();
                 let first_called_type = self.lib.resolve_symbol(&first_called_symbol).unwrap();
                 guard!(NodeType::Function[_params, first_called_ret_type] = first_called_type);
-                let first_called_ret_type = (**first_called_ret_type).clone();
 
                 self.write_temp(&first_called_ret_type, object_str)
             }
@@ -441,7 +440,6 @@ impl ExprVisitor for Codegen {
                 let target_symbol = function.get_symbol().unwrap();
                 let target_type = self.lib.resolve_symbol(&target_symbol).unwrap();
                 guard!(NodeType::Function[_params, ret_type] = target_type);
-                let ret_type = (**ret_type).clone();
 
                 let temp_name = self.write_temp(&ret_type, target_str);
 

@@ -1,9 +1,8 @@
-use super::type_checker::{ArraySize, NodeType};
+use super::node_type::*;
 use crate::guard;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -99,65 +98,165 @@ impl std::fmt::Display for SymbolTable {
 }
 
 pub struct SymbolTableBuilder {
-    table: SymbolTable,
-    lib: Rc<IncompleteLib>,
+    lib: Rc<Lib>,
     context: Vec<Symbol>,
-    visit_methods: bool,
 }
 
 impl SymbolTableBuilder {
     pub fn build_symbols(lib: IncompleteLib) -> Lib {
+        let lib = lib.add_symbols(SymbolTable::new());
         let lib = Rc::new(lib);
 
         let mut builder = SymbolTableBuilder {
-            table: SymbolTable::new(),
             lib: Rc::clone(&lib),
             context: Vec::new(),
-            visit_methods: false,
         };
 
-        // Add all top level types before visiting any function and trying to figure out return type
-        builder.build_list(&lib.type_decls);
+        builder.build_type_headers(&lib.type_decls);
+        builder.build_type_internals(&lib.type_decls);
+        builder.build_functions(&lib.function_decls);
 
-        builder.visit_methods = true;
-        builder.build_list(&lib.type_decls);
-        builder.build_list(&lib.function_decls);
-
-        let table = std::mem::replace(&mut builder.table, SymbolTable::new());
         std::mem::drop(builder);
 
-        let lib = Rc::try_unwrap(lib).ok().unwrap();
-        lib.add_symbols(table)
+        Rc::try_unwrap(lib).ok().unwrap()
     }
 
-    fn build_list(&mut self, stmts: &[Stmt]) -> Vec<NodeType> {
-        stmts.iter().map(|s| s.accept(self)).collect()
+    fn build_type_headers(&mut self, type_decls: &[Stmt]) {
+        for type_decl in type_decls {
+            self.build_type_header(type_decl);
+        }
     }
 
-    fn resolve_symbol(&self, symbol: &Symbol) -> Option<&NodeType> {
-        if let Some(found) = self.table.get_type(symbol) {
-            Some(found)
-        } else if let Some(found) = self.lib.resolve_symbol(symbol) {
-            Some(found)
+    fn insert(&mut self, symbol: Symbol, node_type: NodeType) {
+        self.lib.symbols.borrow_mut().insert(symbol, node_type);
+    }
+
+    fn contains_symbol(&mut self, symbol: &Symbol) -> bool {
+        self.lib.resolve_symbol(symbol).is_some()
+    }
+
+    fn build_type_header(&mut self, decl: &Stmt) {
+        guard!(StmtKind::TypeDecl[name, _fields, _method, _meta_methods] = &decl.kind);
+
+        let new_symbol = Symbol::new(self.context.last(), &name.token);
+        let new_type = NodeType::Metatype(new_symbol.clone());
+        
+        self.insert(new_symbol.clone(), new_type.clone());
+
+        name.set_symbol(new_symbol);
+        name.set_type(new_type);
+    }
+
+    fn build_type_internals(&mut self, type_decls: &[Stmt]) {        
+        for type_decl in type_decls {
+            self.build_type_internal(type_decl);
+        }
+    }
+
+    fn build_type_internal(&mut self, decl: &Stmt) {
+        guard!(StmtKind::TypeDecl[name, fields, methods, meta_methods] = &decl.kind);
+
+        self.context.push(name.get_symbol().unwrap().clone());
+
+        let mut field_types: Vec<NodeType> = Vec::new();
+        for field in fields {
+            let (token, field_type) = self.var_decl_type(field);
+            field_types.push(field_type.clone());
+            self.insert(Symbol::new(self.context.last(), token), field_type);
+        }
+
+        self.build_functions(&methods);
+
+        self.context.push(Symbol::meta_symbol(self.context.last()));
+        self.build_functions(&meta_methods);
+
+        let init_symbol = Symbol::init_symbol(self.context.last());
+        if !self.contains_symbol(&init_symbol) {
+            let instance_type = NodeType::Type(name.get_symbol().unwrap().clone());
+            let init_type = NodeType::Function(field_types, Box::new(instance_type));
+            self.insert(init_symbol, init_type.clone());
+        }
+
+        self.context.pop(); // Meta pop
+
+        self.context.pop(); // Type pop
+    }
+
+    fn build_functions(&mut self, stmts: &[Stmt]) {
+        for stmt in stmts {
+            self.build_function(stmt);
+        }
+    }
+
+    fn build_function(&mut self, stmt: &Stmt) {        
+        let (name, params, return_type) = match &stmt.kind {
+            StmtKind::FunctionDecl(name, params, return_type, ..) => (name, params, return_type),
+            StmtKind::Builtin(internal) => {
+                guard!(StmtKind::FunctionDecl[name, params, return_type, _body, _meta] = &internal.kind);
+                (name, params, return_type)
+            },
+            _ => unreachable!(),
+        };
+
+        let new_symbol = Symbol::new(self.context.last(), &name.token);
+
+        let param_types: Vec<_> = params.iter().map(|p| self.var_decl_type(p).1).collect();
+
+        let return_type = return_type
+            .as_ref()
+            .map(|r| self.resolve_explicit_type_expr(r))
+            .unwrap_or(NodeType::Void);
+        let new_type = NodeType::Function(param_types, Box::new(return_type));
+
+        self.insert(new_symbol, new_type.clone());
+        name.set_type(new_type.clone());
+    }
+
+    fn var_decl_type<'a>(&self, var_decl: &'a Stmt) -> (&'a Token, NodeType) {
+        guard!(StmtKind::VariableDecl[name, explicit_type, _value] = &var_decl.kind);
+        let explicit_type = self.resolve_explicit_type_expr(explicit_type.as_ref().unwrap());
+        (&name.token, explicit_type)
+    }
+
+    fn resolve_explicit_type_expr(&self, expr: &Expr) -> NodeType {
+        if let Some(node_type) = NodeType::deduce_from(expr, &self.lib, &self.context) {
+            node_type
         } else {
-            None
+            // Isn't a real type; make a fake type and type checker will catch the error
+            NodeType::Type(Symbol::new_str(None, "_fake_type"))
+        }
+    }
+
+    /*
+    fn symbol_for_type_token(&self, token: &Token) -> Symbol {
+        for parent in self.context.iter().rev() {
+            let non_top_level_symbol = Symbol::new(Some(parent), token);
+            if let Some(NodeType::Metatype(_)) = self.table.get_type(&non_top_level_symbol) {
+                return non_top_level_symbol;
+            }
+        }
+
+        let top_level_symbol = Symbol::new(None, token);
+
+        if let Some(NodeType::Metatype(_)) = self.table.get_type(&top_level_symbol) {
+            top_level_symbol
+        } else if let Some(NodeType::Metatype(_)) = self.lib.resolve_symbol(&top_level_symbol) {
+            top_level_symbol
+        } else {
+            // Isn't a real type; make a fake type and type checker will catch the error
+            Symbol::new(None, token)
         }
     }
 
     fn resolve_explicit_type_expr(&self, type_expr: &Expr) -> NodeType {
         guard!(ExprKind::ExplicitType[category] = &type_expr.kind);
 
-        match category {
+        let node_type = match category {
             ExplicitTypeCategory::Simple(token) => {
                 if let Some(primitive) = NodeType::primitive(&token.token) {
                     primitive
-                } else if let Some(NodeType::Metatype(symbol)) =
-                    self.resolve_symbol(&Symbol::new(None, &token.token))
-                {
-                    NodeType::Type(symbol.clone())
                 } else {
-                    // Isn't a real type; make a fake type and type checker will catch the error
-                    NodeType::Type(Symbol::new(None, &token.token))
+                    NodeType::Type(self.symbol_for_type_token(&token.token))
                 }
             }
             ExplicitTypeCategory::Pointer(to) => {
@@ -174,122 +273,8 @@ impl SymbolTableBuilder {
                     Err(..) => NodeType::Array(Box::new(inner), ArraySize::Unknown),
                 }
             }
-        }
-    }
-}
+        };
 
-impl StmtVisitor for SymbolTableBuilder {
-    type StmtResult = NodeType;
-
-    fn visit_type_decl(
-        &mut self,
-        _stmt: &Stmt,
-        name: &TypedToken,
-        fields: &[Stmt],
-        methods: &[Stmt],
-        meta_methods: &[Stmt],
-    ) -> Self::StmtResult {
-        let new_symbol = Symbol::new(self.context.last(), &name.token);
-        let new_type = NodeType::Metatype(new_symbol.clone());
-
-        if self.visit_methods {
-            self.context.push(new_symbol.clone());
-            let field_types = self.build_list(&fields);
-
-            self.build_list(&methods);
-
-            self.context.push(Symbol::meta_symbol(self.context.last()));
-            self.build_list(&meta_methods);
-
-            let init_symbol = Symbol::init_symbol(self.context.last());
-            if self.table.get_type(&init_symbol).is_none() {
-                let init_type =
-                    NodeType::Function(field_types, Box::new(NodeType::Type(new_symbol)));
-                self.table
-                    .insert(Symbol::init_symbol(self.context.last()), init_type.clone());
-            }
-
-            self.context.pop();
-
-            self.context.pop();
-        } else {
-            self.table.insert(new_symbol.clone(), new_type.clone());
-            self.context.push(new_symbol.clone());
-            for field in fields {
-                guard!(StmtKind::VariableDecl[name, _e1, _e2] = &field.kind);
-                let field_type = field.accept(self);
-                self.table
-                    .insert(Symbol::new(self.context.last(), &name.token), field_type);
-            }
-            self.context.pop();
-        }
-
-        new_type
-    }
-
-    fn visit_function_decl(
-        &mut self,
-        _stmt: &Stmt,
-        name: &TypedToken,
-        params: &[Stmt],
-        return_type: &Option<Expr>,
-        _body: &[Stmt],
-        _is_meta: bool,
-    ) -> Self::StmtResult {
-        let new_symbol = Symbol::new(self.context.last(), &name.token);
-
-        let param_types: Vec<NodeType> = params.iter().map(|p| p.accept(self)).collect();
-
-        let return_type = return_type
-            .as_ref()
-            .map(|r| self.resolve_explicit_type_expr(r))
-            .unwrap_or(NodeType::Void);
-        let new_type = NodeType::Function(param_types, Box::new(return_type));
-
-        self.table.insert(new_symbol, new_type.clone());
-        name.set_type(new_type.clone());
-
-        new_type
-    }
-
-    fn visit_variable_decl(
-        &mut self,
-        _stmt: &Stmt,
-        _name: &TypedToken,
-        explicit_type: &Option<Expr>,
-        _value: &Option<Expr>,
-    ) -> Self::StmtResult {
-        self.resolve_explicit_type_expr(explicit_type.as_ref().unwrap())
-    }
-
-    fn visit_if_stmt(
-        &mut self,
-        _stmt: &Stmt,
-        _condition: &Expr,
-        _body: &[Stmt],
-        _else_body: &[Stmt],
-    ) -> Self::StmtResult {
-        NodeType::Void
-    }
-
-    fn visit_return_stmt(&mut self, _stmt: &Stmt, _expr: &Option<Expr>) -> Self::StmtResult {
-        NodeType::Void
-    }
-
-    fn visit_print_stmt(
-        &mut self,
-        _stmt: &Stmt,
-        _expr: &Option<Expr>,
-        _print_type: &RefCell<Option<NodeType>>,
-    ) -> Self::StmtResult {
-        NodeType::Void
-    }
-
-    fn visit_expression_stmt(&mut self, _stmt: &Stmt, _expr: &Expr) -> Self::StmtResult {
-        NodeType::Void
-    }
-
-    fn visit_builtin_stmt(&mut self, _stmt: &Stmt, inner: &Box<Stmt>) -> Self::StmtResult {
-        inner.accept(self)
-    }
+        type_expr.set_type(node_type).ok().unwrap()
+    }*/
 }

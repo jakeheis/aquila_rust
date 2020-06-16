@@ -4,19 +4,20 @@ use crate::lexing::*;
 use crate::parsing::*;
 use crate::source::{self, Source};
 use std::rc::Rc;
+use std::cell::RefCell;
 
 pub struct Lib {
     pub name: String,
     pub function_decls: Vec<Stmt>,
     pub type_decls: Vec<Stmt>,
     pub other: Vec<Stmt>,
-    pub symbols: SymbolTable,
+    pub symbols: RefCell<SymbolTable>,
     pub dependencies: Vec<Rc<Lib>>,
 }
 
 const LOG_LEXER: bool = false;
 const LOG_PARSER: bool = false;
-const LOG_SYMBOL_MAKER: bool = false;
+const LOG_SYMBOL_MAKER: bool = true;
 const LOG_TYPE_CHECKER: bool = false;
 const LOG_STDLIB: bool = false;
 
@@ -31,7 +32,7 @@ impl Lib {
             source::file("/Users/jakeheiser/Desktop/Projects/Rust/aquila/src/library/stdlib.aq");
         let lib = Lib::build_lib(src, "stdlib", false).unwrap();
         if LOG_STDLIB {
-            println!("std {}", lib.symbols);
+            println!("std {}", lib.symbols.borrow());
         }
         lib
     }
@@ -77,7 +78,7 @@ impl Lib {
         let lib = SymbolTableBuilder::build_symbols(lib);
 
         if LOG_SYMBOL_MAKER {
-            println!("Table: {}", lib.symbols);
+            println!("Table: {}", lib.symbols.borrow());
         }
 
         let lib = TypeChecker::check(lib, Rc::clone(&reporter));
@@ -102,9 +103,9 @@ impl Lib {
         Ok(lib)
     }
 
-    pub fn resolve_symbol(&self, symbol: &Symbol) -> Option<&NodeType> {
-        if let Some(found) = self.symbols.get_type(symbol) {
-            Some(found)
+    pub fn resolve_symbol(&self, symbol: &Symbol) -> Option<NodeType> {
+        if let Some(found) = self.symbols.borrow().get_type(symbol) {
+            Some(found.clone())
         } else {
             for dep in &self.dependencies {
                 if let Some(found) = dep.resolve_symbol(symbol) {
@@ -152,12 +153,12 @@ impl IncompleteLib {
             function_decls: self.function_decls,
             type_decls: self.type_decls,
             other: self.other,
-            symbols,
+            symbols: RefCell::new(symbols),
             dependencies: self.dependencies,
         }
     }
 
-    pub fn resolve_symbol(&self, symbol: &Symbol) -> Option<&NodeType> {
+    pub fn resolve_symbol(&self, symbol: &Symbol) -> Option<NodeType> {
         for dep in &self.dependencies {
             if let Some(found) = dep.resolve_symbol(symbol) {
                 return Some(found);

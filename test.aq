@@ -46,6 +46,8 @@ print adders[2].add(3);
 
 let more_numbers= [[], [2]];
 
+let some: more_numbers;
+
 let hey = [] + 4;
 
 /*
