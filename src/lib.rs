@@ -18,6 +18,13 @@ pub fn run(source: Source) -> Result<(), &'static str> {
 
 #[macro_export]
 macro_rules! guard {
+    ($pattern_path:path[$name:ident] = $bound:expr) => {
+        let $name = if let $pattern_path($name) = $bound {
+            $name
+        } else {
+            unreachable!()
+        };
+    };
     ($pattern_path:path[$( $name:ident ), *] = $bound:expr) => {
         let ($($name), *) = if let $pattern_path($($name), *) = $bound {
             ($($name), *)

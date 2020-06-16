@@ -417,6 +417,12 @@ impl Parser {
         }
     }
 
+    fn subscript(&mut self, lhs: Expr, _can_assign: bool) -> Result<Expr> {
+        let index = self.expression()?;
+        let right_bracket = self.consume(TokenKind::RightBracket, "Expect ']' after subscript index")?;
+        Ok(Expr::subscript(lhs, index, &right_bracket))
+    }
+
     fn literal(&mut self, _can_assign: bool) -> Result<Expr> {
         Ok(Expr::literal(self.previous()))
     }
@@ -566,6 +572,7 @@ impl TokenKind {
             | TokenKind::LessEqual => Some((Parser::binary, Precedence::Comparison)),
             TokenKind::LeftParen => Some((Parser::call, Precedence::Call)),
             TokenKind::Period => Some((Parser::field, Precedence::Call)),
+            TokenKind::LeftBracket => Some((Parser::subscript, Precedence::Call)),
             _ => None,
         }
     }

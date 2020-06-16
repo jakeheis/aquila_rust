@@ -152,7 +152,7 @@ impl CWriter {
                 }
             }
             NodeType::Pointer(ty) => format!("{}*", self.convert_type(ty)),
-            NodeType::Array(ty) => self.convert_type(ty),
+            NodeType::Array(ty, _) => self.convert_type(ty),
             other_type => panic!("Can't convert type {}", other_type),
         }
     }

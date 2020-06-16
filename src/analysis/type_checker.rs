@@ -411,7 +411,7 @@ impl ExprVisitor for TypeChecker {
 
     fn visit_assignment_expr(
         &mut self,
-        _expr: &Expr,
+        expr: &Expr,
         target: &Expr,
         value: &Expr,
     ) -> Self::ExprResult {
@@ -420,12 +420,12 @@ impl ExprVisitor for TypeChecker {
         if target_type != value_type {
             self.report_error(self.type_mismatch(value, &value_type, &target_type));
         }
-        Ok(NodeType::Void)
+        expr.set_type(NodeType::Void)
     }
 
     fn visit_binary_expr(
         &mut self,
-        _expr: &Expr,
+        expr: &Expr,
         lhs: &Expr,
         op: &Token,
         rhs: &Expr,
@@ -446,14 +446,14 @@ impl ExprVisitor for TypeChecker {
         };
 
         if let Some(matching_entry) = entries.iter().find(|e| e.0 == lhs_type && e.1 == rhs_type) {
-            Ok(matching_entry.2.clone())
+            expr.set_type(matching_entry.2.clone())
         } else {
             let message = format!("Cannot {} on {} and {}", op.lexeme(), lhs_type, rhs_type);
             Err(Diagnostic::error(&Span::join(lhs, rhs), &message))
         }
     }
 
-    fn visit_unary_expr(&mut self, _expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
+    fn visit_unary_expr(&mut self, expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
         let operand_type = operand.accept(self)?;
 
         if let TokenKind::Ampersand = op.kind {
@@ -478,7 +478,7 @@ impl ExprVisitor for TypeChecker {
         };
 
         if entries.contains(&operand_type) {
-            Ok(operand_type.clone())
+            expr.set_type(operand_type.clone())
         } else {
             let message = format!("Cannot {} on {}", op.lexeme(), operand_type);
             Err(Diagnostic::error(operand, &message))
@@ -518,7 +518,7 @@ impl ExprVisitor for TypeChecker {
 
             self.check_function_arguments(expr, &params, args)?;
 
-            Ok(return_type)
+            expr.set_type(return_type)
         } else {
             Err(Diagnostic::error(function, "Undefined function"))
         }
@@ -552,7 +552,7 @@ impl ExprVisitor for TypeChecker {
                 let ret_val = (**ret_val).clone();
 
                 self.check_function_arguments(expr, &params, args)?;
-                Ok(ret_val)
+                expr.set_type(ret_val)
             }
             Some(_) => Err(Diagnostic::error(
                 &Span::join(object, method),
@@ -575,7 +575,7 @@ impl ExprVisitor for TypeChecker {
 
     fn visit_field_expr(
         &mut self,
-        _expr: &Expr,
+        expr: &Expr,
         target: &Expr,
         field: &ResolvedToken,
     ) -> Self::ExprResult {
@@ -595,7 +595,7 @@ impl ExprVisitor for TypeChecker {
 
         if let Some(field_type) = self.lib.resolve_symbol(&field_symbol) {
             field.set_symbol(field_symbol);
-            Ok(field_type.clone())
+            expr.set_type(field_type.clone())
         } else {
             Err(Diagnostic::error(
                 &Span::join(target, field),
@@ -608,26 +608,27 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_literal_expr(&mut self, _expr: &Expr, token: &Token) -> Self::ExprResult {
-        match token.kind {
-            TokenKind::Number => Ok(NodeType::Int),
-            TokenKind::True => Ok(NodeType::Bool),
-            TokenKind::False => Ok(NodeType::Bool),
-            TokenKind::StringLiteral => Ok(NodeType::pointer_to(NodeType::Byte)),
+    fn visit_literal_expr(&mut self, expr: &Expr, token: &Token) -> Self::ExprResult {
+        let node_type = match token.kind {
+            TokenKind::Number => NodeType::Int,
+            TokenKind::True => NodeType::Bool,
+            TokenKind::False => NodeType::Bool,
+            TokenKind::StringLiteral => NodeType::pointer_to(NodeType::Byte),
             _ => panic!(),
-        }
+        };
+        expr.set_type(node_type)
     }
 
-    fn visit_variable_expr(&mut self, _expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
+    fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
         if let Some((found_symbol, node_type)) = self.resolve_var(name.span().lexeme()) {
             name.set_symbol(found_symbol);
-            Ok(node_type.clone())
+            expr.set_type(node_type.clone())
         } else {
             Err(Diagnostic::error(name, "Undefined variable"))
         }
     }
 
-    fn visit_array_expr(&mut self, _expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
+    fn visit_array_expr(&mut self, expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
         let first = elements.first().unwrap().accept(self)?;
 
         for element in elements.iter().skip(1) {
@@ -637,12 +638,27 @@ impl ExprVisitor for TypeChecker {
             }
         }
 
-        Ok(NodeType::Array(Box::new(first)))
+        let node_type = NodeType::Array(Box::new(first), ArraySize::Known(elements.len()));
+        expr.set_type(node_type)
+    }
+
+    fn visit_subscript_expr(&mut self, expr: &Expr, target: &Expr, arg: &Expr) -> Self::ExprResult {
+        let target_type = target.accept(self)?;
+        let arg_type = arg.accept(self)?;
+
+        match (target_type, arg_type) {
+            (NodeType::Array(inside, _), NodeType::Int) => {
+                // println!("setting subscript type to {}", inside)
+                expr.set_type((*inside).clone())
+            },
+            (NodeType::Array(..), other) => Err(self.type_mismatch(arg, &other, &NodeType::Int)),
+            _ => Err(Diagnostic::error(expr, "Can't subscript into non-array")),
+        }
     }
 
     fn visit_explicit_type_expr(
         &mut self,
-        _expr: &Expr,
+        expr: &Expr,
         name: &Token,
         modifier: &Option<Token>,
     ) -> Self::ExprResult {
@@ -659,11 +675,12 @@ impl ExprVisitor for TypeChecker {
             Err(Diagnostic::error(name, "Undefined type"))
         }?;
 
-        if modifier.is_some() {
-            Ok(NodeType::Pointer(Box::new(main)))
+        let node_type = if modifier.is_some() {
+            NodeType::Pointer(Box::new(main))
         } else {
-            Ok(main)
-        }
+            main
+        };
+        expr.set_type(node_type)
     }
 }
 
@@ -677,9 +694,25 @@ pub enum NodeType {
     Byte,
     Type(Symbol),
     Pointer(Box<NodeType>),
-    Array(Box<NodeType>),
+    Array(Box<NodeType>, ArraySize),
     Function(Vec<NodeType>, Box<NodeType>),
     Metatype(Symbol),
+    Ambiguous,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ArraySize {
+    Known(usize),
+    Unknown
+}
+
+impl std::fmt::Display for ArraySize {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            ArraySize::Known(size) => write!(f, "{}", size),
+            ArraySize::Unknown => write!(f, "<unknown>"),
+        }
+    }
 }
 
 impl NodeType {
@@ -735,9 +768,10 @@ impl std::fmt::Display for NodeType {
                 string
             }
             NodeType::Pointer(ty) => format!("ptr<{}>", ty),
-            NodeType::Array(ty) => format!("Array<{}>", ty),
+            NodeType::Array(ty, size) => format!("Array<{}, count={}", ty, size),
             NodeType::Type(ty) => ty.id.clone(),
             NodeType::Metatype(ty) => ty.id.clone() + "_Meta",
+            NodeType::Ambiguous => String::from("<ambiguous>"),
         };
         write!(f, "{}", kind)
     }

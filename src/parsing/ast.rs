@@ -1,6 +1,7 @@
 use crate::analysis::{NodeType, Symbol};
 use crate::lexing::*;
 use crate::source::*;
+use crate::diagnostic::*;
 use std::cell::RefCell;
 
 pub enum StmtKind {
@@ -255,17 +256,28 @@ pub enum ExprKind {
     Literal(Token),
     Variable(ResolvedToken),
     Array(Vec<Expr>),
+    Subscript(Box<Expr>, Box<Expr>),
     ExplicitType(Token, Option<Token>),
 }
 
 pub struct Expr {
     pub kind: ExprKind,
     pub span: Span,
+    pub node_type: RefCell<Option<NodeType>>,
 }
 
 impl Expr {
+    pub fn set_type(&self, node_type: NodeType) -> DiagnosticResult<NodeType> {
+        self.node_type.replace(Some(node_type.clone()));
+        Ok(node_type)
+    }
+
+    pub fn get_type(&self) -> Option<NodeType> {
+        self.node_type.borrow().as_ref().map(|t| t.clone())
+    }
+
     pub fn new(kind: ExprKind, span: Span) -> Self {
-        Expr { kind, span }
+        Expr { kind, span, node_type: RefCell::new(None) }
     }
 
     pub fn accept<V: ExprVisitor>(&self, visitor: &mut V) -> V::ExprResult {
@@ -285,6 +297,7 @@ impl Expr {
             ExprKind::Literal(token) => visitor.visit_literal_expr(&self, &token),
             ExprKind::Variable(name) => visitor.visit_variable_expr(&self, &name),
             ExprKind::Array(elements) => visitor.visit_array_expr(&self, elements),
+            ExprKind::Subscript(target, arg) => visitor.visit_subscript_expr(&self, target, arg),
             ExprKind::ExplicitType(name, modifier) => {
                 visitor.visit_explicit_type_expr(&self, &name, &modifier)
             }
@@ -350,6 +363,11 @@ impl Expr {
         Expr::new(ExprKind::Array(elements), span)
     }
 
+    pub fn subscript(target: Expr, index: Expr, right_bracket: &Token) -> Self {
+        let span = Span::join(&target, right_bracket);
+        Expr::new(ExprKind::Subscript(Box::new(target), Box::new(index)), span)
+    }
+
     pub fn explicit_type(name: Token, modifier: Option<Token>) -> Self {
         let span = (&modifier)
             .as_ref()
@@ -402,6 +420,7 @@ pub trait ExprVisitor {
     fn visit_literal_expr(&mut self, expr: &Expr, token: &Token) -> Self::ExprResult;
     fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult;
     fn visit_array_expr(&mut self, expr: &Expr, elements: &[Expr]) -> Self::ExprResult;
+    fn visit_subscript_expr(&mut self, expr: &Expr, target: &Expr, arg: &Expr) -> Self::ExprResult;
     fn visit_explicit_type_expr(
         &mut self,
         expr: &Expr,
@@ -745,6 +764,14 @@ impl ExprVisitor for ASTPrinter {
         self.write_ln("Array");
         self.indent(|writer| {
             elements.iter().for_each(|e| e.accept(writer));
+        })
+    }
+
+    fn visit_subscript_expr(&mut self, _expr: &Expr, target: &Expr, arg: &Expr) -> Self::ExprResult {
+        self.write_ln("Subscript");
+        self.indent(|writer| {
+            target.accept(writer);
+            arg.accept(writer);
         })
     }
 

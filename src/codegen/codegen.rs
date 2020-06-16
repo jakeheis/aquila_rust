@@ -124,6 +124,13 @@ impl Codegen {
 
         temp_name
     }
+
+    fn write_guard(&mut self, guard: String, message: &str) {
+        self.writer.start_if_block(guard);
+        self.writer.writeln(&format!("printf(\"{}\\n\");", message));
+        self.writer.writeln("exit(1);");
+        self.writer.end_conditional_block();
+    }
 }
 
 impl StmtVisitor for Codegen {
@@ -266,8 +273,13 @@ impl StmtVisitor for Codegen {
         let var_symbol = name.get_symbol().unwrap();
         let var_type = name.get_type().unwrap();
 
-        let decl_name = if let NodeType::Array(_) = var_type {
-            format!("{}[]", var_symbol.mangled())
+        let decl_name = if let NodeType::Array(_, size) = &var_type {
+            let suffix = if let ArraySize::Known(size) = size {
+                format!("[{}]", size)
+            } else {
+                String::from("[]")
+            };
+            format!("{}{}", var_symbol.mangled(), suffix)
         } else {
             var_symbol.mangled()
         };
@@ -460,6 +472,19 @@ impl ExprVisitor for Codegen {
     fn visit_array_expr(&mut self, _expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
         let elements: Vec<String> = elements.iter().map(|e| e.accept(self)).collect();
         format!("{{ {} }}", elements.join(","))
+    }
+
+    fn visit_subscript_expr(&mut self, expr: &Expr, target_expr: &Expr, arg: &Expr) -> Self::ExprResult {
+        let target = target_expr.accept(self);
+        let arg = arg.accept(self);
+        let index = self.write_temp(&NodeType::Int, arg);
+
+        guard!(NodeType::Array[_inside, count] = target_expr.get_type().unwrap());
+        guard!(ArraySize::Known[count] = count);
+        let message = format!("Fatal error: index out of bounds -- line {}", expr.span.line);
+        self.write_guard(format!("{} >= {}", index, count), &message);
+
+        format!("{}[{}]", target, index)
     }
 
     fn visit_explicit_type_expr(
