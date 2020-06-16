@@ -117,9 +117,8 @@ impl Codegen {
         let temp_name = format!("_temp_{}", self.temp_count);
         self.temp_count += 1;
 
-        let temp_type = self.writer.convert_type(temp_type);
-
-        let temp = format!("{} {} = {};", temp_type, temp_name, value);
+        let temp_type = self.writer.type_and_name(temp_type, &temp_name, false);
+        let temp = format!("{} = {};", temp_type, value);
         self.writer.writeln(&temp);
 
         temp_name
@@ -271,21 +270,14 @@ impl StmtVisitor for Codegen {
         value: &Option<Expr>,
     ) -> Self::StmtResult {
         let var_symbol = name.get_symbol().unwrap();
-        let var_type = name.get_type().unwrap();
+        let mut var_type = name.get_type().unwrap();
 
-        let decl_name = if let NodeType::Array(_, size) = &var_type {
-            let suffix = if let ArraySize::Known(size) = size {
-                format!("[{}]", size)
-            } else {
-                String::from("[]")
-            };
-            format!("{}{}", var_symbol.mangled(), suffix)
-        } else {
-            var_symbol.mangled()
-        };
+        if let NodeType::Array(of, _) = var_type {
+            var_type = NodeType::Pointer(of.clone());
+        }
 
         let value = value.as_ref().map(|v| v.accept(self));
-        self.writer.decl_var(&var_type, &decl_name, value);
+        self.writer.decl_var(&var_type, &var_symbol.mangled(), value);
     }
 
     fn visit_if_stmt(
@@ -479,9 +471,9 @@ impl ExprVisitor for Codegen {
         }
     }
 
-    fn visit_array_expr(&mut self, _expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
+    fn visit_array_expr(&mut self, expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
         let elements: Vec<String> = elements.iter().map(|e| e.accept(self)).collect();
-        format!("{{ {} }}", elements.join(","))
+        self.write_temp(expr.get_type().as_ref().unwrap(), format!("{{ {} }}", elements.join(",")))
     }
 
     fn visit_subscript_expr(

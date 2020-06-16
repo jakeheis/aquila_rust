@@ -1,4 +1,4 @@
-pub use crate::analysis::NodeType;
+pub use crate::analysis::{NodeType, ArraySize};
 use std::fs::File;
 use std::io::Write;
 
@@ -66,13 +66,18 @@ impl CWriter {
     }
 
     pub fn decl_var(&mut self, var_type: &NodeType, name: &str, initial_value: Option<String>) {
-        let start = format!("{} {}", self.convert_type(var_type), name);
+        let start = self.type_and_name(var_type, name, false);
         let whole = if let Some(initial_value) = initial_value {
             format!("{} = {}", start, initial_value)
         } else {
             start
         };
         self.writeln(&(whole + ";"));
+    }
+
+    pub fn type_and_name(&self, var_type: &NodeType, name: &str, convert_array_to_ptr: bool) -> String {
+        let (t, n) = self.convert_type(var_type, String::from(name), convert_array_to_ptr);
+        format!("{} {}", t, n)
     }
 
     pub fn start_condition_block(&mut self, name: &str, condition: String) {
@@ -121,13 +126,12 @@ impl CWriter {
     ) {
         let param_str: Vec<String> = params
             .iter()
-            .map(|(param_type, name)| format!("{} {}", self.convert_type(param_type), name))
+            .map(|(param_type, name)| self.type_and_name(param_type, &name, false))
             .collect();
         let param_str = param_str.join(",");
         self.writeln(&format!(
-            "{} {}({}){}",
-            self.convert_type(ret_type),
-            name,
+            "{}({}){}",
+            self.type_and_name(ret_type, name, false),
             param_str,
             terminator
         ));
@@ -138,21 +142,37 @@ impl CWriter {
         self.writeln(&line);
     }
 
-    pub fn convert_type(&self, node_type: &NodeType) -> String {
+    pub fn convert_type(&self, node_type: &NodeType, name: String, convert_array_to_ptr: bool) -> (String, String) {
+        let simple = match node_type {
+            NodeType::Void => Some("void"),
+            NodeType::Int => Some("int"),
+            NodeType::Bool => Some("bool"),
+            NodeType::Byte => Some("char"),
+            _ => None,
+        };
+        if let Some(simple) = simple {
+            return (String::from(simple), name);
+        }
+
         match node_type {
-            NodeType::Void => String::from("void"),
-            NodeType::Int => String::from("int"),
-            NodeType::Bool => String::from("bool"),
-            NodeType::Byte => String::from("char"),
-            NodeType::Type(symbol) => {
-                if false {
-                    format!("struct {}", symbol.mangled())
+            NodeType::Type(symbol) => (symbol.mangled(), name),
+            NodeType::Pointer(ty) => {
+                let (type_portion, name_portion) = self.convert_type(ty, name, true);
+                (format!("{}*", type_portion), name_portion)
+            },
+            NodeType::Array(ty, count) => {
+                let (type_portion, name_portion) = self.convert_type(ty, name, convert_array_to_ptr);
+                if convert_array_to_ptr {
+                    (format!("{}*", type_portion), name_portion)
                 } else {
-                    symbol.mangled()
+                    let array_portion = if let ArraySize::Known(k) = count {
+                        format!("[{}]", k)
+                    } else {
+                        String::from("[]")
+                    };
+                    (type_portion, format!("{}{}", name_portion, array_portion))
                 }
-            }
-            NodeType::Pointer(ty) => format!("{}*", self.convert_type(ty)),
-            NodeType::Array(ty, _) => self.convert_type(ty),
+            },
             other_type => panic!("Can't convert type {}", other_type),
         }
     }

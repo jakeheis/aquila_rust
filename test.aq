@@ -36,12 +36,21 @@ type Adder {
     return lhs + rhs + third;
   }
 
+  def add_both(third: [int; 2]) {
+    print add(third[0]);
+    print add(third[1]);
+  }
+
   meta def example(): Adder {
     return Adder(1, 2);
   }
 }
 
 let adders: [Adder; 3] = [Adder(1, 2), Adder(3,4), Adder(5,6)];
+
+adders[0].add_both([3, 4]);
+
+let arr_ptr = &adders;
 
 let count = 0;
 while count < 3 {

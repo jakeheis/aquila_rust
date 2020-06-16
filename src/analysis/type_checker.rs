@@ -264,6 +264,10 @@ impl StmtVisitor for TypeChecker {
             .and_then(|r| self.check_expr(r))
             .unwrap_or(NodeType::Void);
 
+        if let NodeType::Array(..) = return_type {
+            self.report_error(Diagnostic::error(return_type_expr.as_ref().unwrap(), "Cannot return an array"));
+        }
+
         let symbol = self.push_function_scope(name, return_type.clone());
         name.set_symbol(symbol);
 
