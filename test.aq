@@ -44,6 +44,8 @@ type Adder {
 let adders: [Adder; 3] = [Adder(1, 2), Adder(3,4), Adder(5,6)];
 print adders[2].add(3);
 
+let more_numbers: [int; 3] = [1,2,3];
+
 /*
 enum Hello {
   case one;

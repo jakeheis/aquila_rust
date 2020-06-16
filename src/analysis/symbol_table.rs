@@ -155,10 +155,6 @@ impl SymbolTableBuilder {
                     self.resolve_symbol(&Symbol::new(None, &token.token))
                 {
                     NodeType::Type(symbol.clone())
-                } else if let Some(NodeType::Metatype(symbol)) =
-                    self.resolve_symbol(&Symbol::new(self.context.last(), &token.token))
-                {
-                    NodeType::Type(symbol.clone())
                 } else {
                     // Isn't a real type; make a fake type and type checker will catch the error
                     NodeType::Type(Symbol::new(None, &token.token))
