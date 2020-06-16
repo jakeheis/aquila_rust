@@ -175,13 +175,11 @@ impl TypeChecker {
         given: &NodeType,
         expected: &NodeType,
     ) -> DiagnosticResult<()> {
-        match given.matches(expected) {
-            NodeTypeMatchResult::Match => {
-                let _ = expr.set_type(expected.clone());
-                Ok(())
-            },
-            NodeTypeMatchResult::NoMatch => Err(self.type_mismatch(expr, given, expected)),
-            NodeTypeMatchResult::Ambiguous => Err(Diagnostic::error(expr, "Can't infer type")),
+        if given.matches(expected) {
+            let _ = expr.set_type(expected.clone());
+            Ok(())
+        } else {
+            Err(self.type_mismatch(expr, given, expected))
         }
     }
 
@@ -273,7 +271,7 @@ impl StmtVisitor for TypeChecker {
         self.pop_scope();
 
         if !analysis.guarantees_return
-            && !return_type.sure_match(&NodeType::Void)
+            && !return_type.matches(&NodeType::Void)
             && !self.is_builtin
         {
             let last_param = params.last().map(|p| p.span.clone());
@@ -374,7 +372,7 @@ impl StmtVisitor for TypeChecker {
                 self.report_error(diag);
             }
         } else {
-            if !expected_return.sure_match(&NodeType::Void) {
+            if !expected_return.matches(&NodeType::Void) {
                 self.report_error(Diagnostic::error(stmt, "Function expects a return value"));
             }
         }
@@ -450,6 +448,13 @@ impl ExprVisitor for TypeChecker {
         let lhs_type = lhs.accept(self)?;
         let rhs_type = rhs.accept(self)?;
 
+        if lhs_type.contains_ambiguity() {
+            return Err(Diagnostic::error(lhs, "Cannot infer type"));
+        }
+        if rhs_type.contains_ambiguity() {
+            return Err(Diagnostic::error(lhs, "Cannot infer type"));
+        }
+
         let entries: &[BinaryEntry] = match op.kind {
             TokenKind::Plus => &ADDITION_ENTRIES,
             TokenKind::Minus | TokenKind::Star | TokenKind::Slash => &MATH_ENTRIES,
@@ -464,7 +469,7 @@ impl ExprVisitor for TypeChecker {
 
         if let Some(matching_entry) = entries
             .iter()
-            .find(|e| e.0.sure_match(&lhs_type) && e.1.sure_match(&rhs_type))
+            .find(|e| e.0.matches(&lhs_type) && e.1.matches(&rhs_type))
         {
             expr.set_type(matching_entry.2.clone())
         } else {
@@ -475,6 +480,10 @@ impl ExprVisitor for TypeChecker {
 
     fn visit_unary_expr(&mut self, expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
         let operand_type = operand.accept(self)?;
+
+        if operand_type.contains_ambiguity() {
+            return Err(Diagnostic::error(operand, "Cannot infer type"));
+        }
 
         if let TokenKind::Ampersand = op.kind {
             let boxed_type = Box::new(operand_type.clone());
@@ -499,7 +508,7 @@ impl ExprVisitor for TypeChecker {
 
         if entries
             .iter()
-            .find(|e| e.sure_match(&operand_type))
+            .find(|e| e.matches(&operand_type))
             .is_some()
         {
             expr.set_type(operand_type.clone())
@@ -605,7 +614,6 @@ impl ExprVisitor for TypeChecker {
     ) -> Self::ExprResult {
         let target_type = target.accept(self)?;
 
-        // let type_symbol = match target_type.represented_type() {
         let type_symbol = match target_type {
             NodeType::Type(type_symbol) => Ok(type_symbol),
             NodeType::Metatype(type_symbol) => Ok(Symbol::meta_symbol(Some(&type_symbol))),
@@ -658,14 +666,24 @@ impl ExprVisitor for TypeChecker {
             return expr.set_type(node_type);
         }
 
-        let first = elements.first().unwrap().accept(self)?;
-
-        for element in elements.iter().skip(1) {
-            let element_type = element.accept(self)?;
-            self.check_type_match(element, &element_type, &first)?;
+        let mut element_types: Vec<NodeType> = Vec::new();
+        for element in elements {
+            element_types.push(element.accept(self)?);
         }
 
-        let node_type = NodeType::Array(Box::new(first), ArraySize::Known(elements.len()));
+        let expected_type = if let Some(concrete) = element_types.iter().find(|e| !e.contains_ambiguity()) {
+            concrete
+        } else {
+            element_types.first().unwrap()
+        };
+
+        for (index, element_type) in element_types.iter().enumerate() {
+            if !element_type.tolerant_match(&expected_type) {
+                return Err(self.type_mismatch(&elements[index], &element_type, &expected_type))
+            }
+        }
+
+        let node_type = NodeType::Array(Box::new(expected_type.clone()), ArraySize::Known(elements.len()));
         expr.set_type(node_type)
     }
 
@@ -740,7 +758,7 @@ pub enum NodeType {
     Ambiguous,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ArraySize {
     Known(usize),
     Unknown,
@@ -755,69 +773,77 @@ impl std::fmt::Display for ArraySize {
     }
 }
 
-#[derive(PartialEq)]
-pub enum NodeTypeMatchResult {
-    Match,
-    NoMatch,
-    Ambiguous,
-}
-
 impl NodeType {
-    pub fn matches(&self, other: &NodeType) -> NodeTypeMatchResult {
-        match (self, other) {
+    pub fn matches(&self, unambiguous: &NodeType) -> bool {
+        match (self, unambiguous) {
             (NodeType::Void, NodeType::Void)
             | (NodeType::Int, NodeType::Int)
             | (NodeType::Bool, NodeType::Bool)
-            | (NodeType::Byte, NodeType::Byte) => NodeTypeMatchResult::Match,
+            | (NodeType::Byte, NodeType::Byte) => true,
             (NodeType::Type(lhs), NodeType::Type(rhs))
             | (NodeType::Metatype(lhs), NodeType::Metatype(rhs))
                 if lhs == rhs =>
             {
-                NodeTypeMatchResult::Match
+                true
             }
-            (NodeType::Pointer(lhs), NodeType::Pointer(rhs)) => lhs.matches(rhs),
+            (NodeType::Pointer(lhs), NodeType::Pointer(rhs)) => lhs.matches(&rhs),
             (NodeType::Function(lhs_params, lhs_ret), NodeType::Function(rhs_params, rhs_ret))
                 if lhs_params.len() == rhs_params.len() =>
             {
-                match lhs_ret.matches(rhs_ret) {
-                    NodeTypeMatchResult::NoMatch => return NodeTypeMatchResult::NoMatch,
-                    NodeTypeMatchResult::Ambiguous => return NodeTypeMatchResult::Ambiguous,
-                    NodeTypeMatchResult::Match => (),
+                if !lhs_ret.matches(&rhs_ret) {
+                    return false;
                 }
 
                 for (lhs_param, rhs_param) in lhs_params.iter().zip(rhs_params) {
-                    match lhs_param.matches(rhs_param) {
-                        NodeTypeMatchResult::NoMatch => return NodeTypeMatchResult::NoMatch,
-                        NodeTypeMatchResult::Ambiguous => return NodeTypeMatchResult::Ambiguous,
-                        NodeTypeMatchResult::Match => (),
+                    if !lhs_param.matches(&rhs_param) {
+                        return false;
                     }
                 }
-                NodeTypeMatchResult::Match
+                
+                true
             }
             (NodeType::Array(lhs_kind, lhs_size), NodeType::Array(rhs_kind, rhs_size)) => {
-                match lhs_kind.matches(rhs_kind) {
-                    NodeTypeMatchResult::NoMatch => return NodeTypeMatchResult::NoMatch,
-                    NodeTypeMatchResult::Ambiguous => return NodeTypeMatchResult::Ambiguous,
-                    NodeTypeMatchResult::Match => (),
+                if !lhs_kind.matches(rhs_kind) {
+                    return false;
                 }
 
-                match (lhs_size, rhs_size) {
-                    (ArraySize::Known(k1), ArraySize::Known(k2)) if k1 != k2 => {
-                        NodeTypeMatchResult::NoMatch
+                if let (ArraySize::Known(k1), ArraySize::Known(k2)) = (lhs_size, rhs_size) {
+                    if k1 != k2 {
+                        return false;
                     }
-                    (ArraySize::Unknown, ArraySize::Unknown) => NodeTypeMatchResult::Ambiguous,
-                    _ => NodeTypeMatchResult::Match,
                 }
+
+                true
             },
-            (NodeType::Ambiguous, NodeType::Ambiguous) => NodeTypeMatchResult::Ambiguous,
-            (NodeType::Ambiguous, _) => NodeTypeMatchResult::Match,
-            (_, NodeType::Ambiguous) => NodeTypeMatchResult::Match,
-            _ => NodeTypeMatchResult::NoMatch,
+            (NodeType::Ambiguous, _) => true,
+            _ => false,
         }
     }
 
-    pub fn sure_match(&self, to: &NodeType) -> bool {
-        self.matches(to) == NodeTypeMatchResult::Match
+    pub fn tolerant_match(&self, rhs: &NodeType) -> bool {
+        if self.matches(rhs) {
+            true
+        } else {
+            match (self, rhs) {
+                (NodeType::Array(l_inner, l_size), NodeType::Array(r_inner, r_size)) => {
+                    match (l_size, r_size) {
+                        (ArraySize::Known(k1), ArraySize::Known(k2)) if k1 != k2 => return false,
+                        (ArraySize::Unknown, ArraySize::Unknown) => return false,
+                        _ => (),
+                    }
+
+                    let l_inner: &NodeType = &l_inner;
+                    let r_inner: &NodeType = &r_inner;
+                    
+                    if let (NodeType::Ambiguous, NodeType::Ambiguous) = (l_inner, r_inner) {
+                        return true;
+                    }
+
+                    l_inner.tolerant_match(r_inner)
+                },
+                _ => false
+            }
+        }
     }
 
     pub fn primitive(token: &Token) -> Option<Self> {
@@ -838,7 +864,7 @@ impl NodeType {
         match self {
             NodeType::Ambiguous => true,
             NodeType::Pointer(ptr) => ptr.contains_ambiguity(),
-            NodeType::Array(of, _) => of.contains_ambiguity(),
+            NodeType::Array(of, count) => of.contains_ambiguity() || count == &ArraySize::Unknown,
             NodeType::Function(params, ret) => {
                 for param in params {
                     if param.contains_ambiguity() {
@@ -851,16 +877,9 @@ impl NodeType {
         }
     }
 
-    pub fn represented_type(&self) -> &NodeType {
-        match self {
-            NodeType::Pointer(inner) => inner.represented_type(),
-            _ => self,
-        }
-    }
-
     pub fn is_pointer_to(&self, node_type: NodeType) -> bool {
         if let NodeType::Pointer(pointee) = self {
-            if pointee.matches(&node_type) == NodeTypeMatchResult::Match {
+            if pointee.matches(&node_type) {
                 return true;
             }
         }
