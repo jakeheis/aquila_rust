@@ -1,4 +1,4 @@
-use super::type_checker::NodeType;
+use super::type_checker::{ArraySize, NodeType};
 use crate::guard;
 use crate::lexing::*;
 use crate::library::*;
@@ -144,28 +144,40 @@ impl SymbolTableBuilder {
         }
     }
 
-    fn resolve_type_expr(&self, type_expr: &Expr) -> NodeType {
-        guard!(ExprKind::ExplicitType[type_token, modifier] = &type_expr.kind);
+    fn resolve_explicit_type_expr(&self, type_expr: &Expr) -> NodeType {
+        guard!(ExprKind::ExplicitType[category] = &type_expr.kind);
 
-        let main = if let Some(primitive) = NodeType::primitive(type_token) {
-            primitive
-        } else if let Some(NodeType::Metatype(symbol)) =
-            self.resolve_symbol(&Symbol::new(None, type_token))
-        {
-            NodeType::Type(symbol.clone())
-        } else if let Some(NodeType::Metatype(symbol)) =
-            self.resolve_symbol(&Symbol::new(self.context.last(), type_token))
-        {
-            NodeType::Type(symbol.clone())
-        } else {
-            // Isn't a real type; make a fake type and type checker will catch the error
-            NodeType::Type(Symbol::new(None, type_token))
-        };
-
-        if modifier.is_some() {
-            NodeType::Pointer(Box::new(main))
-        } else {
-            main
+        match category {
+            ExplicitTypeCategory::Simple(token) => {
+                if let Some(primitive) = NodeType::primitive(&token.token) {
+                    primitive
+                } else if let Some(NodeType::Metatype(symbol)) =
+                    self.resolve_symbol(&Symbol::new(None, &token.token))
+                {
+                    NodeType::Type(symbol.clone())
+                } else if let Some(NodeType::Metatype(symbol)) =
+                    self.resolve_symbol(&Symbol::new(self.context.last(), &token.token))
+                {
+                    NodeType::Type(symbol.clone())
+                } else {
+                    // Isn't a real type; make a fake type and type checker will catch the error
+                    NodeType::Type(Symbol::new(None, &token.token))
+                }
+            }
+            ExplicitTypeCategory::Pointer(to) => {
+                let inner = self.resolve_explicit_type_expr(to);
+                NodeType::Pointer(Box::new(inner))
+            }
+            ExplicitTypeCategory::Array(of, count_token) => {
+                let inner = self.resolve_explicit_type_expr(of);
+                match count_token.lexeme().parse::<usize>() {
+                    Ok(count) => {
+                        let size = ArraySize::Known(count);
+                        NodeType::Array(Box::new(inner), size)
+                    }
+                    Err(..) => NodeType::Array(Box::new(inner), ArraySize::Unknown),
+                }
+            }
         }
     }
 }
@@ -234,7 +246,7 @@ impl StmtVisitor for SymbolTableBuilder {
 
         let return_type = return_type
             .as_ref()
-            .map(|r| self.resolve_type_expr(r))
+            .map(|r| self.resolve_explicit_type_expr(r))
             .unwrap_or(NodeType::Void);
         let new_type = NodeType::Function(param_types, Box::new(return_type));
 
@@ -251,7 +263,7 @@ impl StmtVisitor for SymbolTableBuilder {
         explicit_type: &Option<Expr>,
         _value: &Option<Expr>,
     ) -> Self::StmtResult {
-        self.resolve_type_expr(explicit_type.as_ref().unwrap())
+        self.resolve_explicit_type_expr(explicit_type.as_ref().unwrap())
     }
 
     fn visit_if_stmt(

@@ -419,7 +419,8 @@ impl Parser {
 
     fn subscript(&mut self, lhs: Expr, _can_assign: bool) -> Result<Expr> {
         let index = self.expression()?;
-        let right_bracket = self.consume(TokenKind::RightBracket, "Expect ']' after subscript index")?;
+        let right_bracket =
+            self.consume(TokenKind::RightBracket, "Expect ']' after subscript index")?;
         Ok(Expr::subscript(lhs, index, &right_bracket))
     }
 
@@ -446,7 +447,8 @@ impl Parser {
                 self.consume(TokenKind::Comma, "Expect ',' between array elements")?;
             }
         }
-        let right_bracket = self.consume(TokenKind::RightBracket, "Expect ']' after array elements")?;
+        let right_bracket =
+            self.consume(TokenKind::RightBracket, "Expect ']' after array elements")?;
         Ok(Expr::array(left_bracket, elements, right_bracket))
     }
 
@@ -473,17 +475,32 @@ impl Parser {
     }
 
     fn parse_explicit_type(&mut self) -> Result<Expr> {
-        let modifier = if self.matches(TokenKind::Ptr) {
-            Some(self.previous().clone())
+        let start = self.current().span.clone();
+
+        let category = if self.matches(TokenKind::Ptr) {
+            let inside = self.parse_explicit_type()?;
+            ExplicitTypeCategory::Pointer(Box::new(inside))
+        } else if self.matches(TokenKind::LeftBracket) {
+            let inside = self.parse_explicit_type()?;
+            self.consume(
+                TokenKind::Semicolon,
+                "Expect ';' after array type before count",
+            )?;
+            let count = self
+                .consume(TokenKind::Number, "Expect array count after ';'")?
+                .clone();
+            self.consume(TokenKind::RightBracket, "Expect ']' after array count")?;
+            ExplicitTypeCategory::Array(Box::new(inside), count)
         } else {
-            None
+            let name = self
+                .consume(TokenKind::Identifier, "Expected variable type")?
+                .clone();
+            ExplicitTypeCategory::Simple(ResolvedToken::new(name))
         };
 
-        let name = self
-            .consume(TokenKind::Identifier, "Expected variable type")?
-            .clone();
+        let end = &self.previous().span;
 
-        Ok(Expr::explicit_type(name, modifier))
+        Ok(Expr::explicit_type(start, category, end))
     }
 
     fn peek(&self) -> TokenKind {

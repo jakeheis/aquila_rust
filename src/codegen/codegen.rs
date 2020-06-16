@@ -474,14 +474,22 @@ impl ExprVisitor for Codegen {
         format!("{{ {} }}", elements.join(","))
     }
 
-    fn visit_subscript_expr(&mut self, expr: &Expr, target_expr: &Expr, arg: &Expr) -> Self::ExprResult {
+    fn visit_subscript_expr(
+        &mut self,
+        expr: &Expr,
+        target_expr: &Expr,
+        arg: &Expr,
+    ) -> Self::ExprResult {
         let target = target_expr.accept(self);
         let arg = arg.accept(self);
         let index = self.write_temp(&NodeType::Int, arg);
 
         guard!(NodeType::Array[_inside, count] = target_expr.get_type().unwrap());
         guard!(ArraySize::Known[count] = count);
-        let message = format!("Fatal error: index out of bounds -- line {}", expr.span.line);
+        let message = format!(
+            "Fatal error: index out of bounds -- line {}",
+            expr.span.line
+        );
         self.write_guard(format!("{} >= {}", index, count), &message);
 
         format!("{}[{}]", target, index)
@@ -490,8 +498,7 @@ impl ExprVisitor for Codegen {
     fn visit_explicit_type_expr(
         &mut self,
         _expr: &Expr,
-        _name: &Token,
-        _modifier: &Option<Token>,
+        _category: &ExplicitTypeCategory,
     ) -> Self::ExprResult {
         unreachable!()
     }

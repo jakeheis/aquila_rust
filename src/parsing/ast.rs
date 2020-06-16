@@ -1,7 +1,7 @@
 use crate::analysis::{NodeType, Symbol};
+use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::source::*;
-use crate::diagnostic::*;
 use std::cell::RefCell;
 
 pub enum StmtKind {
@@ -224,7 +224,7 @@ pub struct ResolvedToken {
 }
 
 impl ResolvedToken {
-    fn new(token: Token) -> Self {
+    pub fn new(token: Token) -> Self {
         ResolvedToken {
             token,
             symbol: RefCell::new(None),
@@ -246,6 +246,12 @@ impl ContainsSpan for ResolvedToken {
     }
 }
 
+pub enum ExplicitTypeCategory {
+    Simple(ResolvedToken),
+    Array(Box<Expr>, Token),
+    Pointer(Box<Expr>),
+}
+
 pub enum ExprKind {
     Assignment(Box<Expr>, Box<Expr>),
     Binary(Box<Expr>, Token, Box<Expr>),
@@ -257,7 +263,7 @@ pub enum ExprKind {
     Variable(ResolvedToken),
     Array(Vec<Expr>),
     Subscript(Box<Expr>, Box<Expr>),
-    ExplicitType(Token, Option<Token>),
+    ExplicitType(ExplicitTypeCategory),
 }
 
 pub struct Expr {
@@ -277,7 +283,11 @@ impl Expr {
     }
 
     pub fn new(kind: ExprKind, span: Span) -> Self {
-        Expr { kind, span, node_type: RefCell::new(None) }
+        Expr {
+            kind,
+            span,
+            node_type: RefCell::new(None),
+        }
     }
 
     pub fn accept<V: ExprVisitor>(&self, visitor: &mut V) -> V::ExprResult {
@@ -298,9 +308,7 @@ impl Expr {
             ExprKind::Variable(name) => visitor.visit_variable_expr(&self, &name),
             ExprKind::Array(elements) => visitor.visit_array_expr(&self, elements),
             ExprKind::Subscript(target, arg) => visitor.visit_subscript_expr(&self, target, arg),
-            ExprKind::ExplicitType(name, modifier) => {
-                visitor.visit_explicit_type_expr(&self, &name, &modifier)
-            }
+            ExprKind::ExplicitType(category) => visitor.visit_explicit_type_expr(&self, &category),
         }
     }
 
@@ -368,12 +376,9 @@ impl Expr {
         Expr::new(ExprKind::Subscript(Box::new(target), Box::new(index)), span)
     }
 
-    pub fn explicit_type(name: Token, modifier: Option<Token>) -> Self {
-        let span = (&modifier)
-            .as_ref()
-            .map(|m| Span::join(m, &name))
-            .unwrap_or(name.span().clone());
-        Expr::new(ExprKind::ExplicitType(name, modifier), span)
+    pub fn explicit_type(first: Span, category: ExplicitTypeCategory, last: &Span) -> Self {
+        let span = Span::join(&first, last);
+        Expr::new(ExprKind::ExplicitType(category), span)
     }
 
     pub fn lexeme(&self) -> &str {
@@ -424,8 +429,7 @@ pub trait ExprVisitor {
     fn visit_explicit_type_expr(
         &mut self,
         expr: &Expr,
-        name: &Token,
-        modifier: &Option<Token>,
+        category: &ExplicitTypeCategory,
     ) -> Self::ExprResult;
 }
 
@@ -767,7 +771,12 @@ impl ExprVisitor for ASTPrinter {
         })
     }
 
-    fn visit_subscript_expr(&mut self, _expr: &Expr, target: &Expr, arg: &Expr) -> Self::ExprResult {
+    fn visit_subscript_expr(
+        &mut self,
+        _expr: &Expr,
+        target: &Expr,
+        arg: &Expr,
+    ) -> Self::ExprResult {
         self.write_ln("Subscript");
         self.indent(|writer| {
             target.accept(writer);
@@ -775,16 +784,31 @@ impl ExprVisitor for ASTPrinter {
         })
     }
 
-    fn visit_explicit_type_expr(&mut self, _expr: &Expr, name: &Token, modifier: &Option<Token>) {
-        let modifier = modifier
-            .as_ref()
-            .map(|t| t.lexeme().to_string())
-            .unwrap_or("<none>".to_string());
-        let line = format!(
-            "ExplicitType(name: {}, modifier: {})",
-            name.lexeme(),
-            modifier
-        );
-        self.write_ln(&line);
+    fn visit_explicit_type_expr(&mut self, _expr: &Expr, category: &ExplicitTypeCategory) {
+        match category {
+            ExplicitTypeCategory::Simple(token) => {
+                let symbol = token
+                    .get_symbol()
+                    .map(|s| s.id.clone())
+                    .unwrap_or(String::from("<none>"));
+                self.write_ln(&format!(
+                    "ExplicitType(name: {}, symbol: {})",
+                    token.span().lexeme(),
+                    symbol
+                ));
+            }
+            ExplicitTypeCategory::Pointer(to) => {
+                self.write_ln("ExplicitType(ptr)");
+                self.indent(|visitor| {
+                    (*to).accept(visitor);
+                })
+            }
+            ExplicitTypeCategory::Array(of, count) => {
+                self.write_ln(&format!("ExplicitType(array<count={}>)", count));
+                self.indent(|visitor| {
+                    (*of).accept(visitor);
+                })
+            }
+        }
     }
 }

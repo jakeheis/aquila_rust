@@ -650,7 +650,7 @@ impl ExprVisitor for TypeChecker {
             (NodeType::Array(inside, _), NodeType::Int) => {
                 // println!("setting subscript type to {}", inside)
                 expr.set_type((*inside).clone())
-            },
+            }
             (NodeType::Array(..), other) => Err(self.type_mismatch(arg, &other, &NodeType::Int)),
             _ => Err(Diagnostic::error(expr, "Can't subscript into non-array")),
         }
@@ -659,28 +659,44 @@ impl ExprVisitor for TypeChecker {
     fn visit_explicit_type_expr(
         &mut self,
         expr: &Expr,
-        name: &Token,
-        modifier: &Option<Token>,
+        category: &ExplicitTypeCategory,
     ) -> Self::ExprResult {
-        let main = if let Some(primitive) = NodeType::primitive(name) {
-            Ok(primitive)
-        } else if let Some((_, node_type)) = self.resolve_var(name.lexeme()) {
-            if let NodeType::Metatype(type_symbol) = node_type {
-                let compound_type = NodeType::Type(type_symbol.clone());
-                Ok(compound_type)
-            } else {
-                Err(Diagnostic::error(name, "Not a type"))
+        let resolved_type = match category {
+            ExplicitTypeCategory::Simple(token) => {
+                if let Some(primitive) = NodeType::primitive(&token.token) {
+                    token.set_symbol(Symbol::new(None, &token.token));
+                    Ok(primitive)
+                } else if let Some((_, node_type)) = self.resolve_var(token.token.lexeme()) {
+                    if let NodeType::Metatype(type_symbol) = node_type {
+                        token.set_symbol(type_symbol.clone());
+                        Ok(NodeType::Type(type_symbol.clone()))
+                    } else {
+                        Err(Diagnostic::error(token, "Not a type"))
+                    }
+                } else {
+                    Err(Diagnostic::error(token, "Undefined type"))
+                }
             }
-        } else {
-            Err(Diagnostic::error(name, "Undefined type"))
+            ExplicitTypeCategory::Array(of, count_token) => {
+                let of = of.accept(self)?;
+                match count_token.lexeme().parse::<usize>() {
+                    Ok(count) => {
+                        let size = ArraySize::Known(count);
+                        Ok(NodeType::Array(Box::new(of), size))
+                    }
+                    Err(..) => Err(Diagnostic::error(
+                        count_token,
+                        "Array count must be an integer",
+                    )),
+                }
+            }
+            ExplicitTypeCategory::Pointer(to) => {
+                let to = to.accept(self)?;
+                Ok(NodeType::pointer_to(to))
+            }
         }?;
 
-        let node_type = if modifier.is_some() {
-            NodeType::Pointer(Box::new(main))
-        } else {
-            main
-        };
-        expr.set_type(node_type)
+        expr.set_type(resolved_type)
     }
 }
 
@@ -703,7 +719,7 @@ pub enum NodeType {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ArraySize {
     Known(usize),
-    Unknown
+    Unknown,
 }
 
 impl std::fmt::Display for ArraySize {
@@ -768,7 +784,7 @@ impl std::fmt::Display for NodeType {
                 string
             }
             NodeType::Pointer(ty) => format!("ptr<{}>", ty),
-            NodeType::Array(ty, size) => format!("Array<{}, count={}", ty, size),
+            NodeType::Array(ty, size) => format!("Array<{}, count={}>", ty, size),
             NodeType::Type(ty) => ty.id.clone(),
             NodeType::Metatype(ty) => ty.id.clone() + "_Meta",
             NodeType::Ambiguous => String::from("<ambiguous>"),
