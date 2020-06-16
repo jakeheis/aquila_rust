@@ -150,8 +150,7 @@ impl Lexer {
             }
         }
 
-        let token = self.make_token(TokenKind::Identifier).unwrap();
-        match token.lexeme() {
+        match self.current_span().lexeme() {
             "true" => self.make_token(TokenKind::True),
             "false" => self.make_token(TokenKind::False),
             "type" => self.make_token(TokenKind::Type),
@@ -164,7 +163,8 @@ impl Lexer {
             "ptr" => self.make_token(TokenKind::Ptr),
             "builtin" => self.make_token(TokenKind::Builtin),
             "meta" => self.make_token(TokenKind::Meta),
-            _ => Some(token),
+            "while" => self.make_token(TokenKind::While),
+            _ => self.make_token(TokenKind::Identifier),
         }
     }
 

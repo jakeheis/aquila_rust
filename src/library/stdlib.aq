@@ -21,6 +21,14 @@ type FatPointer {
 
 }
 
+/*
+type SizedCollectionIterator {
+    let location: ptr void;
+    let count: int;
+    let offset: int;
+}
+*/
+
 type String {
     
     let storage: FatPointer;
@@ -51,3 +59,13 @@ type String {
     }
 
 }
+
+/*
+type Vec {
+
+    let storage: FatPointer;
+
+    meta from(array: )
+
+}
+*/

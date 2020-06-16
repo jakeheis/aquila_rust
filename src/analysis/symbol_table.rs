@@ -140,14 +140,14 @@ impl SymbolTableBuilder {
 
         let new_symbol = Symbol::new(self.context.last(), &name.token);
         let new_type = NodeType::Metatype(new_symbol.clone());
-        
+
         self.insert(new_symbol.clone(), new_type.clone());
 
         name.set_symbol(new_symbol);
         name.set_type(new_type);
     }
 
-    fn build_type_internals(&mut self, type_decls: &[Stmt]) {        
+    fn build_type_internals(&mut self, type_decls: &[Stmt]) {
         for type_decl in type_decls {
             self.build_type_internal(type_decl);
         }
@@ -188,13 +188,13 @@ impl SymbolTableBuilder {
         }
     }
 
-    fn build_function(&mut self, stmt: &Stmt) {        
+    fn build_function(&mut self, stmt: &Stmt) {
         let (name, params, return_type) = match &stmt.kind {
             StmtKind::FunctionDecl(name, params, return_type, ..) => (name, params, return_type),
             StmtKind::Builtin(internal) => {
                 guard!(StmtKind::FunctionDecl[name, params, return_type, _body, _meta] = &internal.kind);
                 (name, params, return_type)
-            },
+            }
             _ => unreachable!(),
         };
 

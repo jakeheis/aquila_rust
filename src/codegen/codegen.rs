@@ -126,7 +126,7 @@ impl Codegen {
     }
 
     fn write_guard(&mut self, guard: String, message: &str) {
-        self.writer.start_if_block(guard);
+        self.writer.start_condition_block("if", guard);
         self.writer.writeln(&format!("printf(\"{}\\n\");", message));
         self.writer.writeln("exit(1);");
         self.writer.end_conditional_block();
@@ -296,12 +296,24 @@ impl StmtVisitor for Codegen {
         else_body: &[Stmt],
     ) -> Self::StmtResult {
         let condition = condition.accept(self);
-        self.writer.start_if_block(condition);
+        self.writer.start_condition_block("if", condition);
         self.gen_stmts(body);
         if !else_body.is_empty() {
             self.writer.start_else_block();
             self.gen_stmts(else_body);
         }
+        self.writer.end_conditional_block();
+    }
+
+    fn visit_while_stmt(
+        &mut self,
+        _stmt: &Stmt,
+        condition: &Expr,
+        body: &[Stmt],
+    ) {
+        let condition = condition.accept(self);
+        self.writer.start_condition_block("while", condition);
+        self.gen_stmts(body);
         self.writer.end_conditional_block();
     }
 

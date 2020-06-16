@@ -46,6 +46,7 @@ pub enum TokenKind {
     Ptr,
     Builtin,
     Meta,
+    While,
 
     // Other
     Comma,

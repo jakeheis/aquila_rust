@@ -75,8 +75,8 @@ impl CWriter {
         self.writeln(&(whole + ";"));
     }
 
-    pub fn start_if_block(&mut self, condition: String) {
-        let line = format!("if ({}) {{", condition);
+    pub fn start_condition_block(&mut self, name: &str, condition: String) {
+        let line = format!("{} ({}) {{", name, condition);
         self.writeln(&line);
         self.indent += 1;
     }

@@ -96,12 +96,21 @@ impl Parser {
             .replace_span(&decl)?;
             Ok(decl)
         } else if self.matches(TokenKind::If) {
-            if context == Context::InsideFunction {
+            if context == Context::TopLevel || context == Context::InsideFunction {
                 self.if_stmt()
             } else {
                 Err(Diagnostic::error(
                     self.previous(),
                     "If statement not allowed",
+                ))
+            }
+        } else if self.matches(TokenKind::While) {
+            if context == Context::TopLevel || context == Context::InsideFunction {
+                self.while_stmt()
+            } else {
+                Err(Diagnostic::error(
+                    self.previous(),
+                    "While statement not allowed",
                 ))
             }
         } else if self.matches(TokenKind::Return) {
@@ -298,6 +307,20 @@ impl Parser {
             else_body,
             end_brace_span,
         ))
+    }
+
+    fn while_stmt(&mut self) -> Result<Stmt> {
+        let while_span = self.previous().span.clone();
+
+        let condition = self.expression()?;
+        self.consume(TokenKind::LeftBrace, "Expect '{' after condition")?;
+        let body = self.block(Context::InsideFunction);
+
+        let end_brace_span = &self
+            .consume(TokenKind::RightBrace, "Expect '}' after if body")?
+            .span;
+
+        Ok(Stmt::while_stmt(while_span, condition, body, end_brace_span))
     }
 
     fn return_stmt(&mut self) -> Result<Stmt> {

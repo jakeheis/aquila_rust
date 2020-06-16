@@ -42,13 +42,12 @@ type Adder {
 }
 
 let adders: [Adder; 3] = [Adder(1, 2), Adder(3,4), Adder(5,6)];
-print adders[2].add(3);
 
-let more_numbers= [[], [2]];
-
-let some: more_numbers;
-
-let hey = [] + 4;
+let count = 0;
+while count < 3 {
+  print adders[count].add(3);
+  count = count + 1;
+}
 
 /*
 enum Hello {

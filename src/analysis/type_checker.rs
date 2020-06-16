@@ -1,3 +1,4 @@
+use super::node_type::*;
 use super::symbol_table::*;
 use crate::diagnostic::*;
 use crate::guard;
@@ -5,7 +6,6 @@ use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
-use super::node_type::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -271,9 +271,7 @@ impl StmtVisitor for TypeChecker {
         let analysis = self.check_list(body);
         self.pop_scope();
 
-        if !analysis.guarantees_return
-            && !return_type.matches(&NodeType::Void)
-            && !self.is_builtin
+        if !analysis.guarantees_return && !return_type.matches(&NodeType::Void) && !self.is_builtin
         {
             let last_param = params.last().map(|p| p.span.clone());
             let span_params = Span::join_opt(name, &last_param);
@@ -307,16 +305,16 @@ impl StmtVisitor for TypeChecker {
             (Some(explicit), Some(implicit)) => {
                 self.current_scope().define_var(name, &explicit);
 
-                if let Err(diag) = self.check_type_match(
-                    &value.as_ref().unwrap(),
-                    &implicit,
-                    &explicit,
-                ) {
+                if let Err(diag) =
+                    self.check_type_match(&value.as_ref().unwrap(), &implicit, &explicit)
+                {
                     self.report_error(diag);
                 }
             }
             (Some(explicit), None) => self.current_scope().define_var(name, &explicit),
-            (None, Some(implicit)) if !implicit.contains_ambiguity() => self.current_scope().define_var(name, &implicit),
+            (None, Some(implicit)) if !implicit.contains_ambiguity() => {
+                self.current_scope().define_var(name, &implicit)
+            }
             _ => {
                 self.report_error(Diagnostic::error(name, "Can't infer type"));
             }
@@ -359,6 +357,25 @@ impl StmtVisitor for TypeChecker {
         Analysis { guarantees_return }
     }
 
+    fn visit_while_stmt(
+        &mut self,
+        _stmt: &Stmt,
+        condition: &Expr,
+        body: &[Stmt],
+    ) -> Analysis {
+        if let Some(cond_type) = self.check_expr(condition) {
+            if let Err(diag) = self.check_type_match(condition, &cond_type, &NodeType::Bool) {
+                self.report_error(diag);
+            }
+        }
+
+        self.push_scope_named("while");
+        let body_analysis = self.check_list(body);
+        self.pop_scope();
+        
+        body_analysis
+    }
+
     fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Analysis {
         let ret_type = expr
             .as_ref()
@@ -366,7 +383,10 @@ impl StmtVisitor for TypeChecker {
             .unwrap_or(NodeType::Void);
 
         let expected_return = &self.current_scope().function_return_type;
-        let expected_return = expected_return.as_ref().map(|f| f.clone()).unwrap_or(NodeType::Void);
+        let expected_return = expected_return
+            .as_ref()
+            .map(|f| f.clone())
+            .unwrap_or(NodeType::Void);
 
         if let Some(expr) = expr.as_ref() {
             if let Err(diag) = self.check_type_match(expr, &ret_type, &expected_return) {
@@ -507,11 +527,7 @@ impl ExprVisitor for TypeChecker {
             _ => unreachable!(),
         };
 
-        if entries
-            .iter()
-            .find(|e| e.matches(&operand_type))
-            .is_some()
-        {
+        if entries.iter().find(|e| e.matches(&operand_type)).is_some() {
             expr.set_type(operand_type.clone())
         } else {
             let message = format!("Cannot {} on {}", op.lexeme(), operand_type);
@@ -670,19 +686,23 @@ impl ExprVisitor for TypeChecker {
             element_types.push(element.accept(self)?);
         }
 
-        let expected_type = if let Some(concrete) = element_types.iter().find(|e| !e.contains_ambiguity()) {
-            concrete
-        } else {
-            element_types.first().unwrap()
-        };
+        let expected_type =
+            if let Some(concrete) = element_types.iter().find(|e| !e.contains_ambiguity()) {
+                concrete
+            } else {
+                element_types.first().unwrap()
+            };
 
         for (index, element_type) in element_types.iter().enumerate() {
             if !element_type.matches(&expected_type) {
-                return Err(self.type_mismatch(&elements[index], &element_type, &expected_type))
+                return Err(self.type_mismatch(&elements[index], &element_type, &expected_type));
             }
         }
 
-        let node_type = NodeType::Array(Box::new(expected_type.clone()), ArraySize::Known(elements.len()));
+        let node_type = NodeType::Array(
+            Box::new(expected_type.clone()),
+            ArraySize::Known(elements.len()),
+        );
         expr.set_type(node_type)
     }
 
@@ -702,8 +722,12 @@ impl ExprVisitor for TypeChecker {
         expr: &Expr,
         _category: &ExplicitTypeCategory,
     ) -> Self::ExprResult {
-        let context: Vec<Symbol> = self.scopes.iter().flat_map(|s| s.id.as_ref().map(|id| id.clone())).collect();
-        
+        let context: Vec<Symbol> = self
+            .scopes
+            .iter()
+            .flat_map(|s| s.id.as_ref().map(|id| id.clone()))
+            .collect();
+
         if let Some(deduced) = NodeType::deduce_from(expr, &self.lib, &context) {
             Ok(deduced)
         } else {

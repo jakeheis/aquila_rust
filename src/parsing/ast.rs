@@ -9,6 +9,7 @@ pub enum StmtKind {
     FunctionDecl(TypedToken, Vec<Stmt>, Option<Expr>, Vec<Stmt>, bool),
     VariableDecl(TypedToken, Option<Expr>, Option<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
+    WhileStmt(Expr, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
     PrintStmt(Option<Expr>, RefCell<Option<NodeType>>),
     ExpressionStmt(Expr),
@@ -38,6 +39,9 @@ impl Stmt {
             }
             StmtKind::IfStmt(condition, body, else_body) => {
                 visitor.visit_if_stmt(&self, &condition, &body, &else_body)
+            }
+            StmtKind::WhileStmt(condition, body) => {
+                visitor.visit_while_stmt(&self, condition, &body)
             }
             StmtKind::ReturnStmt(expr) => visitor.visit_return_stmt(&self, expr),
             StmtKind::PrintStmt(expr, print_type) => {
@@ -105,6 +109,16 @@ impl Stmt {
         Stmt::new(StmtKind::IfStmt(condition, body, else_body), span)
     }
 
+    pub fn while_stmt(
+        while_span: Span,
+        condition: Expr,
+        body: Vec<Stmt>,
+        end_brace_span: &Span,
+    ) -> Self {
+        let span = Span::join(&while_span, end_brace_span);
+        Stmt::new(StmtKind::WhileStmt(condition, body), span)
+    }
+
     pub fn return_stmt(return_keyword: Span, expr: Option<Expr>) -> Self {
         let span = Span::join_opt(&return_keyword, &expr);
         Stmt::new(StmtKind::ReturnStmt(expr), span)
@@ -162,6 +176,13 @@ pub trait StmtVisitor {
         condition: &Expr,
         body: &[Stmt],
         else_body: &[Stmt],
+    ) -> Self::StmtResult;
+
+    fn visit_while_stmt(
+        &mut self,
+        stmt: &Stmt,
+        condition: &Expr,
+        body: &[Stmt],
     ) -> Self::StmtResult;
 
     fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult;
@@ -614,6 +635,25 @@ impl StmtVisitor for ASTPrinter {
             visitor.write_ln("ElseBody");
             visitor.indent(|visitor| {
                 else_body.iter().for_each(|s| s.accept(visitor));
+            });
+        })
+    }
+
+    fn visit_while_stmt(
+        &mut self,
+        _stmt: &Stmt,
+        condition: &Expr,
+        body: &[Stmt],
+    ) {
+        self.write_ln("While");
+        self.indent(|visitor| {
+            visitor.write_ln("Condition");
+            visitor.indent(|visitor| {
+                condition.accept(visitor);
+            });
+            visitor.write_ln("Body");
+            visitor.indent(|visitor| {
+                body.iter().for_each(|s| s.accept(visitor));
             });
         })
     }

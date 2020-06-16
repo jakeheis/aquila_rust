@@ -1,8 +1,8 @@
 use super::symbol_table::*;
-use crate::lexing::Token;
-use crate::parsing::*;
-use crate::library::*;
 use crate::guard;
+use crate::lexing::Token;
+use crate::library::*;
+use crate::parsing::*;
 
 #[derive(Clone, Debug)]
 pub enum NodeType {
@@ -91,7 +91,7 @@ impl NodeType {
                     }
                 }
                 ret.contains_ambiguity()
-            },
+            }
             _ => false,
         }
     }
@@ -121,7 +121,7 @@ impl NodeType {
                         return false;
                     }
                 }
-                
+
                 true
             }
             (NodeType::Array(lhs_kind, lhs_size), NodeType::Array(rhs_kind, rhs_size)) => {
@@ -136,7 +136,7 @@ impl NodeType {
                 }
 
                 true
-            },
+            }
             (NodeType::Ambiguous, _) => true,
             _ => false,
         }
@@ -156,7 +156,7 @@ impl NodeType {
 
     //                 let l_inner: &NodeType = &l_inner;
     //                 let r_inner: &NodeType = &r_inner;
-                    
+
     //                 if let (NodeType::Ambiguous, NodeType::Ambiguous) = (l_inner, r_inner) {
     //                     return true;
     //                 }
