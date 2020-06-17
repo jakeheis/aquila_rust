@@ -319,12 +319,14 @@ impl StmtVisitor for Codegen {
         let array = array_expr.accept(self);
         guard!(NodeType::Array[of, size] = array_expr.get_type().unwrap());
         guard!(ArraySize::Known[count] = size);
-        
+
+        let of: &NodeType = &of;
+
         let condition = format!("int i = 0; i < {}; i++", count);
         self.writer.start_condition_block("for", condition);
 
-        let subscript = format!("{}[i]", array);
-        self.writer.decl_var(&of, &variable.get_symbol().unwrap().mangled(), Some(subscript));
+        let subscript = format!("&{}[i]", array);
+        self.writer.decl_var(&NodeType::pointer_to(of.clone()), &variable.get_symbol().unwrap().mangled(), Some(subscript));
         self.gen_stmts(body);
         self.writer.end_conditional_block();
     }

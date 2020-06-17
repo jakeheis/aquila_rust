@@ -501,6 +501,12 @@ impl Parser {
         Ok(Expr::array(left_bracket, elements, right_bracket))
     }
 
+    fn grouping(&mut self, _can_assign: bool) -> Result<Expr> {
+        let expr = self.expression()?;
+        self.consume(TokenKind::RightParen, "Expect matching ')'")?;
+        Ok(expr)
+    }
+
     fn parse_var(&mut self, allow_type: bool, require_type: bool) -> Result<(Token, Option<Expr>)> {
         let name = self.previous().clone();
         let mut explicit_type: Option<Expr> = None;
@@ -618,6 +624,7 @@ impl TokenKind {
             }
             TokenKind::Identifier => Some(Parser::variable),
             TokenKind::LeftBracket => Some(Parser::array),
+            TokenKind::LeftParen => Some(Parser::grouping),
             _ => None,
         }
     }

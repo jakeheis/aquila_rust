@@ -402,7 +402,8 @@ impl StmtVisitor for TypeChecker {
         guard!(NodeType::Array[of, _size] = &array_type);
 
         self.push_scope_named("for");
-        self.current_scope().define_var(variable, of);
+        let of: &NodeType = &of;
+        self.current_scope().define_var(variable, &NodeType::pointer_to(of.clone()));
         let body_analysis = self.check_list(body);
         self.pop_scope();
 
