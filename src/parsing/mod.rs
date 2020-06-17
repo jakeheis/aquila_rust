@@ -1,8 +1,10 @@
 mod ast;
+mod ast_printer;
 mod parser;
 
 pub use ast::{
-    ASTPrinter, ExplicitTypeCategory, Expr, ExprKind, ExprVisitor, ResolvedToken, Stmt, StmtKind,
+    ExplicitTypeCategory, Expr, ExprKind, ExprVisitor, ResolvedToken, Stmt, StmtKind,
     StmtVisitor, TypedToken,
 };
 pub use parser::Parser;
+pub use ast_printer::ASTPrinter;

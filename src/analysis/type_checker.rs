@@ -752,6 +752,11 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
+    fn visit_cast_expr(&mut self, _expr: &Expr, explicit_type: &Expr, value: &Expr) -> Self::ExprResult {
+        value.accept(self)?;
+        explicit_type.accept(self)
+    }
+
     fn visit_explicit_type_expr(
         &mut self,
         expr: &Expr,
@@ -764,7 +769,11 @@ impl ExprVisitor for TypeChecker {
             .collect();
 
         if let Some(deduced) = NodeType::deduce_from(expr, &self.lib, &context) {
-            Ok(deduced)
+            if let (&NodeType::Any, false) = (&deduced, self.is_builtin) {
+                Err(Diagnostic::error(expr, "Cannot have type any; must be ptr any"))
+            } else {
+                Ok(deduced)
+            }
         } else {
             Err(Diagnostic::error(expr, "Undefined type"))
         }

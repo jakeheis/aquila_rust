@@ -118,7 +118,7 @@ impl Codegen {
         let temp_name = format!("_temp_{}", self.temp_count);
         self.temp_count += 1;
 
-        let temp_type = self.writer.type_and_name(temp_type, &temp_name, false);
+        let temp_type = self.writer.type_and_name(temp_type, &temp_name);
         let temp = format!("{} = {};", temp_type, value);
         self.writer.writeln(&temp);
 
@@ -402,7 +402,15 @@ impl ExprVisitor for Codegen {
     }
 
     fn visit_unary_expr(&mut self, _expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
-        format!("{}({})", op.lexeme(), operand.accept(self))
+        let operand_text = operand.accept(self);
+        
+        let operand_text = if let &TokenKind::Ampersand = &op.kind {
+            self.write_temp(&operand.get_type().unwrap().coerce_array_to_ptr(), operand_text)
+        } else {
+            operand_text
+        };
+
+        format!("{}({})", op.lexeme(), operand_text)
     }
 
     fn visit_function_call_expr(
@@ -528,6 +536,14 @@ impl ExprVisitor for Codegen {
         );
 
         format!("{}[{}]", target, index)
+    }
+
+    fn visit_cast_expr(&mut self, _expr: &Expr, explicit_type: &Expr, value: &Expr) -> Self::ExprResult {
+        let cast_type = explicit_type.get_type().unwrap();
+        let (cast_type, _) = self.writer.convert_type(&cast_type, String::new());
+        let value = value.accept(self);
+        
+        format!("({})({})", cast_type, value)
     }
 
     fn visit_explicit_type_expr(

@@ -48,9 +48,17 @@ type Adder {
   }
 }
 
-let adders: [Adder; 3] = [Adder(1, 2), Adder(3,4), Adder(5,6)];
+let vec = Vec.new(sizeof(Adder));
+vec.insert(&Adder(10, 2));
+vec.insert(&Adder(3, 4));
 
-adders[3];
+let first_adder = cast<ptr Adder>(vec.get(0));
+let second_adder = cast<ptr Adder>(vec.get(1));
+
+print (*first_adder).add(4);
+print (*second_adder).add(4);
+
+let adders: [Adder; 3] = [Adder(1, 2), Adder(3,4), Adder(5,6)];
 
 for add in adders {
   print (*add).add(5);
@@ -94,10 +102,10 @@ combo2.print_str();
 
 dyn.append_literal(" world").append_literal(" again").print_str();
 
-print dyn.append_literal(" world").append_literal(" again 2").storage.location;
+print dyn.append_literal(" world").append_literal(" again 2").storage;
 
 let here = dyn.append_literal(" world").append_literal(" again 3");
-print here.storage.location;
+print here.storage;
 
 /*let sum = Adder(4, 5);
 print sum.add(6);

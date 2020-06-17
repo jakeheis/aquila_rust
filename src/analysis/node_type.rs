@@ -17,6 +17,7 @@ pub enum NodeType {
     Metatype(Symbol),
     FlexibleFunction(fn(&[NodeType]) -> bool),
     Ambiguous,
+    Any,
 }
 
 impl NodeType {
@@ -26,6 +27,7 @@ impl NodeType {
             "int" => Some(NodeType::Int),
             "bool" => Some(NodeType::Bool),
             "byte" => Some(NodeType::Byte),
+            "any" => Some(NodeType::Any),
             _ => None,
         }
     }
@@ -139,6 +141,7 @@ impl NodeType {
                 true
             }
             (NodeType::Ambiguous, _) => true,
+            (_, NodeType::Any) => true,
             _ => false,
         }
     }
@@ -177,6 +180,13 @@ impl NodeType {
         }
         false
     }
+
+    pub fn coerce_array_to_ptr(&self) -> NodeType {
+        match self {
+            NodeType::Array(inner, _) => NodeType::Pointer(inner.clone()),
+            _ => self.clone(),
+        }
+    }
 }
 
 impl std::fmt::Display for NodeType {
@@ -186,6 +196,7 @@ impl std::fmt::Display for NodeType {
             NodeType::Int => String::from("int"),
             NodeType::Bool => String::from("bool"),
             NodeType::Byte => String::from("byte"),
+            NodeType::Any => String::from("any"),
             NodeType::Function(params, ret) => {
                 let mut string = String::from("def(");
                 if let Some(first) = params.first() {

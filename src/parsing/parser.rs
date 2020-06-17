@@ -520,6 +520,20 @@ impl Parser {
         Ok(expr)
     }
 
+    fn cast(&mut self, _can_assign: bool) -> Result<Expr> {
+        let cast_span = self.previous().span.clone();
+
+        self.consume(TokenKind::Less, "Expect '<' after cast")?;
+        let cast_type = self.parse_explicit_type()?;
+        self.consume(TokenKind::Greater, "Expect '<' after cast type")?;
+
+        self.consume(TokenKind::LeftParen, "Expect '(' after cast type")?;
+        let value = self.expression()?;
+        let right_paren = self.consume(TokenKind::RightParen, "Expect matching ')'")?;
+
+        Ok(Expr::cast(cast_span, cast_type, value, right_paren))
+    }
+
     fn parse_var(&mut self, allow_type: bool, require_type: bool) -> Result<(Token, Option<Expr>)> {
         let name = self.previous().clone();
         let mut explicit_type: Option<Expr> = None;
@@ -638,6 +652,7 @@ impl TokenKind {
             TokenKind::Identifier => Some(Parser::variable),
             TokenKind::LeftBracket => Some(Parser::array),
             TokenKind::LeftParen => Some(Parser::grouping),
+            TokenKind::Cast => Some(Parser::cast),
             _ => None,
         }
     }

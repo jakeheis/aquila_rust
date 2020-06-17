@@ -66,7 +66,7 @@ impl CWriter {
     }
 
     pub fn decl_var(&mut self, var_type: &NodeType, name: &str, initial_value: Option<String>) {
-        let start = self.type_and_name(var_type, name, false);
+        let start = self.type_and_name(var_type, name);
         let whole = if let Some(initial_value) = initial_value {
             format!("{} = {}", start, initial_value)
         } else {
@@ -79,9 +79,8 @@ impl CWriter {
         &self,
         var_type: &NodeType,
         name: &str,
-        convert_array_to_ptr: bool,
     ) -> String {
-        let (t, n) = self.convert_type(var_type, String::from(name), convert_array_to_ptr);
+        let (t, n) = self.convert_type(var_type, String::from(name));
         format!("{} {}", t, n)
     }
 
@@ -131,12 +130,12 @@ impl CWriter {
     ) {
         let param_str: Vec<String> = params
             .iter()
-            .map(|(param_type, name)| self.type_and_name(param_type, &name, false))
+            .map(|(param_type, name)| self.type_and_name(param_type, &name))
             .collect();
         let param_str = param_str.join(",");
         self.writeln(&format!(
             "{}({}){}",
-            self.type_and_name(ret_type, name, false),
+            self.type_and_name(ret_type, name),
             param_str,
             terminator
         ));
@@ -151,7 +150,6 @@ impl CWriter {
         &self,
         node_type: &NodeType,
         name: String,
-        convert_array_to_ptr: bool,
     ) -> (String, String) {
         let simple = match node_type {
             NodeType::Void => Some("void"),
@@ -167,23 +165,23 @@ impl CWriter {
         match node_type {
             NodeType::Type(symbol) => (symbol.mangled(), name),
             NodeType::Pointer(ty) => {
-                let (type_portion, name_portion) = self.convert_type(ty, name, true);
-                (format!("{}*", type_portion), name_portion)
-            }
-            NodeType::Array(ty, count) => {
-                let (type_portion, name_portion) =
-                    self.convert_type(ty, name, convert_array_to_ptr);
-                if convert_array_to_ptr {
-                    (format!("{}*", type_portion), name_portion)
+                let ty: &NodeType = &ty.coerce_array_to_ptr();
+                if let NodeType::Any = ty {
+                    (String::from("void*"), name)
                 } else {
-                    let array_portion = if let ArraySize::Known(k) = count {
-                        format!("[{}]", k)
-                    } else {
-                        String::from("[]")
-                    };
-                    (type_portion, format!("{}{}", name_portion, array_portion))
+                    let (type_portion, name_portion) = self.convert_type(ty, name);
+                    (format!("{}*", type_portion), name_portion)
                 }
             }
+            NodeType::Array(ty, count) => {
+                let (type_portion, name_portion) = self.convert_type(ty, name);
+                let array_portion = if let ArraySize::Known(k) = count {
+                    format!("[{}]", k)
+                } else {
+                    String::from("[]")
+                };
+                (type_portion, format!("{}{}", name_portion, array_portion))
+            },
             other_type => panic!("Can't convert type {}", other_type),
         }
     }

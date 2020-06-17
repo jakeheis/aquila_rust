@@ -49,6 +49,7 @@ pub enum TokenKind {
     While,
     For,
     In,
+    Cast,
 
     // Other
     Comma,

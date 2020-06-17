@@ -1,24 +1,14 @@
-builtin def malloc(count: int): ptr byte {}
+builtin def malloc(count: int): ptr any {}
+builtin def realloc(location: ptr any, count: int): ptr any {}
 builtin def strlen(location: ptr byte): int {}
-builtin def memcpy(to: ptr byte, from: ptr byte, length: int): int {}
+builtin def memcpy(to: ptr any, from: ptr any, length: int): int {}
+builtin def sizeof(object: any): int {}
 
-builtin def ptr_offset(pointer: ptr byte, distance: int): ptr byte {}
+builtin def ptr_offset(pointer: ptr any, distance: int): ptr any {}
 builtin def _read_line(): ptr byte {}
 
 def read_line(): String {
     return String.from(_read_line());
-}
-
-type FatPointer {
-
-    let size: int;
-    let location: ptr byte;
-
-    meta def heap_alloc(size: int): FatPointer {
-        let location = malloc(size);
-        return FatPointer(size, location);
-    }
-
 }
 
 /*
@@ -31,41 +21,62 @@ type SizedCollectionIterator {
 
 type String {
     
-    let storage: FatPointer;
+    let storage: ptr byte;
+    let size: int;
 
     meta def from(lit: ptr byte): String {
-        let pointer = FatPointer(strlen(lit) + 1, lit);
-        return String(pointer);
+        let size = strlen(lit) + 1;
+        return String(lit, size);
     }
 
     def append_literal(lit: ptr byte): String {
-        let size = storage.size + strlen(lit);
-        let new_storage = FatPointer.heap_alloc(size);
+        let new_size = size + strlen(lit);
+        let new_storage = cast<ptr byte>(malloc(new_size));
         
-        memcpy(new_storage.location, storage.location, storage.size - 1);
+        memcpy(new_storage, storage, size - 1);
 
-        let second = ptr_offset(new_storage.location, storage.size - 1);
+        let second = ptr_offset(new_storage, size - 1);
         memcpy(second, lit, strlen(lit) + 1);
 
-        return String(new_storage);
+        return String(new_storage, new_size);
     }
 
     def append(string: String): String {
-        return append_literal(string.storage.location);
+        return append_literal(string.storage);
     }
 
     def print_str() {
-        print storage.location;
+        print storage;
     }
 
 }
 
-/*
 type Vec {
 
-    let storage: FatPointer;
+    let storage: ptr any;
+    let count: int;
+    let capacity: int;
+    let element_size: int;
 
-    meta from(array: )
+    meta def new(element_size: int): Vec {
+        let storage = malloc(10 * element_size);
+        return Vec(storage, 0, 0, element_size);
+    }
+
+    def insert(object: ptr any) {
+        if count == capacity {
+            capacity = capacity * 2;
+            storage = realloc(storage, capacity * element_size);
+        }
+
+        let insertion_location = ptr_offset(storage, count * element_size);
+        memcpy(insertion_location, object, element_size);
+
+        count = count + 1;
+    }
+
+    def get(index: int): ptr any {
+        return ptr_offset(storage, index * element_size);
+    }
 
 }
-*/

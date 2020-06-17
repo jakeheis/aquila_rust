@@ -5,7 +5,7 @@ use crate::library::Lib;
 pub fn should_write_builtin(symbol: &Symbol) -> bool {
     let id_ref: &str = &symbol.id;
     match id_ref {
-        "strlen" | "memcpy" | "malloc" => false,
+        "strlen" | "memcpy" | "malloc" | "sizeof" | "realloc" => false,
         _ => true,
     }
 }
@@ -34,7 +34,7 @@ pub fn add_builtin_symbols(_lib: &Lib) {
 // }
 
 fn write_ptr_offset(writer: &mut CWriter) {
-    let line = String::from("ptr_offset__pointer + ptr_offset__distance");
+    let line = String::from("(char*)ptr_offset__pointer + ptr_offset__distance");
     writer.write_return(Some(line));
 }
 
