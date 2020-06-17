@@ -1,5 +1,6 @@
 use super::c_writer::CWriter;
 use crate::analysis::*;
+use crate::library::Lib;
 
 pub fn should_write_builtin(symbol: &Symbol) -> bool {
     let id_ref: &str = &symbol.id;
@@ -17,6 +18,20 @@ pub fn write(symbol: &Symbol, writer: &mut CWriter) {
         name => panic!("Haven't implemented builtin {}", name),
     }
 }
+
+pub fn add_builtin_symbols(_lib: &Lib) {
+    // let mut symbols = lib.symbols.borrow_mut();
+    // symbols.insert(Symbol::new_str(None, "iterate"), NodeType::FlexibleFunction(iterate_check));
+}
+
+// pub fn iterate_check(args: &[NodeType]) -> bool {
+//     if args.len() == 1 {
+//         if let NodeType::Array(..) = args[0] {
+//             return true;
+//         }
+//     }
+//     false
+// }
 
 fn write_ptr_offset(writer: &mut CWriter) {
     let line = String::from("ptr_offset__pointer + ptr_offset__distance");

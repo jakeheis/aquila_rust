@@ -5,6 +5,7 @@ use crate::parsing::*;
 use crate::source::{self, Source};
 use std::cell::RefCell;
 use std::rc::Rc;
+use crate::codegen::core;
 
 pub struct Lib {
     pub name: String,
@@ -31,6 +32,7 @@ impl Lib {
         let src =
             source::file("/Users/jakeheiser/Desktop/Projects/Rust/aquila/src/library/stdlib.aq");
         let lib = Lib::build_lib(src, "stdlib", false).unwrap();
+        core::add_builtin_symbols(&lib);
         if LOG_STDLIB {
             println!("std {}", lib.symbols.borrow());
         }
@@ -78,7 +80,7 @@ impl Lib {
         let lib = SymbolTableBuilder::build_symbols(lib);
 
         if LOG_SYMBOL_MAKER {
-            println!("Table: {}", lib.symbols.borrow());
+            println!("{}", lib.symbols.borrow());
         }
 
         let lib = TypeChecker::check(lib, Rc::clone(&reporter));

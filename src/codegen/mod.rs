@@ -1,5 +1,5 @@
 mod c_writer;
 pub mod codegen;
-mod core;
+pub mod core;
 
 pub use codegen::Codegen;

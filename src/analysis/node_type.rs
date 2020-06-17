@@ -4,7 +4,7 @@ use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum NodeType {
     Void,
     Int,
@@ -15,6 +15,7 @@ pub enum NodeType {
     Array(Box<NodeType>, ArraySize),
     Function(Vec<NodeType>, Box<NodeType>),
     Metatype(Symbol),
+    FlexibleFunction(fn(&[NodeType]) -> bool),
     Ambiguous,
 }
 
@@ -202,6 +203,7 @@ impl std::fmt::Display for NodeType {
             NodeType::Type(ty) => ty.id.clone(),
             NodeType::Metatype(ty) => ty.id.clone() + "_Meta",
             NodeType::Ambiguous => String::from("<ambiguous>"),
+            NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
         };
         write!(f, "{}", kind)
     }

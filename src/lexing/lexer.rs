@@ -164,6 +164,8 @@ impl Lexer {
             "builtin" => self.make_token(TokenKind::Builtin),
             "meta" => self.make_token(TokenKind::Meta),
             "while" => self.make_token(TokenKind::While),
+            "for" => self.make_token(TokenKind::For),
+            "in" => self.make_token(TokenKind::In),
             _ => self.make_token(TokenKind::Identifier),
         }
     }

@@ -10,6 +10,7 @@ pub enum StmtKind {
     VariableDecl(TypedToken, Option<Expr>, Option<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     WhileStmt(Expr, Vec<Stmt>),
+    ForStmt(TypedToken, Expr, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
     PrintStmt(Option<Expr>, RefCell<Option<NodeType>>),
     ExpressionStmt(Expr),
@@ -42,6 +43,9 @@ impl Stmt {
             }
             StmtKind::WhileStmt(condition, body) => {
                 visitor.visit_while_stmt(&self, condition, &body)
+            },
+            StmtKind::ForStmt(variable, array, body) => {
+                visitor.visit_for_stmt(&self, variable, array, &body)
             }
             StmtKind::ReturnStmt(expr) => visitor.visit_return_stmt(&self, expr),
             StmtKind::PrintStmt(expr, print_type) => {
@@ -119,6 +123,17 @@ impl Stmt {
         Stmt::new(StmtKind::WhileStmt(condition, body), span)
     }
 
+    pub fn for_stmt(
+        for_span: Span,
+        new_var: Token,
+        array: Expr,
+        body: Vec<Stmt>,
+        end_brace_span: &Span,
+    ) -> Self {
+        let span = Span::join(&for_span, end_brace_span);
+        Stmt::new(StmtKind::ForStmt(TypedToken::new(new_var), array, body), span)
+    }
+
     pub fn return_stmt(return_keyword: Span, expr: Option<Expr>) -> Self {
         let span = Span::join_opt(&return_keyword, &expr);
         Stmt::new(StmtKind::ReturnStmt(expr), span)
@@ -182,6 +197,14 @@ pub trait StmtVisitor {
         &mut self,
         stmt: &Stmt,
         condition: &Expr,
+        body: &[Stmt],
+    ) -> Self::StmtResult;
+
+    fn visit_for_stmt(
+        &mut self,
+        stmt: &Stmt,
+        variable: &TypedToken,
+        array: &Expr,
         body: &[Stmt],
     ) -> Self::StmtResult;
 
@@ -650,6 +673,26 @@ impl StmtVisitor for ASTPrinter {
             visitor.write_ln("Condition");
             visitor.indent(|visitor| {
                 condition.accept(visitor);
+            });
+            visitor.write_ln("Body");
+            visitor.indent(|visitor| {
+                body.iter().for_each(|s| s.accept(visitor));
+            });
+        })
+    }
+
+    fn visit_for_stmt(
+        &mut self,
+        _stmt: &Stmt,
+        variable: &TypedToken,
+        array: &Expr,
+        body: &[Stmt],
+    ) {
+        self.write_ln(&format!("For({})", variable.token.lexeme()));
+        self.indent(|visitor| {
+            visitor.write_ln("Array");
+            visitor.indent(|visitor| {
+                array.accept(visitor);
             });
             visitor.write_ln("Body");
             visitor.indent(|visitor| {

@@ -93,7 +93,11 @@ impl SymbolTable {
 
 impl std::fmt::Display for SymbolTable {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "SymbolTable({:#?})", self.type_map)
+        writeln!(f, "SymbolTable:")?;
+        for (symbol, node_type) in self.type_map.iter() {
+            writeln!(f, "  {} -> {}", symbol, node_type)?;
+        }
+        Ok(())
     }
 }
 

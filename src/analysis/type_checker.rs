@@ -380,6 +380,35 @@ impl StmtVisitor for TypeChecker {
         body_analysis
     }
 
+    fn visit_for_stmt(
+        &mut self,
+        _stmt: &Stmt,
+        variable: &TypedToken,
+        array: &Expr,
+        body: &[Stmt],
+    ) -> Analysis {
+        let array_type = match self.check_expr(array) {
+            Some(NodeType::Array(of, size)) => Some(NodeType::Array(of, size)),
+            None => None,
+            _ => {
+                self.report_error(Diagnostic::error(array, "Can only iterate over arrays"));
+                None
+            }
+        };
+        if array_type.is_none() {
+            return Analysis { guarantees_return: false }
+        }
+        let array_type = array_type.unwrap();
+        guard!(NodeType::Array[of, _size] = &array_type);
+
+        self.push_scope_named("for");
+        self.current_scope().define_var(variable, of);
+        let body_analysis = self.check_list(body);
+        self.pop_scope();
+
+        body_analysis
+    }
+
     fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Analysis {
         let ret_type = expr
             .as_ref()

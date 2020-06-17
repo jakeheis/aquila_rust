@@ -113,6 +113,15 @@ impl Parser {
                     "While statement not allowed",
                 ))
             }
+        } else if self.matches(TokenKind::For) {
+            if context == Context::TopLevel || context == Context::InsideFunction {
+                self.for_stmt()
+            } else {
+                Err(Diagnostic::error(
+                    self.previous(),
+                    "For statement not allowed",
+                ))
+            }
         } else if self.matches(TokenKind::Return) {
             let stmt = self.return_stmt();
             self.consume(
@@ -317,10 +326,27 @@ impl Parser {
         let body = self.block(Context::InsideFunction);
 
         let end_brace_span = &self
-            .consume(TokenKind::RightBrace, "Expect '}' after if body")?
+            .consume(TokenKind::RightBrace, "Expect '}' after while body")?
             .span;
 
         Ok(Stmt::while_stmt(while_span, condition, body, end_brace_span))
+    }
+
+    fn for_stmt(&mut self) -> Result<Stmt> {
+        let for_span = self.previous().span.clone();
+
+        let var_name = self.consume(TokenKind::Identifier, "Expect variable name after for")?.clone();
+        self.consume(TokenKind::In, "Expect 'in' after variable name")?;
+        let array = self.expression()?;
+
+        self.consume(TokenKind::LeftBrace, "Expect '{' after array")?;
+        let body = self.block(Context::InsideFunction);
+
+        let end_brace_span = &self
+            .consume(TokenKind::RightBrace, "Expect '}' after for body")?
+            .span;
+
+        Ok(Stmt::for_stmt(for_span, var_name, array, body, end_brace_span))
     }
 
     fn return_stmt(&mut self) -> Result<Stmt> {
