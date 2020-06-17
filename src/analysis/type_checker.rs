@@ -712,7 +712,7 @@ impl ExprVisitor for TypeChecker {
 
     fn visit_array_expr(&mut self, expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
         if elements.is_empty() {
-            let node_type = NodeType::Array(Box::new(NodeType::Ambiguous), ArraySize::Known(0));
+            let node_type = NodeType::Array(Box::new(NodeType::Ambiguous), 0);
             return expr.set_type(node_type);
         }
 
@@ -736,7 +736,7 @@ impl ExprVisitor for TypeChecker {
 
         let node_type = NodeType::Array(
             Box::new(expected_type.clone()),
-            ArraySize::Known(elements.len()),
+            elements.len(),
         );
         expr.set_type(node_type)
     }

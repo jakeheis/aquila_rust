@@ -12,7 +12,7 @@ pub enum NodeType {
     Byte,
     Type(Symbol),
     Pointer(Box<NodeType>),
-    Array(Box<NodeType>, ArraySize),
+    Array(Box<NodeType>, usize),
     Function(Vec<NodeType>, Box<NodeType>),
     Metatype(Symbol),
     FlexibleFunction(fn(&[NodeType]) -> bool),
@@ -58,8 +58,7 @@ impl NodeType {
             ExplicitTypeCategory::Array(of, count_token) => {
                 let inner = NodeType::deduce_from(of, lib, context)?;
                 let count = count_token.lexeme().parse::<usize>().ok().unwrap();
-                let size = ArraySize::Known(count);
-                NodeType::Array(Box::new(inner), size)
+                NodeType::Array(Box::new(inner), count)
             }
         };
 
@@ -86,7 +85,7 @@ impl NodeType {
         match self {
             NodeType::Ambiguous => true,
             NodeType::Pointer(ptr) => ptr.contains_ambiguity(),
-            NodeType::Array(of, count) => of.contains_ambiguity() || count == &ArraySize::Unknown,
+            NodeType::Array(of, _) => of.contains_ambiguity(),
             NodeType::Function(params, ret) => {
                 for param in params {
                     if param.contains_ambiguity() {
@@ -98,6 +97,45 @@ impl NodeType {
             _ => false,
         }
     }
+
+    // pub fn exact_match(&self, other: &NodeType) -> bool {
+    //     match (self, other) {
+    //         (NodeType::Void, NodeType::Void)
+    //         | (NodeType::Int, NodeType::Int)
+    //         | (NodeType::Bool, NodeType::Bool)
+    //         | (NodeType::Byte, NodeType::Byte) => true,
+    //         (NodeType::Type(lhs), NodeType::Type(rhs))
+    //         | (NodeType::Metatype(lhs), NodeType::Metatype(rhs))
+    //             if lhs == rhs =>
+    //         {
+    //             true
+    //         }
+    //         (NodeType::Pointer(lhs), NodeType::Pointer(rhs)) => lhs.exact_match(&rhs),
+    //         (NodeType::Function(lhs_params, lhs_ret), NodeType::Function(rhs_params, rhs_ret))
+    //             if lhs_params.len() == rhs_params.len() =>
+    //         {
+    //             if !lhs_ret.exact_match(&rhs_ret) {
+    //                 return false;
+    //             }
+
+    //             for (lhs_param, rhs_param) in lhs_params.iter().zip(rhs_params) {
+    //                 if !lhs_param.exact_match(&rhs_param) {
+    //                     return false;
+    //                 }
+    //             }
+
+    //             true
+    //         }
+    //         (NodeType::Array(lhs_kind, lhs_size), NodeType::Array(rhs_kind, rhs_size)) => {
+    //             if !lhs_kind.exact_match(rhs_kind) {
+    //                 return false;
+    //             }
+
+    //             lhs_size == rhs_size
+    //         },
+    //         _ => false,
+    //     }
+    // }
 
     pub fn matches(&self, unambiguous: &NodeType) -> bool {
         match (self, unambiguous) {
@@ -132,13 +170,7 @@ impl NodeType {
                     return false;
                 }
 
-                if let (ArraySize::Known(k1), ArraySize::Known(k2)) = (lhs_size, rhs_size) {
-                    if k1 != k2 {
-                        return false;
-                    }
-                }
-
-                true
+                lhs_size == rhs_size
             }
             (NodeType::Ambiguous, _) => true,
             (_, NodeType::Any) => true,
@@ -187,6 +219,14 @@ impl NodeType {
             _ => self.clone(),
         }
     }
+
+    // pub fn can_automatically_cast_to(&self, other: &NodeType) -> {
+    //     if self.exact_match(other) {
+    //         true
+    //     } else {
+
+    //     }
+    // }
 }
 
 impl std::fmt::Display for NodeType {
@@ -217,22 +257,5 @@ impl std::fmt::Display for NodeType {
             NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
         };
         write!(f, "{}", kind)
-    }
-}
-
-// ArraySize
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum ArraySize {
-    Known(usize),
-    Unknown,
-}
-
-impl std::fmt::Display for ArraySize {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            ArraySize::Known(size) => write!(f, "{}", size),
-            ArraySize::Unknown => write!(f, "<unknown>"),
-        }
     }
 }

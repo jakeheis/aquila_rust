@@ -1,4 +1,4 @@
-pub use crate::analysis::{ArraySize, NodeType};
+pub use crate::analysis::NodeType;
 use std::fs::File;
 use std::io::Write;
 
@@ -175,12 +175,7 @@ impl CWriter {
             }
             NodeType::Array(ty, count) => {
                 let (type_portion, name_portion) = self.convert_type(ty, name);
-                let array_portion = if let ArraySize::Known(k) = count {
-                    format!("[{}]", k)
-                } else {
-                    String::from("[]")
-                };
-                (type_portion, format!("{}{}", name_portion, array_portion))
+                (type_portion, format!("{}[{}]", name_portion, count))
             },
             other_type => panic!("Can't convert type {}", other_type),
         }

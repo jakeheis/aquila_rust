@@ -321,8 +321,7 @@ impl StmtVisitor for Codegen {
         body: &[Stmt],
     ) {
         let array = array_expr.accept(self);
-        guard!(NodeType::Array[of, size] = array_expr.get_type().unwrap());
-        guard!(ArraySize::Known[count] = size);
+        guard!(NodeType::Array[of, count] = array_expr.get_type().unwrap());
 
         let of: &NodeType = &of;
 
@@ -528,7 +527,6 @@ impl ExprVisitor for Codegen {
         let index = self.write_temp(&NodeType::Int, arg);
 
         guard!(NodeType::Array[_inside, count] = target_expr.get_type().unwrap());
-        guard!(ArraySize::Known[count] = count);
         self.write_guard(
             format!("{} >= {}", index, count),
             "index out of bounds",
