@@ -7,6 +7,18 @@ builtin def sizeof(object: any): int {}
 builtin def ptr_offset(pointer: ptr any, distance: int): ptr any {}
 builtin def _read_line(): ptr byte {}
 
+type Memory {
+    
+    meta def allocate|T|(): ptr T {
+        return cast|ptr T|(malloc(sizeof(T)));
+    }
+
+    meta def allocate_block|T|(count: int): ptr T {
+        return cast|ptr T|(malloc(sizeof(T) * count));
+    }
+
+}
+
 def read_line(): String {
     return String.from(_read_line());
 }
@@ -31,7 +43,7 @@ type String {
 
     def append_literal(lit: ptr byte): String {
         let new_size = size + strlen(lit);
-        let new_storage = cast<ptr byte>(malloc(new_size));
+        let new_storage = cast|ptr byte|(malloc(new_size));
         
         memcpy(new_storage, storage, size - 1);
 
@@ -58,12 +70,12 @@ type Vec {
     let capacity: int;
     let element_size: int;
 
-    meta def new(element_size: int): Vec {
-        let storage = malloc(10 * element_size);
-        return Vec(storage, 0, 0, element_size);
+    meta def new|T|(): Vec {
+        let storage = Memory.allocate_block|T|(10);
+        return Vec(storage, 0, 0, sizeof(T));
     }
 
-    def insert(object: ptr any) {
+    def insert|T|(object: ptr T) {
         if count == capacity {
             capacity = capacity * 2;
             storage = realloc(storage, capacity * element_size);

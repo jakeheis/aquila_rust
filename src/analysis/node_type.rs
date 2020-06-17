@@ -13,7 +13,8 @@ pub enum NodeType {
     Type(Symbol),
     Pointer(Box<NodeType>),
     Array(Box<NodeType>, usize),
-    Function(Vec<NodeType>, Box<NodeType>),
+    Function(Vec<NodeType>, Vec<Symbol>, Box<NodeType>),
+    // Generic(Symbol, usize),
     Metatype(Symbol),
     FlexibleFunction(fn(&[NodeType]) -> bool),
     Ambiguous,
@@ -37,7 +38,10 @@ impl NodeType {
     }
 
     pub fn deduce_from(expr: &Expr, lib: &Lib, context: &[Symbol]) -> Option<Self> {
+        // println!("trying to deduce {} -- {}", expr.span.entire_line().0, expr.lexeme());
+
         if let Some(already_typed) = expr.get_type() {
+            // println!("already typed {}", already_typed);
             return Some(already_typed.clone());
         }
 
@@ -62,13 +66,19 @@ impl NodeType {
             }
         };
 
+        // println!("setting {} -- {} -- to {}", expr.span.entire_line().0, expr.lexeme(), node_type);
+
         expr.set_type(node_type).ok()
     }
 
     fn symbol_for_type_token(token: &Token, lib: &Lib, context: &[Symbol]) -> Option<Symbol> {
+        // println!("trying to find {} -- {}", token.span.entire_line().0, token.lexeme());
+
         for parent in context.iter().rev() {
             let non_top_level_symbol = Symbol::new(Some(parent), token);
+            // println!("checking {}", non_top_level_symbol);
             if let Some(NodeType::Metatype(_)) = lib.resolve_symbol(&non_top_level_symbol) {
+                // println!("found {}", non_top_level_symbol);
                 return Some(non_top_level_symbol);
             }
         }
@@ -86,7 +96,7 @@ impl NodeType {
             NodeType::Ambiguous => true,
             NodeType::Pointer(ptr) => ptr.contains_ambiguity(),
             NodeType::Array(of, _) => of.contains_ambiguity(),
-            NodeType::Function(params, ret) => {
+            NodeType::Function(params, _, ret) => {
                 for param in params {
                     if param.contains_ambiguity() {
                         return true;
@@ -150,7 +160,7 @@ impl NodeType {
                 true
             }
             (NodeType::Pointer(lhs), NodeType::Pointer(rhs)) => lhs.matches(&rhs),
-            (NodeType::Function(lhs_params, lhs_ret), NodeType::Function(rhs_params, rhs_ret))
+            (NodeType::Function(lhs_params, _, lhs_ret), NodeType::Function(rhs_params, _, rhs_ret))
                 if lhs_params.len() == rhs_params.len() =>
             {
                 if !lhs_ret.matches(&rhs_ret) {
@@ -237,8 +247,16 @@ impl std::fmt::Display for NodeType {
             NodeType::Bool => String::from("bool"),
             NodeType::Byte => String::from("byte"),
             NodeType::Any => String::from("any"),
-            NodeType::Function(params, ret) => {
-                let mut string = String::from("def(");
+            NodeType::Function(params, generics, ret) => {
+                let mut string = String::from("def");
+                if !generics.is_empty() {
+                    let generics: Vec<String> = generics.iter().map(|g| g.id.clone()).collect();
+                    let generics = generics.join(",");
+                    string += "|";
+                    string += &generics;
+                    string += "|";
+                }
+                string += "(";
                 if let Some(first) = params.first() {
                     string += &first.to_string()
                 }
@@ -253,6 +271,7 @@ impl std::fmt::Display for NodeType {
             NodeType::Array(ty, size) => format!("Array<{}, count={}>", ty, size),
             NodeType::Type(ty) => ty.id.clone(),
             NodeType::Metatype(ty) => ty.id.clone() + "_Meta",
+            // NodeType::Generic(symbol, index) => format!("Generic({}, index: {})", symbol, index),
             NodeType::Ambiguous => String::from("<ambiguous>"),
             NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
         };

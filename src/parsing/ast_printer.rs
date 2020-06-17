@@ -105,6 +105,7 @@ impl StmtVisitor for ASTPrinter {
         &mut self,
         _stmt: &Stmt,
         name: &TypedToken,
+        generics: &[TypedToken],
         params: &[Stmt],
         return_type: &Option<Expr>,
         body: &[Stmt],
@@ -118,9 +119,12 @@ impl StmtVisitor for ASTPrinter {
             .get_type()
             .map(|t| t.to_string())
             .unwrap_or(String::from("<none>"));
+        let generics: Vec<_> = generics.iter().map(|g| g.token.lexeme()).collect();
+        let generics = format!("<{}>", generics.join(","));
         self.write_ln(&format!(
-            "FunctionDecl(name: {}, return_type: {}, symbol: {}, resolved_type: {}, meta: {})",
+            "FunctionDecl(name: {}, generics: {}, return_type: {}, symbol: {}, resolved_type: {}, meta: {})",
             name.span().lexeme(),
+            generics,
             return_type.as_ref().map(|r| r.lexeme()).unwrap_or("<void>"),
             symbol,
             resolved_type,
@@ -283,6 +287,7 @@ impl ExprVisitor for ASTPrinter {
         &mut self,
         _expr: &Expr,
         function: &ResolvedToken,
+        generics: &[Expr],
         args: &[Expr],
     ) -> Self::ExprResult {
         let symbol = function
@@ -295,6 +300,12 @@ impl ExprVisitor for ASTPrinter {
             symbol
         ));
         self.indent(|visitor| {
+            if generics.len() > 0 {
+                visitor.write_ln("Specializations");
+                visitor.indent(|visitor| {
+                    generics.iter().for_each(|a| a.accept(visitor));
+                });
+            }
             visitor.write_ln("Arguments");
             visitor.indent(|visitor| {
                 args.iter().for_each(|a| a.accept(visitor));
@@ -307,6 +318,7 @@ impl ExprVisitor for ASTPrinter {
         _expr: &Expr,
         object: &Expr,
         method: &ResolvedToken,
+        generics: &[Expr],
         args: &[Expr],
     ) -> Self::ExprResult {
         let symbol = method
@@ -323,6 +335,12 @@ impl ExprVisitor for ASTPrinter {
             visitor.indent(|visitor| {
                 object.accept(visitor);
             });
+            if generics.len() > 0 {
+                visitor.write_ln("Specializations");
+                visitor.indent(|visitor| {
+                    generics.iter().for_each(|a| a.accept(visitor));
+                });
+            }
             visitor.write_ln("Arguments");
             visitor.indent(|visitor| {
                 args.iter().for_each(|a| a.accept(visitor));

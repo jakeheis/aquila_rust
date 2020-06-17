@@ -230,6 +230,18 @@ impl Parser {
             .consume(TokenKind::Identifier, "Expect function name")?
             .clone();
 
+        let mut generics: Vec<Token> = Vec::new();
+        if self.matches(TokenKind::Bar) {
+            while !self.is_at_end() && self.peek() != TokenKind::Bar {
+                let generic_type = self.consume(TokenKind::Identifier, "Expect generic type identifier")?.clone();
+                generics.push(generic_type);
+                if self.peek() != TokenKind::Bar {
+                    self.consume(TokenKind::Comma, "Expect ',' separating parameters")?;
+                }
+            }
+            self.consume(TokenKind::Bar, "Expect '|' after generic parameters")?;
+        }
+
         let mut params: Vec<Stmt> = Vec::new();
         self.consume(TokenKind::LeftParen, "Expect '(' after function name")?;
         while !self.is_at_end() && self.peek() != TokenKind::RightParen {
@@ -256,6 +268,7 @@ impl Parser {
         Ok(Stmt::function_decl(
             start_span,
             name,
+            generics,
             params,
             return_type,
             body,
@@ -439,6 +452,14 @@ impl Parser {
     }
 
     fn call(&mut self, lhs: Expr, _can_assign: bool) -> Result<Expr> {
+        let specialization = if self.previous().kind == TokenKind::Bar {
+            let result = self.parse_generic_specialization()?;
+            self.consume(TokenKind::LeftParen, "Expect '(' before function arguments")?;
+            result
+        } else {
+            Vec::new()
+        };
+
         let mut args: Vec<Expr> = Vec::new();
         while !self.is_at_end() && self.peek() != TokenKind::RightParen {
             let arg = self.expression()?;
@@ -452,9 +473,9 @@ impl Parser {
 
         match lhs.kind {
             ExprKind::Field(object, field) => {
-                Ok(Expr::method_call(object, field, args, right_paren))
+                Ok(Expr::method_call(object, field, specialization, args, right_paren))
             }
-            ExprKind::Variable(name) => Ok(Expr::function_call(name, args, right_paren)),
+            ExprKind::Variable(name) => Ok(Expr::function_call(name, specialization, args, right_paren)),
             _ => {
                 let span = Span::join(&lhs, right_paren);
                 Err(Diagnostic::error(&span, "Cannot call this"))
@@ -523,15 +544,31 @@ impl Parser {
     fn cast(&mut self, _can_assign: bool) -> Result<Expr> {
         let cast_span = self.previous().span.clone();
 
-        self.consume(TokenKind::Less, "Expect '<' after cast")?;
-        let cast_type = self.parse_explicit_type()?;
-        self.consume(TokenKind::Greater, "Expect '<' after cast type")?;
+        self.consume(TokenKind::Bar, "Expect |cast type|")?;
+        
+        let mut specialization = self.parse_generic_specialization()?;
+        if specialization.len() != 1 {
+            return Err(Diagnostic::error(&cast_span, "Expect single cast type"));
+        }
 
         self.consume(TokenKind::LeftParen, "Expect '(' after cast type")?;
         let value = self.expression()?;
         let right_paren = self.consume(TokenKind::RightParen, "Expect matching ')'")?;
 
-        Ok(Expr::cast(cast_span, cast_type, value, right_paren))
+        Ok(Expr::cast(cast_span, specialization.remove(0), value, right_paren))
+    }
+
+    fn parse_generic_specialization(&mut self) -> Result<Vec<Expr>> {
+        let mut specialized_types = Vec::new();
+        while !self.is_at_end() && self.peek() != TokenKind::Bar {
+            let specialized_type = self.parse_explicit_type()?;
+            specialized_types.push(specialized_type);
+            if self.peek() != TokenKind::Bar {
+                self.consume(TokenKind::Comma, "Expect ',' between generic types")?;
+            }
+        }
+        self.consume(TokenKind::Bar, "Expect '|' after generic specialization")?;
+        Ok(specialized_types)
     }
 
     fn parse_var(&mut self, allow_type: bool, require_type: bool) -> Result<(Token, Option<Expr>)> {
@@ -671,7 +708,7 @@ impl TokenKind {
             | TokenKind::GreaterEqual
             | TokenKind::Less
             | TokenKind::LessEqual => Some((Parser::binary, Precedence::Comparison)),
-            TokenKind::LeftParen => Some((Parser::call, Precedence::Call)),
+            TokenKind::LeftParen | TokenKind::Bar => Some((Parser::call, Precedence::Call)),
             TokenKind::Period => Some((Parser::field, Precedence::Call)),
             TokenKind::LeftBracket => Some((Parser::subscript, Precedence::Call)),
             _ => None,

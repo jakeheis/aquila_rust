@@ -10,6 +10,7 @@ use std::cell::RefCell;
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
+use std::collections::HashMap;
 
 #[derive(PartialEq)]
 enum CodegenStage {
@@ -23,9 +24,11 @@ pub struct Codegen {
     writer: CWriter,
     lib: Rc<Lib>,
     current_type: Option<Symbol>,
+    current_func: Option<Symbol>,
     stage: CodegenStage,
     is_builtin: bool,
     temp_count: u32,
+    specialization_map: HashMap<Symbol, NodeType>,
 }
 
 impl Codegen {
@@ -65,9 +68,11 @@ impl Codegen {
             writer: writer,
             lib: Rc::clone(&lib),
             current_type: None,
+            current_func: None,
             stage: CodegenStage::ForwardStructDecls,
             is_builtin: false,
             temp_count: 0,
+            specialization_map: HashMap::new(),
         };
 
         codegen.stage = CodegenStage::ForwardStructDecls;
@@ -138,6 +143,35 @@ impl Codegen {
         self.writer.writeln("exit(1);");
         self.writer.end_conditional_block();
     }
+
+    fn flatten_generic_opt(&self, function: &Option<Symbol>, node_type: &NodeType) -> NodeType {
+        if let Some(function) = function.as_ref() {
+            self.flatten_generic(function, node_type)
+        } else {
+            node_type.clone()
+        }
+    }
+
+    fn flatten_generic(&self, function: &Symbol, node_type: &NodeType) -> NodeType {
+        match &node_type {
+            NodeType::Type(ty) => {
+                // let meta_symbol = 
+                if function.owns(ty) && self.lib.resolve_symbol(&ty).is_some() {
+                    NodeType::Void
+                }  else {
+                    node_type.clone()
+                }
+            },
+            NodeType::Pointer(to) => {
+                NodeType::pointer_to(self.flatten_generic(function, to))
+            },
+            NodeType::Array(of, size) => {
+                let of = self.flatten_generic(function, of);
+                NodeType::Array(Box::new(of), *size)
+            },
+            _ => node_type.clone(),
+        }
+    }
 }
 
 impl StmtVisitor for Codegen {
@@ -176,7 +210,7 @@ impl StmtVisitor for Codegen {
                 let meta_symbol = Symbol::meta_symbol(Some(&struct_symbol));
                 let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
                 let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
-                guard!(NodeType::Function[field_types, ret_type] = init_type);
+                guard!(NodeType::Function[field_types, specializations, ret_type] = init_type);
 
                 let field_list: Vec<_> = field_types
                     .iter()
@@ -214,6 +248,7 @@ impl StmtVisitor for Codegen {
         &mut self,
         _stmt: &Stmt,
         name: &TypedToken,
+        generics: &[TypedToken],
         params: &[Stmt],
         _return_type: &Option<Expr>,
         body: &[Stmt],
@@ -222,14 +257,26 @@ impl StmtVisitor for Codegen {
         let func_symbol = name.get_symbol().unwrap();
         let func_type = name.get_type().unwrap();
 
-        guard!(NodeType::Function[param_types, ret_type] = func_type);
+        self.current_func = Some(func_symbol.clone());
+
+        guard!(NodeType::Function[param_types, generics, ret_type] = func_type);
         let ret_type: &NodeType = &ret_type;
+        let ret_type = self.flatten_generic(&func_symbol, ret_type);
 
         let mut params: Vec<(NodeType, String)> = param_types
             .iter()
             .zip(params)
             .map(|(param_type, param_stmt)| {
-                (param_type.clone(), self.decl_symbol(param_stmt).mangled())
+                let param_symbol = self.decl_symbol(param_stmt);
+
+                let param_type = self.flatten_generic(&func_symbol, param_type);
+                // if self.lib.resolve_symbol(&param_symbol)
+                println!("param {} is typed {}", param_symbol, param_type);
+                // if param_symbol.is_generic() {
+                //     (NodeType::pointer_to(NodeType::Void), param_symbol.mangled())
+                // } else {
+                    (param_type.clone(), param_symbol.mangled())
+                // }
             })
             .collect();
 
@@ -244,30 +291,35 @@ impl StmtVisitor for Codegen {
         }
 
         if self.stage == CodegenStage::FuncPrototypes {
+            println!("Writing prototypes for {}", func_symbol);
+
             if self.is_builtin {
                 if core::should_write_builtin(&func_symbol) {
+                    println!("trying to actually write builtin {}", func_symbol);
                     self.writer
-                        .write_function_prototype(ret_type, &func_symbol.mangled(), &params);
+                        .write_function_prototype(&ret_type, &func_symbol.mangled(), &params);
                 }
             } else {
                 self.writer
-                    .write_function_prototype(ret_type, &func_symbol.mangled(), &params);
+                    .write_function_prototype(&ret_type, &func_symbol.mangled(), &params);
             }
         } else {
             if self.is_builtin {
                 if core::should_write_builtin(&func_symbol) {
                     self.writer
-                        .start_decl_func(ret_type, &func_symbol.mangled(), &params);
+                        .start_decl_func(&ret_type, &func_symbol.mangled(), &params);
                     core::write(&func_symbol, &mut self.writer);
                     self.writer.end_decl_func();
                 }
             } else {
                 self.writer
-                    .start_decl_func(ret_type, &func_symbol.mangled(), &params);
+                    .start_decl_func(&ret_type, &func_symbol.mangled(), &params);
                 self.gen_stmts(body);
                 self.writer.end_decl_func();
             }
         }
+
+        self.current_func = None;
     }
 
     fn visit_variable_decl(
@@ -283,6 +335,10 @@ impl StmtVisitor for Codegen {
         if let NodeType::Array(of, _) = var_type {
             var_type = NodeType::Pointer(of.clone());
         }
+
+        println!("writing {} as kind {} in {:?}", var_symbol, var_type, self.current_func);
+
+        let var_type = self.flatten_generic_opt(&self.current_func, &var_type);
 
         let value = value.as_ref().map(|v| v.accept(self));
         self.writer
@@ -414,18 +470,34 @@ impl ExprVisitor for Codegen {
 
     fn visit_function_call_expr(
         &mut self,
-        _expr: &Expr,
+        expr: &Expr,
         function: &ResolvedToken,
+        specializations: &[Expr],
         args: &[Expr],
     ) -> Self::ExprResult {
-        let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
+        println!("Making args for {}", function.token.lexeme());
+
+        // self.specialization_map.insert(k: K, v: V)
 
         let function_symbol = function.get_symbol().unwrap();
+        let resolved = self.lib.resolve_symbol(&function_symbol).unwrap();
+        guard!(NodeType::Function[_one, generics, _two] = resolved);
+
+        for (specialization, generic) in specializations.iter().zip(generics) {
+            let gen_type = specialization.get_type().unwrap();
+            println!("inserting toija {} -> {}", generic, gen_type);
+            self.specialization_map.insert(generic, gen_type);
+        }
+
+        let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
+
         if let Some(parent_symbol) = function_symbol.parent() {
             if let Some(NodeType::Metatype(_)) = self.lib.resolve_symbol(&parent_symbol) {
                 args.insert(0, String::from("self"));
             }
         }
+
+        self.specialization_map.clear();
 
         format!(
             "{}({})",
@@ -439,6 +511,7 @@ impl ExprVisitor for Codegen {
         _expr: &Expr,
         object: &Expr,
         method: &ResolvedToken,
+        generics: &[Expr],
         args: &[Expr],
     ) -> Self::ExprResult {
         let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
@@ -448,10 +521,10 @@ impl ExprVisitor for Codegen {
         let object_str = object.accept(self);
 
         let object_str = match &object.kind {
-            ExprKind::FunctionCall(first_called, _) | ExprKind::MethodCall(_, first_called, _) => {
+            ExprKind::FunctionCall(first_called, generics, _) | ExprKind::MethodCall(_, first_called, generics, _) => {
                 let first_called_symbol = first_called.get_symbol().unwrap();
                 let first_called_type = self.lib.resolve_symbol(&first_called_symbol).unwrap();
-                guard!(NodeType::Function[_params, first_called_ret_type] = first_called_type);
+                guard!(NodeType::Function[_params, specializations, first_called_ret_type] = first_called_type);
 
                 self.write_temp(&first_called_ret_type, object_str)
             }
@@ -477,10 +550,10 @@ impl ExprVisitor for Codegen {
         let field_symbol = field.get_symbol().unwrap();
 
         match &target.kind {
-            ExprKind::FunctionCall(function, _) | ExprKind::MethodCall(_, function, _) => {
+            ExprKind::FunctionCall(function, generics, _) | ExprKind::MethodCall(_, function, generics, _) => {
                 let target_symbol = function.get_symbol().unwrap();
                 let target_type = self.lib.resolve_symbol(&target_symbol).unwrap();
-                guard!(NodeType::Function[_params, ret_type] = target_type);
+                guard!(NodeType::Function[_params, specializations, ret_type] = target_type);
 
                 let temp_name = self.write_temp(&ret_type, target_str);
 
@@ -494,8 +567,16 @@ impl ExprVisitor for Codegen {
         String::from(token.lexeme())
     }
 
-    fn visit_variable_expr(&mut self, _expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
+    fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
         let symbol = name.get_symbol().unwrap();
+        let expr_type = expr.get_type().unwrap();
+
+        if let Some(mapped) = self.specialization_map.get(&symbol) {
+            println!("FOUND MAPPED {}", mapped);
+            return mapped.to_string();
+        }
+
+        println!("Expr {} type {} map {}", symbol, expr_type, self.specialization_map.len());
         if self
             .current_type
             .as_ref()
@@ -538,6 +619,7 @@ impl ExprVisitor for Codegen {
 
     fn visit_cast_expr(&mut self, _expr: &Expr, explicit_type: &Expr, value: &Expr) -> Self::ExprResult {
         let cast_type = explicit_type.get_type().unwrap();
+        let cast_type = self.flatten_generic_opt(&self.current_func, &cast_type);
         let (cast_type, _) = self.writer.convert_type(&cast_type, String::new());
         let value = value.accept(self);
         

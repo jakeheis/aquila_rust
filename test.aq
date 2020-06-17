@@ -48,12 +48,13 @@ type Adder {
   }
 }
 
-let vec = Vec.new(sizeof(Adder));
-vec.insert(&Adder(10, 2));
-vec.insert(&Adder(3, 4));
+let vec = Vec.new|Adder|();
 
-let first_adder = cast<ptr Adder>(vec.get(0));
-let second_adder = cast<ptr Adder>(vec.get(1));
+vec.insert|Adder|(&Adder(10, 2));
+vec.insert|Adder|(&Adder(3, 4));
+/*
+let first_adder = vec.get|Adder|(0);
+let second_adder = vec.get|Adder|(1);
 
 print (*first_adder).add(4);
 print (*second_adder).add(4);
@@ -80,7 +81,7 @@ let count = 0;
 while count < 3 {
   print adders[count].add(3);
   count = count + 1;
-}
+}*/
 
 /*
 enum Hello {
@@ -91,7 +92,7 @@ enum Hello {
 
 // let input = read_line();
 // String.from("Got: ").append(input).print_str();
-
+/*
 let dyn = String.from("hello");
 
 let combo1 = dyn.append_literal(" world");
@@ -105,7 +106,7 @@ dyn.append_literal(" world").append_literal(" again").print_str();
 print dyn.append_literal(" world").append_literal(" again 2").storage;
 
 let here = dyn.append_literal(" world").append_literal(" again 3");
-print here.storage;
+print here.storage;*/
 
 /*let sum = Adder(4, 5);
 print sum.add(6);

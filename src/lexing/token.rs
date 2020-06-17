@@ -32,6 +32,8 @@ pub enum TokenKind {
     RightParen,
     LeftBracket,
     RightBracket,
+    GenericOpen,
+    GenericClose,
 
     // Keywords
     True,

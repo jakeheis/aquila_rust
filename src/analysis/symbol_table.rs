@@ -29,6 +29,23 @@ impl Symbol {
         Symbol::new_str(parent, "init")
     }
 
+    // pub fn generic_symbol(parent: Option<&Symbol>, index: usize) -> Self {
+        // Symbol::new_str(parent, &format!("{}__Specialization", name.lexeme()))
+        // Symbol::new_str(parent, &format!("{}", index))
+    // }
+
+    // pub fn
+
+    // pub fn is_generic(&self) -> bool {
+    //     let last = self.last_component();
+    //     let first_char: char = last.as_bytes()[0] as char;
+    //     if let '0'..='9' = first_char {
+    //         true
+    //     } else {
+    //         false
+    //     }
+    // }
+
     pub fn mangled(&self) -> String {
         self.id.replace("$", "__")
     }
@@ -177,7 +194,7 @@ impl SymbolTableBuilder {
         let init_symbol = Symbol::init_symbol(self.context.last());
         if !self.contains_symbol(&init_symbol) {
             let instance_type = NodeType::Type(name.get_symbol().unwrap().clone());
-            let init_type = NodeType::Function(field_types, Box::new(instance_type));
+            let init_type = NodeType::Function(field_types, Vec::new(), Box::new(instance_type));
             self.insert(init_symbol, init_type.clone());
         }
 
@@ -193,16 +210,25 @@ impl SymbolTableBuilder {
     }
 
     fn build_function(&mut self, stmt: &Stmt) {
-        let (name, params, return_type) = match &stmt.kind {
-            StmtKind::FunctionDecl(name, params, return_type, ..) => (name, params, return_type),
+        let (name, generics, params, return_type) = match &stmt.kind {
+            StmtKind::FunctionDecl(name, generics, params, return_type, ..) => (name, generics, params, return_type),
             StmtKind::Builtin(internal) => {
-                guard!(StmtKind::FunctionDecl[name, params, return_type, _body, _meta] = &internal.kind);
-                (name, params, return_type)
+                guard!(StmtKind::FunctionDecl[name, generics, params, return_type, _body, _meta] = &internal.kind);
+                (name, generics, params, return_type)
             }
             _ => unreachable!(),
         };
 
         let new_symbol = Symbol::new(self.context.last(), &name.token);
+
+        self.context.push(new_symbol.clone());
+
+        let mut generic_symbols = Vec::new();
+        for (index, generic) in generics.iter().enumerate() {
+            let generic_symbol = Symbol::new(self.context.last(), &generic.token);
+            self.insert(generic_symbol.clone(), NodeType::Metatype(generic_symbol.clone()));
+            generic_symbols.push(generic_symbol);
+        }
 
         let param_types: Vec<_> = params.iter().map(|p| self.var_decl_type(p).1).collect();
 
@@ -210,7 +236,10 @@ impl SymbolTableBuilder {
             .as_ref()
             .map(|r| self.resolve_explicit_type_expr(r))
             .unwrap_or(NodeType::Void);
-        let new_type = NodeType::Function(param_types, Box::new(return_type));
+
+        self.context.pop();
+
+        let new_type = NodeType::Function(param_types, generic_symbols, Box::new(return_type));
 
         self.insert(new_symbol, new_type.clone());
         name.set_type(new_type.clone());

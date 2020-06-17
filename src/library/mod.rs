@@ -19,8 +19,8 @@ pub struct Lib {
 const LOG_LEXER: bool = false;
 const LOG_PARSER: bool = false;
 const LOG_SYMBOL_MAKER: bool = true;
-const LOG_TYPE_CHECKER: bool = false;
-const LOG_STDLIB: bool = false;
+const LOG_TYPE_CHECKER: bool = true;
+const LOG_STDLIB: bool = true;
 
 impl Lib {
     pub fn from_source(source: Source) -> Result<Lib, &'static str> {
