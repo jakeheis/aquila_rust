@@ -5,6 +5,7 @@ use crate::guard;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
+use crate::source::*;
 use std::cell::RefCell;
 use std::fs::{self, File};
 use std::process::Command;
@@ -124,8 +125,15 @@ impl Codegen {
         temp_name
     }
 
-    fn write_guard(&mut self, guard: String, message: &str) {
+    fn write_guard<T: ContainsSpan>(&mut self, guard: String, message: &str, span: &T) {
         self.writer.start_condition_block("if", guard);
+
+        let message = format!(
+            "\\nFatal error: {}\\n\\n{}\\n",
+            message,
+            span.span().location(),
+        );
+
         self.writer.writeln(&format!("printf(\"{}\\n\");", message));
         self.writer.writeln("exit(1);");
         self.writer.end_conditional_block();
@@ -277,7 +285,8 @@ impl StmtVisitor for Codegen {
         }
 
         let value = value.as_ref().map(|v| v.accept(self));
-        self.writer.decl_var(&var_type, &var_symbol.mangled(), value);
+        self.writer
+            .decl_var(&var_type, &var_symbol.mangled(), value);
     }
 
     fn visit_if_stmt(
@@ -297,12 +306,7 @@ impl StmtVisitor for Codegen {
         self.writer.end_conditional_block();
     }
 
-    fn visit_while_stmt(
-        &mut self,
-        _stmt: &Stmt,
-        condition: &Expr,
-        body: &[Stmt],
-    ) {
+    fn visit_while_stmt(&mut self, _stmt: &Stmt, condition: &Expr, body: &[Stmt]) {
         let condition = condition.accept(self);
         self.writer.start_condition_block("while", condition);
         self.gen_stmts(body);
@@ -326,7 +330,11 @@ impl StmtVisitor for Codegen {
         self.writer.start_condition_block("for", condition);
 
         let subscript = format!("&{}[i]", array);
-        self.writer.decl_var(&NodeType::pointer_to(of.clone()), &variable.get_symbol().unwrap().mangled(), Some(subscript));
+        self.writer.decl_var(
+            &NodeType::pointer_to(of.clone()),
+            &variable.get_symbol().unwrap().mangled(),
+            Some(subscript),
+        );
         self.gen_stmts(body);
         self.writer.end_conditional_block();
     }
@@ -495,26 +503,29 @@ impl ExprVisitor for Codegen {
 
     fn visit_array_expr(&mut self, expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
         let elements: Vec<String> = elements.iter().map(|e| e.accept(self)).collect();
-        self.write_temp(expr.get_type().as_ref().unwrap(), format!("{{ {} }}", elements.join(",")))
+        self.write_temp(
+            expr.get_type().as_ref().unwrap(),
+            format!("{{ {} }}", elements.join(",")),
+        )
     }
 
     fn visit_subscript_expr(
         &mut self,
-        expr: &Expr,
+        _expr: &Expr,
         target_expr: &Expr,
-        arg: &Expr,
+        index_expr: &Expr,
     ) -> Self::ExprResult {
         let target = target_expr.accept(self);
-        let arg = arg.accept(self);
+        let arg = index_expr.accept(self);
         let index = self.write_temp(&NodeType::Int, arg);
 
         guard!(NodeType::Array[_inside, count] = target_expr.get_type().unwrap());
         guard!(ArraySize::Known[count] = count);
-        let message = format!(
-            "Fatal error: index out of bounds -- line {}",
-            expr.span.line
+        self.write_guard(
+            format!("{} >= {}", index, count),
+            "index out of bounds",
+            index_expr,
         );
-        self.write_guard(format!("{} >= {}", index, count), &message);
 
         format!("{}[{}]", target, index)
     }

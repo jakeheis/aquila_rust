@@ -1,11 +1,11 @@
 use crate::analysis::*;
+use crate::codegen::core;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::parsing::*;
 use crate::source::{self, Source};
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::codegen::core;
 
 pub struct Lib {
     pub name: String,

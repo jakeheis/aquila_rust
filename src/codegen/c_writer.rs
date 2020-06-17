@@ -1,4 +1,4 @@
-pub use crate::analysis::{NodeType, ArraySize};
+pub use crate::analysis::{ArraySize, NodeType};
 use std::fs::File;
 use std::io::Write;
 
@@ -75,7 +75,12 @@ impl CWriter {
         self.writeln(&(whole + ";"));
     }
 
-    pub fn type_and_name(&self, var_type: &NodeType, name: &str, convert_array_to_ptr: bool) -> String {
+    pub fn type_and_name(
+        &self,
+        var_type: &NodeType,
+        name: &str,
+        convert_array_to_ptr: bool,
+    ) -> String {
         let (t, n) = self.convert_type(var_type, String::from(name), convert_array_to_ptr);
         format!("{} {}", t, n)
     }
@@ -142,7 +147,12 @@ impl CWriter {
         self.writeln(&line);
     }
 
-    pub fn convert_type(&self, node_type: &NodeType, name: String, convert_array_to_ptr: bool) -> (String, String) {
+    pub fn convert_type(
+        &self,
+        node_type: &NodeType,
+        name: String,
+        convert_array_to_ptr: bool,
+    ) -> (String, String) {
         let simple = match node_type {
             NodeType::Void => Some("void"),
             NodeType::Int => Some("int"),
@@ -159,9 +169,10 @@ impl CWriter {
             NodeType::Pointer(ty) => {
                 let (type_portion, name_portion) = self.convert_type(ty, name, true);
                 (format!("{}*", type_portion), name_portion)
-            },
+            }
             NodeType::Array(ty, count) => {
-                let (type_portion, name_portion) = self.convert_type(ty, name, convert_array_to_ptr);
+                let (type_portion, name_portion) =
+                    self.convert_type(ty, name, convert_array_to_ptr);
                 if convert_array_to_ptr {
                     (format!("{}*", type_portion), name_portion)
                 } else {
@@ -172,7 +183,7 @@ impl CWriter {
                     };
                     (type_portion, format!("{}{}", name_portion, array_portion))
                 }
-            },
+            }
             other_type => panic!("Can't convert type {}", other_type),
         }
     }

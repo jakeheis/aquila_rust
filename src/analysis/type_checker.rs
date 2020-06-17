@@ -265,7 +265,10 @@ impl StmtVisitor for TypeChecker {
             .unwrap_or(NodeType::Void);
 
         if let NodeType::Array(..) = return_type {
-            self.report_error(Diagnostic::error(return_type_expr.as_ref().unwrap(), "Cannot return an array"));
+            self.report_error(Diagnostic::error(
+                return_type_expr.as_ref().unwrap(),
+                "Cannot return an array",
+            ));
         }
 
         let symbol = self.push_function_scope(name, return_type.clone());
@@ -361,12 +364,7 @@ impl StmtVisitor for TypeChecker {
         Analysis { guarantees_return }
     }
 
-    fn visit_while_stmt(
-        &mut self,
-        _stmt: &Stmt,
-        condition: &Expr,
-        body: &[Stmt],
-    ) -> Analysis {
+    fn visit_while_stmt(&mut self, _stmt: &Stmt, condition: &Expr, body: &[Stmt]) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
             if let Err(diag) = self.check_type_match(condition, &cond_type, &NodeType::Bool) {
                 self.report_error(diag);
@@ -376,7 +374,7 @@ impl StmtVisitor for TypeChecker {
         self.push_scope_named("while");
         let body_analysis = self.check_list(body);
         self.pop_scope();
-        
+
         body_analysis
     }
 
@@ -396,14 +394,17 @@ impl StmtVisitor for TypeChecker {
             }
         };
         if array_type.is_none() {
-            return Analysis { guarantees_return: false }
+            return Analysis {
+                guarantees_return: false,
+            };
         }
         let array_type = array_type.unwrap();
         guard!(NodeType::Array[of, _size] = &array_type);
 
         self.push_scope_named("for");
         let of: &NodeType = &of;
-        self.current_scope().define_var(variable, &NodeType::pointer_to(of.clone()));
+        self.current_scope()
+            .define_var(variable, &NodeType::pointer_to(of.clone()));
         let body_analysis = self.check_list(body);
         self.pop_scope();
 

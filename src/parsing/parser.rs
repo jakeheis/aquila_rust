@@ -329,13 +329,20 @@ impl Parser {
             .consume(TokenKind::RightBrace, "Expect '}' after while body")?
             .span;
 
-        Ok(Stmt::while_stmt(while_span, condition, body, end_brace_span))
+        Ok(Stmt::while_stmt(
+            while_span,
+            condition,
+            body,
+            end_brace_span,
+        ))
     }
 
     fn for_stmt(&mut self) -> Result<Stmt> {
         let for_span = self.previous().span.clone();
 
-        let var_name = self.consume(TokenKind::Identifier, "Expect variable name after for")?.clone();
+        let var_name = self
+            .consume(TokenKind::Identifier, "Expect variable name after for")?
+            .clone();
         self.consume(TokenKind::In, "Expect 'in' after variable name")?;
         let array = self.expression()?;
 
@@ -346,7 +353,13 @@ impl Parser {
             .consume(TokenKind::RightBrace, "Expect '}' after for body")?
             .span;
 
-        Ok(Stmt::for_stmt(for_span, var_name, array, body, end_brace_span))
+        Ok(Stmt::for_stmt(
+            for_span,
+            var_name,
+            array,
+            body,
+            end_brace_span,
+        ))
     }
 
     fn return_stmt(&mut self) -> Result<Stmt> {

@@ -43,7 +43,7 @@ impl Stmt {
             }
             StmtKind::WhileStmt(condition, body) => {
                 visitor.visit_while_stmt(&self, condition, &body)
-            },
+            }
             StmtKind::ForStmt(variable, array, body) => {
                 visitor.visit_for_stmt(&self, variable, array, &body)
             }
@@ -131,7 +131,10 @@ impl Stmt {
         end_brace_span: &Span,
     ) -> Self {
         let span = Span::join(&for_span, end_brace_span);
-        Stmt::new(StmtKind::ForStmt(TypedToken::new(new_var), array, body), span)
+        Stmt::new(
+            StmtKind::ForStmt(TypedToken::new(new_var), array, body),
+            span,
+        )
     }
 
     pub fn return_stmt(return_keyword: Span, expr: Option<Expr>) -> Self {
@@ -662,12 +665,7 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
-    fn visit_while_stmt(
-        &mut self,
-        _stmt: &Stmt,
-        condition: &Expr,
-        body: &[Stmt],
-    ) {
+    fn visit_while_stmt(&mut self, _stmt: &Stmt, condition: &Expr, body: &[Stmt]) {
         self.write_ln("While");
         self.indent(|visitor| {
             visitor.write_ln("Condition");
@@ -681,13 +679,7 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
-    fn visit_for_stmt(
-        &mut self,
-        _stmt: &Stmt,
-        variable: &TypedToken,
-        array: &Expr,
-        body: &[Stmt],
-    ) {
+    fn visit_for_stmt(&mut self, _stmt: &Stmt, variable: &TypedToken, array: &Expr, body: &[Stmt]) {
         self.write_ln(&format!("For({})", variable.token.lexeme()));
         self.indent(|visitor| {
             visitor.write_ln("Array");
