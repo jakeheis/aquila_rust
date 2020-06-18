@@ -9,6 +9,7 @@ use crate::source::*;
 use log::trace;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::collections::HashMap;
 
 type Result = DiagnosticResult<NodeType>;
 
@@ -52,6 +53,7 @@ impl Scope {
 pub struct TypeChecker {
     reporter: Rc<dyn Reporter>,
     lib: Rc<Lib>,
+    specialization_map: HashMap<Symbol, Vec<GenericSpecialization>>,
     scopes: Vec<Scope>,
     is_builtin: bool,
 }
@@ -63,12 +65,11 @@ pub struct Analysis {
 impl TypeChecker {
     pub fn check(lib: Lib, reporter: Rc<dyn Reporter>) -> Lib {
         let top_level = Scope::new(None, None);
-
         let lib = Rc::new(lib);
-
         let mut checker = TypeChecker {
             reporter,
             lib: Rc::clone(&lib),
+            specialization_map: HashMap::new(), 
             scopes: vec![top_level],
             is_builtin: false,
         };
@@ -80,9 +81,16 @@ impl TypeChecker {
         checker.check_list(&lib.other);
         checker.pop_scope();
 
+        let spec_map = std::mem::replace(&mut checker.specialization_map, HashMap::new());
+
         std::mem::drop(checker);
 
-        Rc::try_unwrap(lib).ok().unwrap()
+        let mut lib = Rc::try_unwrap(lib).ok().unwrap();
+        for (symbol, specs) in spec_map {
+            let metadata = lib.function_metadata_mut(&symbol).unwrap();
+            metadata.specializations = specs;
+        }
+        lib
     }
 
     fn check_list(&mut self, stmt_list: &[Stmt]) -> Analysis {
@@ -207,7 +215,7 @@ impl TypeChecker {
         &mut self,
         expr: &Expr,
         _function_symbol: &Symbol,
-        specializations: &[NodeType],
+        specialization: &Option<GenericSpecialization>,
         param_types: &[NodeType],
         args: &[Expr],
     ) -> DiagnosticResult<()> {
@@ -227,7 +235,7 @@ impl TypeChecker {
         }
 
         for ((index, param), arg) in param_types.iter().enumerate().zip(arg_types) {
-            let param_spec = param.specialize(&specializations);
+            let param_spec = param.specialize(specialization.as_ref());
             // TODO: this won't work when passing zero length arrays as arguments probably
             self.check_type_match(&args[index], &arg, &param_spec)?;
         }
@@ -713,11 +721,16 @@ impl ExprVisitor for TypeChecker {
 
         let metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
-        let specializations: std::result::Result<Vec<NodeType>, _> = specializations
+        let specialization: std::result::Result<Vec<NodeType>, _> = specializations
             .iter()
             .map(|s| self.resolve_explicit_type(s))
             .collect();
-        let specializations = specializations?;
+        let specialization = specialization?;
+        let specialization = if specialization.is_empty() {
+            None
+        } else {
+            Some(GenericSpecialization::new(&func_symbol, specialization))
+        };
 
         if specializations.len() != metadata.generics.len() {
             let message = format!(
@@ -728,17 +741,22 @@ impl ExprVisitor for TypeChecker {
             return Err(Diagnostic::error(function, &message));
         }
 
-        let return_type = metadata.return_type.specialize(&specializations);
+        let return_type = metadata.return_type.specialize(specialization.as_ref());
 
         self.check_function_arguments(
             expr,
             &function.get_symbol().unwrap(),
-            &specializations,
+            &specialization,
             &metadata.parameters,
             args,
         )?;
 
-        self.lib.add_specialization(&func_symbol, specializations);
+        if let Some(specialization) = specialization {
+            let vector = self.specialization_map.entry(func_symbol).or_insert(Vec::new());
+            if vector.iter().position(|s| s.id == specialization.id).is_none() {
+                vector.push(specialization);
+            }
+        }
 
         expr.set_type(return_type)
     }

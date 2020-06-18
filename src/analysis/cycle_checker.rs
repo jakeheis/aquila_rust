@@ -15,7 +15,7 @@ impl CycleChecker {
     pub fn check(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Lib {
         let mut field_map: HashMap<Symbol, HashSet<Symbol>> = HashMap::new();
 
-        for (type_symbol, type_info) in &lib.symbols.borrow().type_metadata {
+        for (type_symbol, type_info) in &lib.symbols.type_metadata {
             let mut field_set: HashSet<Symbol> = HashSet::new();
             for field in &type_info.fields {
                 if let Some(NodeType::Type(field_type)) = lib.resolve_symbol(field) {

@@ -37,9 +37,17 @@ impl NodeType {
         NodeType::Pointer(Box::new(pointee))
     }
 
-    pub fn deduce_from(
+    pub fn deduce_from_lib(
         explicit_type: &ExplicitType,
         lib: &Lib,
+        context: &[Symbol]) -> Option<Self> {
+            NodeType::deduce_from(explicit_type, &lib.symbols, &lib.dependencies, context)
+    }
+
+    pub fn deduce_from(
+        explicit_type: &ExplicitType,
+        table: &SymbolTable,
+        deps: &[Lib],
         context: &[Symbol],
     ) -> Option<Self> {
         let node_type = match &explicit_type.kind {
@@ -47,17 +55,17 @@ impl NodeType {
                 if let Some(primitive) = NodeType::primitive(&token.token) {
                     primitive
                 } else {
-                    NodeType::symbol_for_type_token(&token.token, lib, context)?
+                    NodeType::symbol_for_type_token(&token.token, table, deps, context)?
                 }
             }
             ExplicitTypeKind::Pointer(to) => {
                 let to: &ExplicitType = &to;
-                let inner = NodeType::deduce_from(to, lib, context)?;
+                let inner = NodeType::deduce_from(to, table, deps, context)?;
                 NodeType::Pointer(Box::new(inner))
             }
             ExplicitTypeKind::Array(of, count_token) => {
                 let of: &ExplicitType = &of;
-                let inner = NodeType::deduce_from(of, lib, context)?;
+                let inner = NodeType::deduce_from(of, table, deps, context)?;
                 let count = count_token.lexeme().parse::<usize>().ok().unwrap();
                 NodeType::Array(Box::new(inner), count)
             }
@@ -66,33 +74,41 @@ impl NodeType {
         Some(node_type)
     }
 
-    fn symbol_for_type_token(token: &Token, lib: &Lib, context: &[Symbol]) -> Option<NodeType> {
+    fn symbol_for_type_token(token: &Token, table: &SymbolTable, deps: &[Lib], context: &[Symbol]) -> Option<NodeType> {
         trace!(target: "symbol_table", "Trying to find symbol for {} -- ({})", token.lexeme(), token.span.entire_line().0);
 
         for parent in context.iter().rev() {
             let non_top_level_symbol = Symbol::new(Some(parent), token);
-            let resolved = lib.resolve_symbol(&non_top_level_symbol);
+            let resolved = table.get_type(&non_top_level_symbol);
             match resolved {
                 Some(NodeType::Metatype(metatype)) => {
-                    let instance_type = NodeType::Type(metatype);
+                    let instance_type = NodeType::Type(metatype.clone());
                     trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), instance_type);
                     return Some(instance_type);
                 }
                 Some(NodeType::Generic(..)) => {
                     let instance_type = resolved.unwrap();
                     trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), instance_type);
-                    return Some(instance_type);
+                    return Some(instance_type.clone());
                 }
                 _ => (),
             }
         }
 
         let top_level_symbol = Symbol::new(None, token);
-        if let Some(NodeType::Metatype(metatype)) = lib.resolve_symbol(&top_level_symbol) {
-            let instance_type = NodeType::Type(metatype);
-            trace!(target: "symbol_table", "Resolving {} as Typ({}", token.lexeme(), instance_type);
+        
+        if let Some(NodeType::Metatype(metatype)) = table.get_type(&top_level_symbol) {
+            let instance_type = NodeType::Type(metatype.clone());
+            trace!(target: "symbol_table", "Resolving {} as Type({})", token.lexeme(), instance_type);
             Some(instance_type)
         } else {
+            for dep in deps {
+                if let Some(NodeType::Metatype(metatype)) = dep.resolve_symbol(&top_level_symbol) {
+                    let instance_type = NodeType::Type(metatype.clone());
+                    trace!(target: "symbol_table", "Resolving {} as other lib Type({})", token.lexeme(), instance_type);
+                    return Some(instance_type);
+                }
+            }
             None
         }
     }
@@ -195,14 +211,17 @@ impl NodeType {
         }
     }
 
-    pub fn specialize(&self, specializations: &[NodeType]) -> NodeType {
+    pub fn specialize(&self, specialization: Option<&GenericSpecialization>) -> NodeType {
+        if specialization.is_none() {
+            return self.clone();
+        }
         match self {
-            NodeType::Generic(_, index) => specializations[*index].clone(),
+            NodeType::Generic(_, index) => specialization.unwrap().node_types[*index].clone(),
             NodeType::Pointer(to) => {
-                NodeType::pointer_to(to.specialize(specializations))
+                NodeType::pointer_to(to.specialize(specialization))
             }
             NodeType::Array(of, size) => {
-                let specialized = of.specialize(specializations);
+                let specialized = of.specialize(specialization);
                 return NodeType::Array(Box::new(specialized), *size);
             }
             _ => self.clone(),
@@ -290,16 +309,5 @@ impl std::fmt::Display for NodeType {
             NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
         };
         write!(f, "{}", kind)
-    }
-}
-
-pub trait NodeTypeString {
-    fn node_string(&self) -> String;
-}
-
-impl NodeTypeString for Vec<NodeType> {
-    fn node_string(&self) -> String {
-        let descrs = self.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(",");
-        format!("Vec({})", descrs)
     }
 }

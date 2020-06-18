@@ -5,8 +5,6 @@ use crate::lexing::*;
 use crate::parsing::*;
 use crate::source::*;
 use crate::source::{self, Source};
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 pub struct Lib {
@@ -14,9 +12,8 @@ pub struct Lib {
     pub function_decls: Vec<Stmt>,
     pub type_decls: Vec<Stmt>,
     pub other: Vec<Stmt>,
-    pub symbols: RefCell<SymbolTable>,
-    pub dependencies: Vec<Rc<Lib>>,
-    pub required_specializations: RefCell<HashMap<Symbol, Vec<Vec<NodeType>>>>,
+    pub symbols: SymbolTable,
+    pub dependencies: Vec<Lib>,
 }
 
 const LOG_LEXER: bool = false;
@@ -37,7 +34,7 @@ impl Lib {
         let lib = Lib::build_lib(src, "stdlib", false).unwrap();
         core::add_builtin_symbols(&lib);
         if LOG_STDLIB {
-            println!("std {}", lib.symbols.borrow());
+            println!("std {}", lib.symbols);
         }
         lib
     }
@@ -68,22 +65,23 @@ impl Lib {
         let (type_decls, function_decls, other) = Lib::organize_stms(stmts);
 
         let dependencies = if link_stdlib {
-            vec![Rc::new(Lib::stdlib())]
+            vec![Lib::stdlib()]
         } else {
             vec![]
         };
-        let lib = IncompleteLib {
+        let mut lib = Lib {
             name: String::from(name),
             type_decls,
             function_decls,
+            symbols: SymbolTable::new(),
             other,
             dependencies,
         };
 
-        let lib = SymbolTableBuilder::build_symbols(lib);
+        lib.symbols = SymbolTableBuilder::build_symbols(&lib.type_decls, &lib.function_decls, &lib.dependencies);
 
         if LOG_SYMBOL_MAKER {
-            println!("{}", lib.symbols.borrow());
+            println!("{}", lib.symbols);
         }
 
         let lib = TypeChecker::check(lib, Rc::clone(&reporter));
@@ -109,7 +107,7 @@ impl Lib {
     }
 
     pub fn resolve_symbol(&self, symbol: &Symbol) -> Option<NodeType> {
-        if let Some(found) = self.symbols.borrow().get_type(symbol) {
+        if let Some(found) = self.symbols.get_type(symbol) {
             Some(found.clone())
         } else {
             for dep in &self.dependencies {
@@ -122,7 +120,7 @@ impl Lib {
     }
 
     pub fn type_metadata(&self, symbol: &Symbol) -> Option<TypeMetadata> {
-        if let Some(found) = self.symbols.borrow().get_type_metadata(symbol) {
+        if let Some(found) = self.symbols.get_type_metadata(symbol) {
             Some(found.clone())
         } else {
             for dep in &self.dependencies {
@@ -135,7 +133,7 @@ impl Lib {
     }
 
     pub fn function_metadata(&self, symbol: &Symbol) -> Option<FunctionMetadata> {
-        if let Some(found) = self.symbols.borrow().get_func_metadata(symbol) {
+        if let Some(found) = self.symbols.get_func_metadata(symbol) {
             Some(found.clone())
         } else {
             for dep in &self.dependencies {
@@ -147,8 +145,21 @@ impl Lib {
         }
     }
 
+    pub fn function_metadata_mut(&mut self, symbol: &Symbol) -> Option<&mut FunctionMetadata> {
+        if let Some(found) = self.symbols.get_func_metadata_mut(symbol) {
+            Some(found)
+        } else {
+            for dep in &mut self.dependencies {
+                if let Some(found) = dep.function_metadata_mut(symbol) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+    }
+
     pub fn symbol_span(&self, symbol: &Symbol) -> Option<Span> {
-        if let Some(found) = self.symbols.borrow().span_map.get(symbol) {
+        if let Some(found) = self.symbols.span_map.get(symbol) {
             Some(found.clone())
         } else {
             for dep in &self.dependencies {
@@ -157,59 +168,6 @@ impl Lib {
                 }
             }
             None
-        }
-    }
-
-    pub fn specializations_for(&self, symbol: &Symbol) -> Option<Vec<Vec<NodeType>>> {
-        if let Some(found) = self.required_specializations.borrow().get(symbol) {
-            Some(found.clone())
-        } else {
-            for dep in &self.dependencies {
-                if let Some(found) = dep.specializations_for(symbol) {
-                    return Some(found);
-                }
-            }
-            None
-        }
-    }
-
-    pub fn add_specialization(&self, function: &Symbol, specialization: Vec<NodeType>) -> bool {
-        if self.symbols.borrow().get_type(function).is_some() {
-            let mut borrowed = self.required_specializations.borrow_mut();
-            let specs = borrowed
-                .entry(function.clone())
-                .or_insert(Vec::new());
-
-            let mut already_exists = false;
-            for spec in specs.iter() {
-                if spec.len() != specialization.len() {
-                    continue
-                }
-                let mut all_match = true;
-                for (lhs, rhs) in spec.iter().zip(&specialization) {
-                    if !lhs.matches(rhs) {
-                        all_match = false;
-                        break
-                    }
-                }
-                if all_match {
-                    already_exists = true;
-                    break
-                }
-            }
-
-            if !already_exists {
-                specs.push(specialization);
-            }
-
-            true
-        } else {
-            for dep in &self.dependencies {
-                if dep.add_specialization(function, specialization.clone()) {
-                    return true;
-                }
-            }
-            false
         }
     }
 
@@ -230,38 +188,5 @@ impl Lib {
             }
         }
         (type_decls, function_decls, other)
-    }
-}
-
-// IncompleteLib
-
-pub struct IncompleteLib {
-    pub name: String,
-    pub function_decls: Vec<Stmt>,
-    pub type_decls: Vec<Stmt>,
-    pub other: Vec<Stmt>,
-    pub dependencies: Vec<Rc<Lib>>,
-}
-
-impl IncompleteLib {
-    pub fn add_symbols(self, symbols: SymbolTable) -> Lib {
-        Lib {
-            name: self.name,
-            function_decls: self.function_decls,
-            type_decls: self.type_decls,
-            other: self.other,
-            symbols: RefCell::new(symbols),
-            dependencies: self.dependencies,
-            required_specializations: RefCell::new(HashMap::new()),
-        }
-    }
-
-    pub fn resolve_symbol(&self, symbol: &Symbol) -> Option<NodeType> {
-        for dep in &self.dependencies {
-            if let Some(found) = dep.resolve_symbol(symbol) {
-                return Some(found);
-            }
-        }
-        None
     }
 }

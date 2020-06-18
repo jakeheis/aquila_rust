@@ -345,7 +345,7 @@ impl ExplicitType {
     }
 
     pub fn resolve(&self, lib: &Lib, context: &[Symbol]) -> Option<NodeType> {
-        let result = NodeType::deduce_from(self, lib, context);
+        let result = NodeType::deduce_from_lib(self, lib, context);
         self.cached_type.replace(result.clone());
         result
     }

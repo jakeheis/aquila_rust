@@ -6,7 +6,6 @@ use crate::parsing::*;
 use crate::source::*;
 use log::trace;
 use std::collections::HashMap;
-use std::rc::Rc;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Symbol {
@@ -128,6 +127,10 @@ impl SymbolTable {
         self.function_metadata.get(symbol)
     }
 
+    pub fn get_func_metadata_mut(&mut self, symbol: &Symbol) -> Option<&mut FunctionMetadata> {
+        self.function_metadata.get_mut(symbol)
+    }
+
     pub fn get_type_metadata(&self, symbol: &Symbol) -> Option<&TypeMetadata> {
         self.type_metadata.get(symbol)
     }
@@ -157,6 +160,7 @@ pub struct FunctionMetadata {
     pub generics: Vec<Symbol>,
     pub parameters: Vec<NodeType>,
     pub return_type: NodeType,
+    pub specializations: Vec<GenericSpecialization>,
 }
 
 // impl FunctionMetadata {
@@ -186,7 +190,45 @@ impl std::fmt::Display for FunctionMetadata {
             generic_porition,
             parameters,
             self.return_type
-        )
+        )?;
+        
+        if !self.specializations.is_empty() {
+            for spec in &self.specializations {
+                write!(f, "\n  {}", spec)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct GenericSpecialization {
+    pub id: String,
+    pub node_types: Vec<NodeType>,
+}
+
+impl GenericSpecialization {
+    pub fn new(function: &Symbol, node_types: Vec<NodeType>) -> Self {
+        let special_part = node_types.iter().map(|s| {
+            match s {
+                NodeType::Type(ty) => ty.mangled(),
+                NodeType::Int | NodeType::Void | NodeType::Bool | NodeType::Byte => s.to_string(),
+                _ => panic!(),
+            }
+        }).collect::<Vec<_>>().join("__");
+
+        GenericSpecialization {
+            id: function.mangled() + &special_part,
+            node_types,
+        }
+    }
+}
+
+impl std::fmt::Display for GenericSpecialization {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let descrs = self.node_types.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(",");
+        write!(f, "GenericSpecialization({})", descrs)
     }
 }
 
@@ -226,28 +268,25 @@ impl std::fmt::Display for TypeMetadata {
     }
 }
 
-pub struct SymbolTableBuilder {
-    lib: Rc<Lib>,
+pub struct SymbolTableBuilder<'a> {
+    symbols: SymbolTable,
+    deps: &'a [Lib],
     context: Vec<Symbol>,
 }
 
-impl SymbolTableBuilder {
-    pub fn build_symbols(lib: IncompleteLib) -> Lib {
-        let lib = lib.add_symbols(SymbolTable::new());
-        let lib = Rc::new(lib);
-
+impl<'a> SymbolTableBuilder<'a> {
+    pub fn build_symbols(type_decls: &[Stmt], function_decls: &[Stmt], deps: &[Lib]) -> SymbolTable {
         let mut builder = SymbolTableBuilder {
-            lib: Rc::clone(&lib),
+            symbols: SymbolTable::new(),
+            deps: deps,
             context: Vec::new(),
         };
 
-        builder.build_type_headers(&lib.type_decls);
-        builder.build_type_internals(&lib.type_decls);
-        builder.build_functions(&lib.function_decls);
+        builder.build_type_headers(&type_decls);
+        builder.build_type_internals(&type_decls);
+        builder.build_functions(&function_decls);
 
-        std::mem::drop(builder);
-
-        Rc::try_unwrap(lib).ok().unwrap()
+        builder.symbols
     }
 
     fn build_type_headers(&mut self, type_decls: &[Stmt]) {
@@ -257,28 +296,18 @@ impl SymbolTableBuilder {
     }
 
     fn insert<S: ContainsSpan>(&mut self, symbol: Symbol, node_type: NodeType, span: &S) {
-        self.lib
-            .symbols
-            .borrow_mut()
+        self.symbols
             .insert(symbol, node_type, span.span().clone());
     }
 
     fn insert_func_metadata(&mut self, symbol: Symbol, metadata: FunctionMetadata) {
-        self.lib
-            .symbols
-            .borrow_mut()
+        self.symbols
             .insert_func_metadata(symbol, metadata)
     }
 
     fn insert_type_metadata(&mut self, symbol: Symbol, metadata: TypeMetadata) {
-        self.lib
-            .symbols
-            .borrow_mut()
+        self.symbols
             .insert_type_metadata(symbol, metadata)
-    }
-
-    fn contains_symbol(&mut self, symbol: &Symbol) -> bool {
-        self.lib.resolve_symbol(symbol).is_some()
     }
 
     fn build_type_header(&mut self, decl: &Stmt) {
@@ -327,7 +356,7 @@ impl SymbolTableBuilder {
         let mut meta_method_symbols = self.build_functions(&meta_methods);
 
         let init_symbol = Symbol::init_symbol(self.context.last());
-        if !self.contains_symbol(&init_symbol) {
+        if self.symbols.get_type(&init_symbol).is_none() {
             let instance_type = NodeType::Type(name.get_symbol().unwrap().clone());
             let init_type =
                 NodeType::Function(field_types.clone(), Box::new(instance_type.clone()));
@@ -342,6 +371,7 @@ impl SymbolTableBuilder {
                     generics: Vec::new(),
                     parameters: field_types.clone(),
                     return_type: instance_type,
+                    specializations: Vec::new(),
                 },
             )
         }
@@ -413,6 +443,7 @@ impl SymbolTableBuilder {
             generics: generic_symbols,
             parameters: param_types.clone(),
             return_type: return_type,
+            specializations: Vec::new(),
         };
         self.insert_func_metadata(function_symbol.clone(), function_metadata);
 
@@ -424,14 +455,14 @@ impl SymbolTableBuilder {
         function_symbol
     }
 
-    fn var_decl_type<'a>(&self, var_decl: &'a Stmt) -> (&'a Token, NodeType) {
+    fn var_decl_type<'b>(&self, var_decl: &'b Stmt) -> (&'b Token, NodeType) {
         guard!(StmtKind::VariableDecl[name, explicit_type, _value] = &var_decl.kind);
         let explicit_type = self.resolve_explicit_type(explicit_type.as_ref().unwrap());
         (&name.token, explicit_type)
     }
 
     fn resolve_explicit_type(&self, explicit_type: &ExplicitType) -> NodeType {
-        if let Some(node_type) = explicit_type.resolve(&self.lib, &self.context) {
+        if let Some(node_type) = NodeType::deduce_from(explicit_type, &self.symbols, self.deps, &self.context) {
             trace!(target: "symbol_table", "Resolved explicit type {} to {}", explicit_type.span().lexeme(), node_type);
             node_type
         } else {
