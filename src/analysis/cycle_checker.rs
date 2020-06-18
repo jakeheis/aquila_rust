@@ -88,7 +88,7 @@ impl CycleChecker {
                 );
                 self.reporter.report(Diagnostic::error(
                     &lib.symbol_span(&cur_symbol).unwrap(),
-                    &message
+                    &message,
                 ));
             } else {
                 chain.push(field_symbol.clone());

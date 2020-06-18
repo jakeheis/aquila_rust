@@ -77,12 +77,12 @@ impl NodeType {
                     let instance_type = NodeType::Type(metatype);
                     trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), instance_type);
                     return Some(instance_type);
-                },
+                }
                 Some(NodeType::Generic(..)) => {
                     let instance_type = resolved.unwrap();
                     trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), instance_type);
                     return Some(instance_type);
-                },
+                }
                 _ => (),
             }
         }
@@ -195,6 +195,20 @@ impl NodeType {
         }
     }
 
+    pub fn specialize(&self, specializations: &[NodeType]) -> NodeType {
+        match self {
+            NodeType::Generic(_, index) => specializations[*index].clone(),
+            NodeType::Pointer(to) => {
+                NodeType::pointer_to(to.specialize(specializations))
+            }
+            NodeType::Array(of, size) => {
+                let specialized = of.specialize(specializations);
+                return NodeType::Array(Box::new(specialized), *size);
+            }
+            _ => self.clone(),
+        }
+    }
+
     // pub fn tolerant_match(&self, rhs: &NodeType) -> bool {
     //     if self.matches(rhs) {
     //         true
@@ -276,5 +290,16 @@ impl std::fmt::Display for NodeType {
             NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
         };
         write!(f, "{}", kind)
+    }
+}
+
+pub trait NodeTypeString {
+    fn node_string(&self) -> String;
+}
+
+impl NodeTypeString for Vec<NodeType> {
+    fn node_string(&self) -> String {
+        let descrs = self.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(",");
+        format!("Vec({})", descrs)
     }
 }

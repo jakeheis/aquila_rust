@@ -36,14 +36,16 @@ impl Scope {
 
         trace!(target: "type_checker", "Defining {} (symbol = {}) as {}", name.span().lexeme(), new_symbol, var_type);
 
-        self.symbols.insert(new_symbol.clone(), var_type.clone(), name.span().clone());
+        self.symbols
+            .insert(new_symbol.clone(), var_type.clone(), name.span().clone());
 
         name.set_symbol(new_symbol);
         name.set_type(var_type.clone());
     }
 
     fn put_in_scope(&mut self, symbol: &Symbol, var_type: &NodeType) {
-        self.symbols.insert(symbol.clone(), var_type.clone(), Span::empty());
+        self.symbols
+            .insert(symbol.clone(), var_type.clone(), Span::empty());
     }
 }
 
@@ -195,7 +197,6 @@ impl TypeChecker {
         expected: &NodeType,
     ) -> DiagnosticResult<()> {
         if given.matches(expected) {
-            let _ = expr.set_type(expected.clone());
             Ok(())
         } else {
             Err(self.type_mismatch(expr, given, expected))
@@ -226,23 +227,12 @@ impl TypeChecker {
         }
 
         for ((index, param), arg) in param_types.iter().enumerate().zip(arg_types) {
-            let param_spec = self.specialize_type(param, &specializations);
+            let param_spec = param.specialize(&specializations);
+            // TODO: this won't work when passing zero length arrays as arguments probably
             self.check_type_match(&args[index], &arg, &param_spec)?;
         }
 
         Ok(())
-    }
-
-    fn specialize_type(&self, node_type: &NodeType, specializations: &[NodeType]) -> NodeType {
-        match node_type {
-            NodeType::Generic(_, index) => specializations[*index].clone(),
-            NodeType::Pointer(to) => NodeType::pointer_to(self.specialize_type(&to, specializations)),
-            NodeType::Array(of, size) => {
-                let specialized = self.specialize_type(&of, specializations);
-                return NodeType::Array(Box::new(specialized), *size);
-            }
-            _ => node_type.clone(),
-        }
     }
 
     fn resolve_explicit_type(&mut self, explicit_type: &ExplicitType) -> Result {
@@ -399,6 +389,7 @@ impl StmtVisitor for TypeChecker {
                 {
                     self.report_error(diag);
                 }
+                let _ = value.as_ref().unwrap().set_type(explicit.clone());
             }
             (Some(explicit), None) => self.current_scope().define_var(name, &explicit),
             (None, Some(implicit)) if !implicit.contains_ambiguity() => {
@@ -425,6 +416,7 @@ impl StmtVisitor for TypeChecker {
             if let Err(diag) = self.check_type_match(condition, &cond_type, &NodeType::Bool) {
                 self.report_error(diag);
             }
+            let _ = condition.set_type(NodeType::Bool);
         }
 
         let mut guarantees_return = true;
@@ -451,6 +443,7 @@ impl StmtVisitor for TypeChecker {
             if let Err(diag) = self.check_type_match(condition, &cond_type, &NodeType::Bool) {
                 self.report_error(diag);
             }
+            let _ = condition.set_type(NodeType::Bool);
         }
 
         self.push_scope_named("while");
@@ -507,6 +500,7 @@ impl StmtVisitor for TypeChecker {
         let expected_return = expected_return.unwrap_or(&NodeType::Void);
 
         if let Some(expr) = expr.as_ref() {
+            let _ = expr.set_type(expected_return.clone());
             if let Err(diag) = self.check_type_match(expr, &ret_type, &expected_return) {
                 self.report_error(diag);
             }
@@ -574,6 +568,7 @@ impl ExprVisitor for TypeChecker {
         let target_type = target.accept(self)?;
         let value_type = value.accept(self)?;
         self.check_type_match(value, &value_type, &target_type)?;
+        let _ = value.set_type(target_type);
         expr.set_type(NodeType::Void)
     }
 
@@ -733,8 +728,7 @@ impl ExprVisitor for TypeChecker {
             return Err(Diagnostic::error(function, &message));
         }
 
-        let return_type: NodeType = metadata.return_type.clone();
-        let return_type = self.specialize_type(&return_type, &specializations);
+        let return_type = metadata.return_type.specialize(&specializations);
 
         self.check_function_arguments(
             expr,
@@ -743,6 +737,8 @@ impl ExprVisitor for TypeChecker {
             &metadata.parameters,
             args,
         )?;
+
+        self.lib.add_specialization(&func_symbol, specializations);
 
         expr.set_type(return_type)
     }

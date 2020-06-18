@@ -202,11 +202,26 @@ pub struct TypeMetadata {
 impl std::fmt::Display for TypeMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         writeln!(f, "Type {}", self.symbol.mangled())?;
-        let fields = self.fields.iter().map(|f| f.mangled()).collect::<Vec<_>>().join(",");
+        let fields = self
+            .fields
+            .iter()
+            .map(|f| f.mangled())
+            .collect::<Vec<_>>()
+            .join(",");
         writeln!(f, "  fields: {}", fields)?;
-        let methods = self.methods.iter().map(|m| m.mangled()).collect::<Vec<_>>().join(",");
+        let methods = self
+            .methods
+            .iter()
+            .map(|m| m.mangled())
+            .collect::<Vec<_>>()
+            .join(",");
         writeln!(f, "  methods: {}", methods)?;
-        let meta_methods = self.meta_methods.iter().map(|m| m.mangled()).collect::<Vec<_>>().join(",");
+        let meta_methods = self
+            .meta_methods
+            .iter()
+            .map(|m| m.mangled())
+            .collect::<Vec<_>>()
+            .join(",");
         write!(f, "  meta methods: {}", meta_methods)
     }
 }
@@ -242,7 +257,10 @@ impl SymbolTableBuilder {
     }
 
     fn insert<S: ContainsSpan>(&mut self, symbol: Symbol, node_type: NodeType, span: &S) {
-        self.lib.symbols.borrow_mut().insert(symbol, node_type, span.span().clone());
+        self.lib
+            .symbols
+            .borrow_mut()
+            .insert(symbol, node_type, span.span().clone());
     }
 
     fn insert_func_metadata(&mut self, symbol: Symbol, metadata: FunctionMetadata) {
@@ -334,18 +352,19 @@ impl SymbolTableBuilder {
 
         trace!(target: "symbol_table", "Finished building type {}", name.token.lexeme());
 
-        self.insert_type_metadata(type_symbol.clone(), TypeMetadata {
-            symbol: type_symbol,
-            fields: field_symbols,
-            methods: method_symbols,
-            meta_methods: meta_method_symbols,
-        })
+        self.insert_type_metadata(
+            type_symbol.clone(),
+            TypeMetadata {
+                symbol: type_symbol,
+                fields: field_symbols,
+                methods: method_symbols,
+                meta_methods: meta_method_symbols,
+            },
+        )
     }
 
     fn build_functions(&mut self, stmts: &[Stmt]) -> Vec<Symbol> {
-        stmts.iter().map(|stmt| {
-            self.build_function(stmt)
-        }).collect()
+        stmts.iter().map(|stmt| self.build_function(stmt)).collect()
     }
 
     fn build_function(&mut self, stmt: &Stmt) -> Symbol {

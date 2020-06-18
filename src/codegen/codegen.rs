@@ -7,10 +7,10 @@ use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
+use log::trace;
 
 #[derive(PartialEq)]
 enum CodegenStage {
@@ -28,7 +28,7 @@ pub struct Codegen {
     stage: CodegenStage,
     is_builtin: bool,
     temp_count: u32,
-    specialization_map: HashMap<Symbol, NodeType>,
+    specializations: Vec<NodeType>,
 }
 
 impl Codegen {
@@ -72,7 +72,7 @@ impl Codegen {
             stage: CodegenStage::ForwardStructDecls,
             is_builtin: false,
             temp_count: 0,
-            specialization_map: HashMap::new(),
+            specializations: Vec::new(),
         };
 
         codegen.stage = CodegenStage::ForwardStructDecls;
@@ -144,24 +144,72 @@ impl Codegen {
         self.writer.end_conditional_block();
     }
 
-    fn flatten_generic_opt(&self, function: &Option<Symbol>, node_type: &NodeType) -> NodeType {
-        if let Some(function) = function.as_ref() {
-            self.flatten_generic(function, node_type)
-        } else {
-            node_type.clone()
-        }
-    }
+    fn write_function(&mut self, name: &TypedToken, params: &[Stmt], body: &[Stmt], specializations: Vec<NodeType>, is_meta: bool) {
+        let func_symbol = name.get_symbol().unwrap();
+        let func_type = name.get_type().unwrap();
 
-    fn flatten_generic(&self, function: &Symbol, node_type: &NodeType) -> NodeType {
-        match &node_type {
-            NodeType::Generic(..) => NodeType::Void,
-            NodeType::Pointer(to) => NodeType::pointer_to(self.flatten_generic(function, to)),
-            NodeType::Array(of, size) => {
-                let of = self.flatten_generic(function, of);
-                NodeType::Array(Box::new(of), *size)
-            }
-            _ => node_type.clone(),
+        if specializations.is_empty() {
+            trace!(target: "codegen", "Writing function {}", func_symbol);
+        } else {
+            trace!(target: "codegen", "Writing function {} with specializations {}", func_symbol, specializations.node_string());
         }
+
+        guard!(NodeType::Function[param_types, ret_type] = func_type);
+
+        self.specializations = specializations;
+        
+        let ret_type = ret_type.specialize(&self.specializations);
+
+        let mut params: Vec<(NodeType, String)> = param_types
+            .iter()
+            .zip(params)
+            .map(|(param_type, param_stmt)| {
+                let param_symbol = self.decl_symbol(param_stmt);
+                let spec_param_type = param_type.specialize(&self.specializations);
+                (spec_param_type.clone(), param_symbol.mangled())
+            })
+            .collect();
+
+        if let (Some(current_type), false) = (&self.current_type, is_meta) {
+            params.insert(
+                0,
+                (
+                    NodeType::Pointer(Box::new(NodeType::Type(current_type.clone()))),
+                    String::from("self"),
+                ),
+            );
+        }
+
+        if self.stage == CodegenStage::FuncPrototypes {
+            if self.is_builtin {
+                if core::should_write_builtin(&func_symbol) {
+                    self.writer.write_function_prototype(
+                        &ret_type,
+                        &func_symbol.mangled(),
+                        &params,
+                    );
+                }
+            } else {
+                self.writer
+                    .write_function_prototype(&ret_type, &func_symbol.mangled(), &params);
+            }
+        } else {
+            if self.is_builtin {
+                if core::should_write_builtin(&func_symbol) {
+                    self.writer
+                        .start_decl_func(&ret_type, &func_symbol.mangled(), &params);
+                    core::write(&func_symbol, &mut self.writer);
+                    self.writer.end_decl_func();
+                }
+            } else {
+                self.writer
+                    .start_decl_func(&ret_type, &func_symbol.mangled(), &params);
+                self.gen_stmts(body);
+                self.writer.end_decl_func();
+            }
+        }
+
+        self.specializations = Vec::new();
     }
 }
 
@@ -246,71 +294,15 @@ impl StmtVisitor for Codegen {
         is_meta: bool,
     ) -> Self::StmtResult {
         let func_symbol = name.get_symbol().unwrap();
-        let func_type = name.get_type().unwrap();
 
         self.current_func = Some(func_symbol.clone());
 
-        guard!(NodeType::Function[param_types, ret_type] = func_type);
-        let ret_type: &NodeType = &ret_type;
-        let ret_type = self.flatten_generic(&func_symbol, ret_type);
-
-        let mut params: Vec<(NodeType, String)> = param_types
-            .iter()
-            .zip(params)
-            .map(|(param_type, param_stmt)| {
-                let param_symbol = self.decl_symbol(param_stmt);
-
-                let param_type = self.flatten_generic(&func_symbol, param_type);
-                // if self.lib.resolve_symbol(&param_symbol)
-                println!("param {} is typed {}", param_symbol, param_type);
-                // if param_symbol.is_generic() {
-                //     (NodeType::pointer_to(NodeType::Void), param_symbol.mangled())
-                // } else {
-                (param_type.clone(), param_symbol.mangled())
-                // }
-            })
-            .collect();
-
-        if let (Some(current_type), false) = (&self.current_type, is_meta) {
-            params.insert(
-                0,
-                (
-                    NodeType::Pointer(Box::new(NodeType::Type(current_type.clone()))),
-                    String::from("self"),
-                ),
-            );
-        }
-
-        if self.stage == CodegenStage::FuncPrototypes {
-            println!("Writing prototypes for {}", func_symbol);
-
-            if self.is_builtin {
-                if core::should_write_builtin(&func_symbol) {
-                    println!("trying to actually write builtin {}", func_symbol);
-                    self.writer.write_function_prototype(
-                        &ret_type,
-                        &func_symbol.mangled(),
-                        &params,
-                    );
-                }
-            } else {
-                self.writer
-                    .write_function_prototype(&ret_type, &func_symbol.mangled(), &params);
+        if let Some(required_specs) = self.lib.specializations_for(&func_symbol) {
+            for spec in required_specs {
+                self.write_function(name, params, body, spec, is_meta);   
             }
-        } else {
-            if self.is_builtin {
-                if core::should_write_builtin(&func_symbol) {
-                    self.writer
-                        .start_decl_func(&ret_type, &func_symbol.mangled(), &params);
-                    core::write(&func_symbol, &mut self.writer);
-                    self.writer.end_decl_func();
-                }
-            } else {
-                self.writer
-                    .start_decl_func(&ret_type, &func_symbol.mangled(), &params);
-                self.gen_stmts(body);
-                self.writer.end_decl_func();
-            }
+        } else if generics.is_empty() {
+            self.write_function(name, params, body, Vec::new(), is_meta);
         }
 
         self.current_func = None;
@@ -330,12 +322,7 @@ impl StmtVisitor for Codegen {
             var_type = NodeType::Pointer(of.clone());
         }
 
-        println!(
-            "writing {} as kind {} in {:?}",
-            var_symbol, var_type, self.current_func
-        );
-
-        let var_type = self.flatten_generic_opt(&self.current_func, &var_type);
+        let var_type = var_type.specialize(&self.specializations);
 
         let value = value.as_ref().map(|v| v.accept(self));
         self.writer
@@ -477,16 +464,17 @@ impl ExprVisitor for Codegen {
         args: &[Expr],
     ) -> Self::ExprResult {
         let function_symbol = function.get_symbol().unwrap();
+
         let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
 
         let metadata = self.lib.function_metadata(&function_symbol).unwrap();
         let resolved = self.lib.resolve_symbol(&function_symbol).unwrap();
         guard!(NodeType::Function[_one, _two] = resolved);
 
-        for (specialization, generic) in specializations.iter().zip(&metadata.generics) {
-            let gen_type = specialization.guarantee_resolved();
-            self.specialization_map.insert(generic.clone(), gen_type);
-        }
+        // for (specialization, generic) in specializations.iter().zip(&metadata.generics) {
+        //     let gen_type = specialization.guarantee_resolved();
+        //     self.specialization_map.insert(generic.clone(), gen_type);
+        // }
 
         let rendered = if let Some(target) = target {
             let target_str = target.accept(self);
@@ -520,8 +508,6 @@ impl ExprVisitor for Codegen {
                 args.join(",")
             )
         };
-
-        self.specialization_map.clear();
 
         rendered
     }
@@ -558,17 +544,17 @@ impl ExprVisitor for Codegen {
         let symbol = name.get_symbol().unwrap();
         let expr_type = expr.get_type().unwrap();
 
-        if let Some(mapped) = self.specialization_map.get(&symbol) {
-            println!("FOUND MAPPED {}", mapped);
-            return mapped.to_string();
+        if let NodeType::Generic(_, num) = expr_type {
+            let specialized_type = &self.specializations[num];
+            return self.writer.convert_type(specialized_type, String::new()).0;
         }
 
-        println!(
-            "Expr {} type {} map {}",
-            symbol,
-            expr_type,
-            self.specialization_map.len()
-        );
+        // match 
+
+        // if let Some(matching) = self.specializations.iter().find(|s| s == &symbol) {
+        //     return matching.to_string();
+        // }
+
         if self
             .current_type
             .as_ref()
@@ -616,7 +602,7 @@ impl ExprVisitor for Codegen {
         value: &Expr,
     ) -> Self::ExprResult {
         let cast_type = explicit_type.guarantee_resolved();
-        let cast_type = self.flatten_generic_opt(&self.current_func, &cast_type);
+        let cast_type = cast_type.specialize(&self.specializations);
         let (cast_type, _) = self.writer.convert_type(&cast_type, String::new());
         let value = value.accept(self);
 

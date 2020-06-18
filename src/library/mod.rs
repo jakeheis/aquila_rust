@@ -3,10 +3,11 @@ use crate::codegen::core;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::parsing::*;
+use crate::source::*;
 use crate::source::{self, Source};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
-use crate::source::*;
 
 pub struct Lib {
     pub name: String,
@@ -15,6 +16,7 @@ pub struct Lib {
     pub other: Vec<Stmt>,
     pub symbols: RefCell<SymbolTable>,
     pub dependencies: Vec<Rc<Lib>>,
+    pub required_specializations: RefCell<HashMap<Symbol, Vec<Vec<NodeType>>>>,
 }
 
 const LOG_LEXER: bool = false;
@@ -158,6 +160,59 @@ impl Lib {
         }
     }
 
+    pub fn specializations_for(&self, symbol: &Symbol) -> Option<Vec<Vec<NodeType>>> {
+        if let Some(found) = self.required_specializations.borrow().get(symbol) {
+            Some(found.clone())
+        } else {
+            for dep in &self.dependencies {
+                if let Some(found) = dep.specializations_for(symbol) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+    }
+
+    pub fn add_specialization(&self, function: &Symbol, specialization: Vec<NodeType>) -> bool {
+        if self.symbols.borrow().get_type(function).is_some() {
+            let mut borrowed = self.required_specializations.borrow_mut();
+            let specs = borrowed
+                .entry(function.clone())
+                .or_insert(Vec::new());
+
+            let mut already_exists = false;
+            for spec in specs.iter() {
+                if spec.len() != specialization.len() {
+                    continue
+                }
+                let mut all_match = true;
+                for (lhs, rhs) in spec.iter().zip(&specialization) {
+                    if !lhs.matches(rhs) {
+                        all_match = false;
+                        break
+                    }
+                }
+                if all_match {
+                    already_exists = true;
+                    break
+                }
+            }
+
+            if !already_exists {
+                specs.push(specialization);
+            }
+
+            true
+        } else {
+            for dep in &self.dependencies {
+                if dep.add_specialization(function, specialization.clone()) {
+                    return true;
+                }
+            }
+            false
+        }
+    }
+
     fn organize_stms(stmts: Vec<Stmt>) -> (Vec<Stmt>, Vec<Stmt>, Vec<Stmt>) {
         let mut type_decls: Vec<Stmt> = Vec::new();
         let mut function_decls: Vec<Stmt> = Vec::new();
@@ -197,6 +252,7 @@ impl IncompleteLib {
             other: self.other,
             symbols: RefCell::new(symbols),
             dependencies: self.dependencies,
+            required_specializations: RefCell::new(HashMap::new()),
         }
     }
 
