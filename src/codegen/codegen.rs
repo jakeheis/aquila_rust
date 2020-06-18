@@ -471,72 +471,58 @@ impl ExprVisitor for Codegen {
     fn visit_function_call_expr(
         &mut self,
         expr: &Expr,
+        target: Option<&Expr>,
         function: &ResolvedToken,
         specializations: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult {
-        println!("Making args for {}", function.token.lexeme());
-
-        // self.specialization_map.insert(k: K, v: V)
-
         let function_symbol = function.get_symbol().unwrap();
+        let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
+
         let resolved = self.lib.resolve_symbol(&function_symbol).unwrap();
         guard!(NodeType::Function[_one, generics, _two] = resolved);
 
         for (specialization, generic) in specializations.iter().zip(generics) {
             let gen_type = specialization.guarantee_resolved();
-            println!("inserting toija {} -> {}", generic, gen_type);
             self.specialization_map.insert(generic, gen_type);
         }
 
-        let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
-
-        if let Some(parent_symbol) = function_symbol.parent() {
-            if let Some(NodeType::Metatype(_)) = self.lib.resolve_symbol(&parent_symbol) {
-                args.insert(0, String::from("self"));
+        let rendered = if let Some(target) = target {
+            let target_str = target.accept(self);
+            let target_str = match &target.kind {
+                ExprKind::FunctionCall(_, first_called, generics, _) => {
+                    let first_called_symbol = first_called.get_symbol().unwrap();
+                    let first_called_type = self.lib.resolve_symbol(&first_called_symbol).unwrap();
+                    guard!(NodeType::Function[_params, specializations, first_called_ret_type] = first_called_type);
+    
+                    self.write_temp(&first_called_ret_type, target_str)
+                },
+                _ => target_str,
+            };
+    
+            if !function_symbol.is_meta_owned() {
+                let main = format!("&({})", target_str);
+                args.insert(0, main);
             }
-        }
+    
+            format!("{}({})", function_symbol.mangled(), args.join(","))
+        } else {
+            if let Some(parent_symbol) = function_symbol.parent() {
+                if let Some(NodeType::Metatype(_)) = self.lib.resolve_symbol(&parent_symbol) {
+                    args.insert(0, String::from("self"));
+                }
+            }
+
+            format!(
+                "{}({})",
+                function.get_symbol().unwrap().mangled(),
+                args.join(",")
+            )
+        };
 
         self.specialization_map.clear();
 
-        format!(
-            "{}({})",
-            function.get_symbol().unwrap().mangled(),
-            args.join(",")
-        )
-    }
-
-    fn visit_method_call_expr(
-        &mut self,
-        _expr: &Expr,
-        object: &Expr,
-        method: &ResolvedToken,
-        generics: &[ExplicitType],
-        args: &[Expr],
-    ) -> Self::ExprResult {
-        let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
-
-        let method_symbol = method.get_symbol().unwrap();
-
-        let object_str = object.accept(self);
-
-        let object_str = match &object.kind {
-            ExprKind::FunctionCall(first_called, generics, _) | ExprKind::MethodCall(_, first_called, generics, _) => {
-                let first_called_symbol = first_called.get_symbol().unwrap();
-                let first_called_type = self.lib.resolve_symbol(&first_called_symbol).unwrap();
-                guard!(NodeType::Function[_params, specializations, first_called_ret_type] = first_called_type);
-
-                self.write_temp(&first_called_ret_type, object_str)
-            }
-            _ => object_str,
-        };
-
-        if !method_symbol.is_meta_owned() {
-            let main = format!("&({})", object_str);
-            args.insert(0, main);
-        }
-
-        format!("{}({})", method_symbol.mangled(), args.join(","))
+        rendered
     }
 
     fn visit_field_expr(
@@ -550,7 +536,7 @@ impl ExprVisitor for Codegen {
         let field_symbol = field.get_symbol().unwrap();
 
         match &target.kind {
-            ExprKind::FunctionCall(function, generics, _) | ExprKind::MethodCall(_, function, generics, _) => {
+            ExprKind::FunctionCall(_, function, generics, _) => {
                 let target_symbol = function.get_symbol().unwrap();
                 let target_type = self.lib.resolve_symbol(&target_symbol).unwrap();
                 guard!(NodeType::Function[_params, specializations, ret_type] = target_type);

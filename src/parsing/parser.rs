@@ -473,12 +473,12 @@ impl Parser {
 
         match lhs.kind {
             ExprKind::Field(object, field) => {
-                Ok(Expr::method_call(object, field, specialization, args, right_paren))
+                Ok(Expr::function_call(Some(object), field, specialization, args, right_paren))
             }
-            ExprKind::Variable(name) => Ok(Expr::function_call(name, specialization, args, right_paren)),
+            ExprKind::Variable(name) => Ok(Expr::function_call(None, name, specialization, args, right_paren)),
             _ => {
                 let span = Span::join(&lhs, right_paren);
-                Err(Diagnostic::error(&span, "Cannot call this"))
+                Err(Diagnostic::error(&span, "Cannot call non-function"))
             }
         }
     }
@@ -487,7 +487,7 @@ impl Parser {
         let field_name = self.consume(TokenKind::Identifier, "Expect field name after '.'")?;
 
         let target_is_call = match &lhs.kind {
-            ExprKind::FunctionCall(..) | ExprKind::MethodCall(..) => true,
+            ExprKind::FunctionCall(..) => true,
             _ => false,
         };
 

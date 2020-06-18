@@ -706,36 +706,77 @@ impl ExprVisitor for TypeChecker {
     fn visit_function_call_expr(
         &mut self,
         expr: &Expr,
+        target: Option<&Expr>,
         function: &ResolvedToken,
         specializations: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult {
-        let resolved = self.resolve_var(function.span().lexeme());
-        if resolved.is_none() {
-            return Err(Diagnostic::error(function, "Undefined function"));
-        }
-        let (found_symbol, node_type) = resolved.unwrap();
+        let result: DiagnosticResult<(Vec<NodeType>, Vec<Symbol>, Box<NodeType>)> = if let Some(target) = target {
+            let target_type = target.accept(self)?;
 
-        let (params, generics, return_type): (Vec<NodeType>, Vec<Symbol>, Box<NodeType>) = match node_type {
-            NodeType::Function(params, generics, ret) => {
-                function.set_symbol(found_symbol);
-                Ok((params, generics, ret))
+            let object_symbol = match target_type {
+                NodeType::Type(type_symbol) => Ok(type_symbol),
+                NodeType::Metatype(type_symbol) => Ok(Symbol::meta_symbol(Some(&type_symbol))),
+                _ => Err(Diagnostic::error(
+                    expr,
+                    &format!("Cannot call method on a {}", target_type),
+                )),
+            }?;
+
+            let method_symbol = Symbol::new(Some(&object_symbol), &function.token);
+
+            match self.lib.resolve_symbol(&method_symbol) {
+                Some(NodeType::Function(params, generics, ret_val)) => {
+                    function.set_symbol(method_symbol.clone());
+                    Ok((params, generics, ret_val))
+                },
+                Some(_) => Err(Diagnostic::error(
+                    &Span::join(target, function),
+                    &format!(
+                        "'{}' is a property, not a method of {}",
+                        function.span().lexeme(),
+                        object_symbol.id,
+                    ),
+                )),
+                None => Err(Diagnostic::error(
+                    &Span::join(target, function),
+                    &format!(
+                        "Type '{}' does not has method '{}'",
+                        object_symbol.id,
+                        function.span().lexeme()
+                    ),
+                )),
             }
-            NodeType::Metatype(symbol) => {
-                let meta_symbol = Symbol::meta_symbol(Some(&symbol));
-                let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
-
-                function.set_symbol(init_symbol.clone());
-
-                let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
-                guard!(NodeType::Function[p, specializations, r] = init_type);
-                Ok((p, specializations, r))
+        } else {
+            let resolved = self.resolve_var(function.span().lexeme());
+            if resolved.is_none() {
+                return Err(Diagnostic::error(function, "Undefined function"));
             }
-            _ => Err(Diagnostic::error(
-                function,
-                &format!("Cannot call type {}", node_type),
-            )),
-        }?;
+            let (found_symbol, node_type) = resolved.unwrap();
+
+            match node_type {
+                NodeType::Function(params, generics, ret) => {
+                    function.set_symbol(found_symbol);
+                    Ok((params, generics, ret))
+                }
+                NodeType::Metatype(symbol) => {
+                    let meta_symbol = Symbol::meta_symbol(Some(&symbol));
+                    let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
+    
+                    function.set_symbol(init_symbol.clone());
+    
+                    let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
+                    guard!(NodeType::Function[p, generics, r] = init_type);
+                    Ok((p, generics, r))
+                }
+                _ => Err(Diagnostic::error(
+                    function,
+                    &format!("Cannot call type {}", node_type),
+                )),
+            }
+        };
+
+        let (params, generics, return_type) = result?;
 
         let mut specialization_map: HashMap<Symbol, NodeType> = HashMap::new();
 
@@ -757,71 +798,6 @@ impl ExprVisitor for TypeChecker {
         self.check_function_arguments(expr, &function.get_symbol().unwrap(), &specialization_map, &params, args)?;
 
         expr.set_type(return_type)
-    }
-
-    fn visit_method_call_expr(
-        &mut self,
-        expr: &Expr,
-        object: &Expr,
-        method: &ResolvedToken,
-        specializations: &[ExplicitType],
-        args: &[Expr],
-    ) -> Self::ExprResult {
-        let object_type = object.accept(self)?;
-
-        let object_symbol = match object_type {
-            NodeType::Type(type_symbol) => Ok(type_symbol),
-            NodeType::Metatype(type_symbol) => Ok(Symbol::meta_symbol(Some(&type_symbol))),
-            _ => Err(Diagnostic::error(
-                expr,
-                &format!("Cannot call method on a {}", object_type),
-            )),
-        }?;
-
-        let method_symbol = Symbol::new(Some(&object_symbol), &method.token);
-
-        match self.lib.resolve_symbol(&method_symbol) {
-            Some(NodeType::Function(params, generics, ret_val)) => {
-                method.set_symbol(method_symbol.clone());
-
-                let mut specialization_map: HashMap<Symbol, NodeType> = HashMap::new();
-
-                let specializations: std::result::Result<Vec<NodeType>, _> = specializations.iter().map(|s| self.resolve_explicit_type(s)).collect();
-                let specializations = specializations?;
-        
-                if specializations.len() != generics.len() {
-                    let message = format!("Expected {} specializations, got {}", generics.len(), specializations.len());
-                    return Err(Diagnostic::error(method, &message))
-                }
-        
-                for (spec, gen) in specializations.iter().zip(generics) {
-                    specialization_map.insert(gen, spec.clone());
-                }
-
-                let ret_val = (*ret_val).clone();
-                let return_type = self.specialize_type(&ret_val, &specialization_map);
-
-                self.check_function_arguments(expr, &method_symbol, &specialization_map, &params, args)?;
-
-                expr.set_type(return_type)
-            }
-            Some(_) => Err(Diagnostic::error(
-                &Span::join(object, method),
-                &format!(
-                    "'{}' is a property, not a method of {}",
-                    method.span().lexeme(),
-                    object_symbol.id,
-                ),
-            )),
-            None => Err(Diagnostic::error(
-                &Span::join(object, method),
-                &format!(
-                    "Type '{}' does not has method '{}'",
-                    object_symbol.id,
-                    method.span().lexeme()
-                ),
-            )),
-        }
     }
 
     fn visit_field_expr(

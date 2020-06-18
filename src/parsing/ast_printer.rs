@@ -321,6 +321,7 @@ impl ExprVisitor for ASTPrinter {
     fn visit_function_call_expr(
         &mut self,
         _expr: &Expr,
+        target: Option<&Expr>,
         function: &ResolvedToken,
         generics: &[ExplicitType],
         args: &[Expr],
@@ -335,41 +336,12 @@ impl ExprVisitor for ASTPrinter {
             symbol
         ));
         self.indent(|visitor| {
-            if generics.len() > 0 {
-                visitor.write_ln("Specializations");
+            if let Some(target) = target {
+                visitor.write_ln("Target");
                 visitor.indent(|visitor| {
-                    generics.iter().for_each(|a| visitor.write_explicit_type(a));
+                    target.accept(visitor);
                 });
             }
-            visitor.write_ln("Arguments");
-            visitor.indent(|visitor| {
-                args.iter().for_each(|a| a.accept(visitor));
-            });
-        })
-    }
-
-    fn visit_method_call_expr(
-        &mut self,
-        _expr: &Expr,
-        object: &Expr,
-        method: &ResolvedToken,
-        generics: &[ExplicitType],
-        args: &[Expr],
-    ) -> Self::ExprResult {
-        let symbol = method
-            .get_symbol()
-            .map(|s| s.id.clone())
-            .unwrap_or(String::from("<none>"));
-        self.write_ln(&format!(
-            "MethodCall(name: {}, symbol: {})",
-            method.token.lexeme(),
-            symbol
-        ));
-        self.indent(|visitor| {
-            visitor.write_ln("Object");
-            visitor.indent(|visitor| {
-                object.accept(visitor);
-            });
             if generics.len() > 0 {
                 visitor.write_ln("Specializations");
                 visitor.indent(|visitor| {

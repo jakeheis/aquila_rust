@@ -340,8 +340,7 @@ pub enum ExprKind {
     Assignment(Box<Expr>, Box<Expr>),
     Binary(Box<Expr>, Token, Box<Expr>),
     Unary(Token, Box<Expr>),
-    FunctionCall(ResolvedToken, Vec<ExplicitType>, Vec<Expr>),
-    MethodCall(Box<Expr>, ResolvedToken, Vec<ExplicitType>, Vec<Expr>),
+    FunctionCall(Option<Box<Expr>>, ResolvedToken, Vec<ExplicitType>, Vec<Expr>),
     Field(Box<Expr>, ResolvedToken),
     Literal(Token),
     Variable(ResolvedToken),
@@ -381,12 +380,10 @@ impl Expr {
             }
             ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&self, &lhs, &op, &rhs),
             ExprKind::Unary(op, expr) => visitor.visit_unary_expr(&self, &op, &expr),
-            ExprKind::FunctionCall(function, generics, args) => {
-                visitor.visit_function_call_expr(&self, &function, &generics, &args)
-            }
-            ExprKind::MethodCall(object, method, generics, args) => {
-                visitor.visit_method_call_expr(&self, &object, &method, &generics, &args)
-            }
+            ExprKind::FunctionCall(target, function, generics, args) => {
+                let target: Option<&Expr> = target.as_ref().map(|t| t.as_ref());
+                visitor.visit_function_call_expr(&self, target, &function, &generics, &args)
+            },
             ExprKind::Field(target, field) => visitor.visit_field_expr(&self, &target, &field),
             ExprKind::Literal(token) => visitor.visit_literal_expr(&self, &token),
             ExprKind::Variable(name) => visitor.visit_variable_expr(&self, &name),
@@ -417,21 +414,9 @@ impl Expr {
         Expr::new(ExprKind::Unary(op, Box::new(expr)), span)
     }
 
-    pub fn function_call(function: ResolvedToken, generics: Vec<ExplicitType>, args: Vec<Expr>, right_paren: &Token) -> Self {
+    pub fn function_call(target: Option<Box<Expr>>, function: ResolvedToken, generics: Vec<ExplicitType>, args: Vec<Expr>, right_paren: &Token) -> Self {
         let span = Span::join(&function, right_paren);
-        Expr::new(ExprKind::FunctionCall(function, generics, args), span)
-    }
-
-    pub fn method_call(
-        object: Box<Expr>,
-        method: ResolvedToken,
-        specializations: Vec<ExplicitType>,
-        args: Vec<Expr>,
-        right_paren: &Token,
-    ) -> Self {
-        let object_ref: &Expr = &object;
-        let span = Span::join(object_ref, right_paren);
-        Expr::new(ExprKind::MethodCall(object, method, specializations, args), span)
+        Expr::new(ExprKind::FunctionCall(target, function, generics, args), span)
     }
 
     pub fn field(target: Expr, name: &Token) -> Self {
@@ -491,15 +476,8 @@ pub trait ExprVisitor {
     fn visit_function_call_expr(
         &mut self,
         expr: &Expr,
+        target: Option<&Expr>,
         function: &ResolvedToken,
-        specializations: &[ExplicitType],
-        args: &[Expr],
-    ) -> Self::ExprResult;
-    fn visit_method_call_expr(
-        &mut self,
-        expr: &Expr,
-        object: &Expr,
-        method: &ResolvedToken,
         specializations: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult;
