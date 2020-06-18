@@ -7,10 +7,10 @@ use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
-use std::collections::HashMap;
 
 #[derive(PartialEq)]
 enum CodegenStage {
@@ -155,20 +155,18 @@ impl Codegen {
     fn flatten_generic(&self, function: &Symbol, node_type: &NodeType) -> NodeType {
         match &node_type {
             NodeType::Type(ty) => {
-                // let meta_symbol = 
+                // let meta_symbol =
                 if function.owns(ty) && self.lib.resolve_symbol(&ty).is_some() {
                     NodeType::Void
-                }  else {
+                } else {
                     node_type.clone()
                 }
-            },
-            NodeType::Pointer(to) => {
-                NodeType::pointer_to(self.flatten_generic(function, to))
-            },
+            }
+            NodeType::Pointer(to) => NodeType::pointer_to(self.flatten_generic(function, to)),
             NodeType::Array(of, size) => {
                 let of = self.flatten_generic(function, of);
                 NodeType::Array(Box::new(of), *size)
-            },
+            }
             _ => node_type.clone(),
         }
     }
@@ -275,7 +273,7 @@ impl StmtVisitor for Codegen {
                 // if param_symbol.is_generic() {
                 //     (NodeType::pointer_to(NodeType::Void), param_symbol.mangled())
                 // } else {
-                    (param_type.clone(), param_symbol.mangled())
+                (param_type.clone(), param_symbol.mangled())
                 // }
             })
             .collect();
@@ -296,8 +294,11 @@ impl StmtVisitor for Codegen {
             if self.is_builtin {
                 if core::should_write_builtin(&func_symbol) {
                     println!("trying to actually write builtin {}", func_symbol);
-                    self.writer
-                        .write_function_prototype(&ret_type, &func_symbol.mangled(), &params);
+                    self.writer.write_function_prototype(
+                        &ret_type,
+                        &func_symbol.mangled(),
+                        &params,
+                    );
                 }
             } else {
                 self.writer
@@ -336,7 +337,10 @@ impl StmtVisitor for Codegen {
             var_type = NodeType::Pointer(of.clone());
         }
 
-        println!("writing {} as kind {} in {:?}", var_symbol, var_type, self.current_func);
+        println!(
+            "writing {} as kind {} in {:?}",
+            var_symbol, var_type, self.current_func
+        );
 
         let var_type = self.flatten_generic_opt(&self.current_func, &var_type);
 
@@ -458,9 +462,12 @@ impl ExprVisitor for Codegen {
 
     fn visit_unary_expr(&mut self, _expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
         let operand_text = operand.accept(self);
-        
+
         let operand_text = if let &TokenKind::Ampersand = &op.kind {
-            self.write_temp(&operand.get_type().unwrap().coerce_array_to_ptr(), operand_text)
+            self.write_temp(
+                &operand.get_type().unwrap().coerce_array_to_ptr(),
+                operand_text,
+            )
         } else {
             operand_text
         };
@@ -495,17 +502,17 @@ impl ExprVisitor for Codegen {
                     let first_called_symbol = first_called.get_symbol().unwrap();
                     let first_called_type = self.lib.resolve_symbol(&first_called_symbol).unwrap();
                     guard!(NodeType::Function[_params, first_called_ret_type] = first_called_type);
-    
+
                     self.write_temp(&first_called_ret_type, target_str)
-                },
+                }
                 _ => target_str,
             };
-    
+
             if !function_symbol.is_meta_owned() {
                 let main = format!("&({})", target_str);
                 args.insert(0, main);
             }
-    
+
             format!("{}({})", function_symbol.mangled(), args.join(","))
         } else {
             if let Some(parent_symbol) = function_symbol.parent() {
@@ -563,7 +570,12 @@ impl ExprVisitor for Codegen {
             return mapped.to_string();
         }
 
-        println!("Expr {} type {} map {}", symbol, expr_type, self.specialization_map.len());
+        println!(
+            "Expr {} type {} map {}",
+            symbol,
+            expr_type,
+            self.specialization_map.len()
+        );
         if self
             .current_type
             .as_ref()
@@ -604,12 +616,17 @@ impl ExprVisitor for Codegen {
         format!("{}[{}]", target, index)
     }
 
-    fn visit_cast_expr(&mut self, _expr: &Expr, explicit_type: &ExplicitType, value: &Expr) -> Self::ExprResult {
+    fn visit_cast_expr(
+        &mut self,
+        _expr: &Expr,
+        explicit_type: &ExplicitType,
+        value: &Expr,
+    ) -> Self::ExprResult {
         let cast_type = explicit_type.guarantee_resolved();
         let cast_type = self.flatten_generic_opt(&self.current_func, &cast_type);
         let (cast_type, _) = self.writer.convert_type(&cast_type, String::new());
         let value = value.accept(self);
-        
+
         format!("({})({})", cast_type, value)
     }
 }

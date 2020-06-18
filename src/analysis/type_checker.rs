@@ -6,9 +6,10 @@ use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
+use log::trace;
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 type Result = DiagnosticResult<NodeType>;
 
@@ -16,7 +17,6 @@ struct Scope {
     id: Option<Symbol>,
     symbols: SymbolTable,
     function_return_type: Option<NodeType>,
-    specialization_map: HashMap<Symbol, Symbol>
 }
 
 impl Scope {
@@ -25,7 +25,6 @@ impl Scope {
             id,
             symbols: SymbolTable::new(),
             function_return_type: return_type,
-            specialization_map: HashMap::new(),
         }
     }
 
@@ -35,6 +34,8 @@ impl Scope {
         }
 
         let new_symbol = Symbol::new((&self.id).as_ref(), &name.token);
+
+        trace!(target: "type_checker", "Defining {} (symbol = {}) as {}", name.span().lexeme(), new_symbol, var_type);
 
         self.symbols.insert(new_symbol.clone(), var_type.clone());
 
@@ -128,20 +129,12 @@ impl TypeChecker {
         self.scopes.last().unwrap().id.as_ref()
     }
 
-    fn push_type_scope(&mut self, name: &TypedToken) -> Symbol {
-        self.push_scope_named(name.span().lexeme())
-    }
-
-    fn push_function_scope(&mut self, name: &TypedToken, ret_type: NodeType) -> Symbol {
-        let symbol = Symbol::new(self.current_symbol(), &name.token);
-        self.scopes
-            .push(Scope::new(Some(symbol.clone()), Some(ret_type)));
-        symbol
-    }
-
     fn push_scope_named(&mut self, name: &str) -> Symbol {
         let symbol = Symbol::new_str(self.current_symbol(), name);
         let ret_type = self.current_scope().function_return_type.clone();
+
+        trace!(target: "type_checker", "Pushing scope {} -- {}", name, symbol);
+
         self.scopes.push(Scope::new(Some(symbol.clone()), ret_type));
         symbol
     }
@@ -149,12 +142,17 @@ impl TypeChecker {
     fn push_scope_meta(&mut self) -> Symbol {
         let symbol = Symbol::meta_symbol(self.current_symbol());
         let ret_type = self.current_scope().function_return_type.clone();
+
+        trace!(target: "type_checker", "Pushing meta scope -- {}", symbol);
+
         self.scopes.push(Scope::new(Some(symbol.clone()), ret_type));
+
         symbol
     }
 
     fn pop_scope(&mut self) {
-        self.scopes.pop();
+        let popped = self.scopes.pop().unwrap();
+        trace!(target: "type_checker", "Popped scope {}", popped.id.unwrap());
     }
 
     fn resolve_var(&self, name: &str) -> Option<(Symbol, NodeType)> {
@@ -219,42 +217,18 @@ impl TypeChecker {
         Ok(())
     }
 
-    fn specialize(&self, node_type: &NodeType, generics: &[Symbol], specializations: &[NodeType]) -> NodeType {
-        println!("checking if {} should be spcialized", node_type);
-        match node_type {
-            NodeType::Type(potential_generic) => {
-                if let Some(index) = generics.iter().position(|g| g == potential_generic) {
-                    println!("specialzngi {} to {}", node_type, specializations[index].clone());
-                    return specializations[index].clone();
-                }
-            },
-            NodeType::Pointer(to) => {
-                return NodeType::pointer_to(self.specialize(to, generics, specializations))
-            },
-            NodeType::Array(of, size) => {
-                let specialized = self.specialize(of, generics, specializations);
-                return NodeType::Array(Box::new(specialized), *size);
-            },
-            _ => (),
-        }
-
-        node_type.clone()
-    }
-
     fn specialize_type(&self, node_type: &NodeType, map: &HashMap<Symbol, NodeType>) -> NodeType {
         match node_type {
             NodeType::Type(potential_generic) => {
                 if let Some(node_type) = map.get(&potential_generic) {
                     return node_type.clone();
                 }
-            },
-            NodeType::Pointer(to) => {
-                return NodeType::pointer_to(self.specialize_type(&to, map))
-            },
+            }
+            NodeType::Pointer(to) => return NodeType::pointer_to(self.specialize_type(&to, map)),
             NodeType::Array(of, size) => {
                 let specialized = self.specialize_type(&of, map);
                 return NodeType::Array(Box::new(specialized), *size);
-            },
+            }
             _ => (),
         }
 
@@ -292,10 +266,7 @@ impl TypeChecker {
     //     Ok(node_type.clone())
     // }
 
-    fn resolve_explicit_type(
-        &mut self,
-        explicit_type: &ExplicitType,
-    ) -> Result {
+    fn resolve_explicit_type(&mut self, explicit_type: &ExplicitType) -> Result {
         let context: Vec<Symbol> = self
             .scopes
             .iter()
@@ -304,7 +275,10 @@ impl TypeChecker {
 
         if let Some(deduced) = explicit_type.resolve(&self.lib, &context) {
             if let (&NodeType::Any, false) = (&deduced, self.is_builtin) {
-                Err(Diagnostic::error(explicit_type, "Cannot have type any; must be ptr any"))
+                Err(Diagnostic::error(
+                    explicit_type,
+                    "Cannot have type any; must be ptr any",
+                ))
             } else {
                 Ok(deduced)
             }
@@ -325,7 +299,7 @@ impl StmtVisitor for TypeChecker {
         methods: &[Stmt],
         meta_methods: &[Stmt],
     ) -> Analysis {
-        let symbol = self.push_type_scope(name);
+        let symbol = self.push_scope_named(name.span().lexeme());
         name.set_symbol(symbol);
 
         self.push_scope_meta();
@@ -368,13 +342,14 @@ impl StmtVisitor for TypeChecker {
 
         for (index, generic) in generics.iter().enumerate() {
             let generic_symbol = Symbol::new(self.current_symbol(), &generic.token);
-            self.current_scope().define_var(generic, &NodeType::Metatype(generic_symbol.clone()));
+            self.current_scope()
+                .define_var(generic, &NodeType::Metatype(generic_symbol.clone()));
             generic_symbols.push(generic_symbol);
 
             // let gen_type = NodeType::Generic(self.current_symbol().unwrap().clone(), index);
             // self.current_scope().define_var(generic, &gen_type);
         }
-        
+
         let return_type = if let Some(explicit_return_type) = explicit_return_type.as_ref() {
             match self.resolve_explicit_type(explicit_return_type) {
                 Ok(NodeType::Array(..)) => {
@@ -383,7 +358,7 @@ impl StmtVisitor for TypeChecker {
                         "Cannot return an array",
                     ));
                     NodeType::Ambiguous
-                },
+                }
                 Ok(node_type) => node_type,
                 Err(diag) => {
                     self.report_error(diag);
@@ -401,7 +376,10 @@ impl StmtVisitor for TypeChecker {
             if let StmtKind::VariableDecl(name, ..) = &param.kind {
                 if let Some(NodeType::Type(ty)) = name.get_type() {
                     if generic_symbols.contains(&ty) {
-                        self.report_error(Diagnostic::error(param, "Can only refer to generic types behind a pointer"));
+                        self.report_error(Diagnostic::error(
+                            param,
+                            "Can only refer to generic types behind a pointer",
+                        ));
                     }
                 }
             }
@@ -431,13 +409,16 @@ impl StmtVisitor for TypeChecker {
         explicit_type: &Option<ExplicitType>,
         value: &Option<Expr>,
     ) -> Analysis {
-        let explicit_type = explicit_type.as_ref().and_then(|k| match self.resolve_explicit_type(k) {
-            Ok(explicit_type) => Some(explicit_type),
-            Err(diagnostic) => {
-                self.report_error(diagnostic);
-                None
-            }
-        });
+        let explicit_type =
+            explicit_type
+                .as_ref()
+                .and_then(|k| match self.resolve_explicit_type(k) {
+                    Ok(explicit_type) => Some(explicit_type),
+                    Err(diagnostic) => {
+                        self.report_error(diagnostic);
+                        None
+                    }
+                });
 
         let implicit_type = value.as_ref().and_then(|v| self.check_expr(v));
 
@@ -726,9 +707,7 @@ impl ExprVisitor for TypeChecker {
             let method_symbol = Symbol::new(Some(&object_symbol), &function.token);
 
             match self.lib.resolve_symbol(&method_symbol) {
-                Some(NodeType::Function(..)) => {
-                    Ok(method_symbol)
-                },
+                Some(NodeType::Function(..)) => Ok(method_symbol),
                 Some(_) => Err(Diagnostic::error(
                     &Span::join(target, function),
                     &format!(
@@ -754,9 +733,7 @@ impl ExprVisitor for TypeChecker {
             let (found_symbol, node_type) = resolved.unwrap();
 
             match node_type {
-                NodeType::Function(..) => {
-                    Ok(found_symbol)
-                }
+                NodeType::Function(..) => Ok(found_symbol),
                 NodeType::Metatype(symbol) => {
                     let meta_symbol = Symbol::meta_symbol(Some(&symbol));
                     Ok(Symbol::init_symbol(Some(&meta_symbol)))
@@ -769,17 +746,24 @@ impl ExprVisitor for TypeChecker {
         }?;
 
         function.set_symbol(func_symbol.clone());
-        
+
         let metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
         let mut specialization_map: HashMap<Symbol, NodeType> = HashMap::new();
 
-        let specializations: std::result::Result<Vec<NodeType>, _> = specializations.iter().map(|s| self.resolve_explicit_type(s)).collect();
+        let specializations: std::result::Result<Vec<NodeType>, _> = specializations
+            .iter()
+            .map(|s| self.resolve_explicit_type(s))
+            .collect();
         let specializations = specializations?;
 
         if specializations.len() != metadata.generics.len() {
-            let message = format!("Expected {} specializations, got {}", metadata.generics.len(), specializations.len());
-            return Err(Diagnostic::error(function, &message))
+            let message = format!(
+                "Expected {} specializations, got {}",
+                metadata.generics.len(),
+                specializations.len()
+            );
+            return Err(Diagnostic::error(function, &message));
         }
 
         for (spec, gen) in specializations.iter().zip(metadata.generics) {
@@ -789,7 +773,13 @@ impl ExprVisitor for TypeChecker {
         let return_type: NodeType = metadata.return_type.clone();
         let return_type = self.specialize_type(&return_type, &specialization_map);
 
-        self.check_function_arguments(expr, &function.get_symbol().unwrap(), &specialization_map, &metadata.parameters, args)?;
+        self.check_function_arguments(
+            expr,
+            &function.get_symbol().unwrap(),
+            &specialization_map,
+            &metadata.parameters,
+            args,
+        )?;
 
         expr.set_type(return_type)
     }
@@ -872,10 +862,7 @@ impl ExprVisitor for TypeChecker {
             }
         }
 
-        let node_type = NodeType::Array(
-            Box::new(expected_type.clone()),
-            elements.len(),
-        );
+        let node_type = NodeType::Array(Box::new(expected_type.clone()), elements.len());
         expr.set_type(node_type)
     }
 
@@ -890,7 +877,12 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_cast_expr(&mut self, _expr: &Expr, explicit_type: &ExplicitType, value: &Expr) -> Self::ExprResult {
+    fn visit_cast_expr(
+        &mut self,
+        _expr: &Expr,
+        explicit_type: &ExplicitType,
+        value: &Expr,
+    ) -> Self::ExprResult {
         value.accept(self)?;
         self.resolve_explicit_type(explicit_type)
     }

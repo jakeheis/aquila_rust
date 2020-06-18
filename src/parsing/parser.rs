@@ -233,7 +233,9 @@ impl Parser {
         let mut generics: Vec<Token> = Vec::new();
         if self.matches(TokenKind::Bar) {
             while !self.is_at_end() && self.peek() != TokenKind::Bar {
-                let generic_type = self.consume(TokenKind::Identifier, "Expect generic type identifier")?.clone();
+                let generic_type = self
+                    .consume(TokenKind::Identifier, "Expect generic type identifier")?
+                    .clone();
                 generics.push(generic_type);
                 if self.peek() != TokenKind::Bar {
                     self.consume(TokenKind::Comma, "Expect ',' separating parameters")?;
@@ -472,10 +474,20 @@ impl Parser {
         let right_paren = self.consume(TokenKind::RightParen, "Expect ')' after arguments")?;
 
         match lhs.kind {
-            ExprKind::Field(object, field) => {
-                Ok(Expr::function_call(Some(object), field, specialization, args, right_paren))
-            }
-            ExprKind::Variable(name) => Ok(Expr::function_call(None, name, specialization, args, right_paren)),
+            ExprKind::Field(object, field) => Ok(Expr::function_call(
+                Some(object),
+                field,
+                specialization,
+                args,
+                right_paren,
+            )),
+            ExprKind::Variable(name) => Ok(Expr::function_call(
+                None,
+                name,
+                specialization,
+                args,
+                right_paren,
+            )),
             _ => {
                 let span = Span::join(&lhs, right_paren);
                 Err(Diagnostic::error(&span, "Cannot call non-function"))
@@ -545,7 +557,7 @@ impl Parser {
         let cast_span = self.previous().span.clone();
 
         self.consume(TokenKind::Bar, "Expect |cast type|")?;
-        
+
         let mut specialization = self.parse_generic_specialization()?;
         if specialization.len() != 1 {
             return Err(Diagnostic::error(&cast_span, "Expect single cast type"));
@@ -555,7 +567,12 @@ impl Parser {
         let value = self.expression()?;
         let right_paren = self.consume(TokenKind::RightParen, "Expect matching ')'")?;
 
-        Ok(Expr::cast(cast_span, specialization.remove(0), value, right_paren))
+        Ok(Expr::cast(
+            cast_span,
+            specialization.remove(0),
+            value,
+            right_paren,
+        ))
     }
 
     fn parse_generic_specialization(&mut self) -> Result<Vec<ExplicitType>> {
@@ -571,7 +588,11 @@ impl Parser {
         Ok(specialized_types)
     }
 
-    fn parse_var(&mut self, allow_type: bool, require_type: bool) -> Result<(Token, Option<ExplicitType>)> {
+    fn parse_var(
+        &mut self,
+        allow_type: bool,
+        require_type: bool,
+    ) -> Result<(Token, Option<ExplicitType>)> {
         let name = self.previous().clone();
         let mut explicit_type: Option<ExplicitType> = None;
 
@@ -614,7 +635,7 @@ impl Parser {
             let name = self
                 .consume(TokenKind::Identifier, "Expected variable type")?
                 .clone();
-                ExplicitTypeKind::Simple(ResolvedToken::new(name))
+            ExplicitTypeKind::Simple(ResolvedToken::new(name))
         };
 
         let end = &self.previous().span;

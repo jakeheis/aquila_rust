@@ -1,7 +1,7 @@
 use super::*;
-use crate::source::*;
-use crate::lexing::*;
 use crate::analysis::*;
+use crate::lexing::*;
+use crate::source::*;
 use std::cell::RefCell;
 
 enum ASTPrinterMode {
@@ -162,9 +162,7 @@ impl StmtVisitor for ASTPrinter {
         self.indent(|visitor| {
             if let Some(return_type) = return_type.as_ref() {
                 visitor.write_ln("Return");
-                visitor.indent(|visitor| {
-                    visitor.write_explicit_type(return_type)
-                });
+                visitor.indent(|visitor| visitor.write_explicit_type(return_type));
             }
             visitor.write_ln("Params");
             visitor.indent(|visitor| {
@@ -406,7 +404,12 @@ impl ExprVisitor for ASTPrinter {
         })
     }
 
-    fn visit_cast_expr(&mut self, _expr: &Expr, explicit_type: &ExplicitType, value: &Expr) -> Self::ExprResult {
+    fn visit_cast_expr(
+        &mut self,
+        _expr: &Expr,
+        explicit_type: &ExplicitType,
+        value: &Expr,
+    ) -> Self::ExprResult {
         self.write_ln("Cast");
         self.indent(|writer| {
             writer.write_explicit_type(explicit_type);

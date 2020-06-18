@@ -99,9 +99,9 @@ impl Reporter for DefaultReporter {
         } else {
             "• Warning:".yellow().bold()
         };
-        println!("\n{} {}\n", header, diagnostic.message);
+        eprintln!("\n{} {}\n", header, diagnostic.message);
         let (line, offset) = diagnostic.span.entire_line();
-        println!("  {}", line);
+        eprintln!("  {}", line);
 
         let offset = (0..offset).map(|_| " ").collect::<String>();
         let underline = (0..diagnostic.span.length).map(|_| "^").collect::<String>();
@@ -110,8 +110,8 @@ impl Reporter for DefaultReporter {
         } else {
             underline.yellow()
         };
-        println!("  {}{}", offset, colored_outline);
-        println!("  {}\n", diagnostic.span.location());
+        eprintln!("  {}{}", offset, colored_outline);
+        eprintln!("  {}\n", diagnostic.span.location());
     }
 
     fn has_errored(&self) -> bool {

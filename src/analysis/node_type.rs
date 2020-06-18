@@ -37,7 +37,11 @@ impl NodeType {
         NodeType::Pointer(Box::new(pointee))
     }
 
-    pub fn deduce_from(explicit_type: &ExplicitType, lib: &Lib, context: &[Symbol]) -> Option<Self> {
+    pub fn deduce_from(
+        explicit_type: &ExplicitType,
+        lib: &Lib,
+        context: &[Symbol],
+    ) -> Option<Self> {
         let node_type = match &explicit_type.kind {
             ExplicitTypeKind::Simple(token) => {
                 if let Some(primitive) = NodeType::primitive(&token.token) {
@@ -253,8 +257,8 @@ impl std::fmt::Display for NodeType {
             }
             NodeType::Pointer(ty) => format!("ptr<{}>", ty),
             NodeType::Array(ty, size) => format!("Array<{}, count={}>", ty, size),
-            NodeType::Type(ty) => ty.id.clone(),
-            NodeType::Metatype(ty) => ty.id.clone() + "_Meta",
+            NodeType::Type(ty) => format!("Type({})", ty.id),
+            NodeType::Metatype(ty) => format!("Metatype({})", ty.id),
             // NodeType::Generic(symbol, index) => format!("Generic({}, index: {})", symbol, index),
             NodeType::Ambiguous => String::from("<ambiguous>"),
             NodeType::FlexibleFunction(_) => String::from("<flexible function>"),

@@ -3,6 +3,8 @@ use crate::guard;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
+use crate::source::*;
+use log::trace;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -148,7 +150,11 @@ impl FunctionMetadata {
 
 impl std::fmt::Display for FunctionMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let generics: Vec<String> = self.generics.iter().map(|g| g.last_component().to_string()).collect();
+        let generics: Vec<String> = self
+            .generics
+            .iter()
+            .map(|g| g.last_component().to_string())
+            .collect();
         let generic_porition = if generics.is_empty() {
             String::new()
         } else {
@@ -156,7 +162,14 @@ impl std::fmt::Display for FunctionMetadata {
         };
         let parameters: Vec<String> = self.parameters.iter().map(|p| p.to_string()).collect();
         let parameters = parameters.join(",");
-        write!(f, "Function(def {}{}({}): {})", self.symbol.mangled(), generic_porition, parameters, self.return_type)
+        write!(
+            f,
+            "Function(def {}{}({}): {})",
+            self.symbol.mangled(),
+            generic_porition,
+            parameters,
+            self.return_type
+        )
     }
 }
 
@@ -195,7 +208,10 @@ impl SymbolTableBuilder {
     }
 
     fn insert_func_metadata(&mut self, symbol: Symbol, metadata: FunctionMetadata) {
-        self.lib.symbols.borrow_mut().insert_func_metadata(symbol, metadata)
+        self.lib
+            .symbols
+            .borrow_mut()
+            .insert_func_metadata(symbol, metadata)
     }
 
     fn contains_symbol(&mut self, symbol: &Symbol) -> bool {
@@ -225,13 +241,17 @@ impl SymbolTableBuilder {
 
         let type_symbol = name.get_symbol().unwrap();
 
+        trace!(target: "symbol_table", "Building type {} (symbol = {})", name.token.lexeme(), type_symbol);
+
         self.context.push(type_symbol.clone());
 
         let mut field_types: Vec<NodeType> = Vec::new();
         for field in fields {
             let (token, field_type) = self.var_decl_type(field);
             field_types.push(field_type.clone());
-            self.insert(Symbol::new(self.context.last(), token), field_type);
+            let field_symbol = Symbol::new(self.context.last(), token);
+            trace!(target: "symbol_table", "Inserting field {} (symbol = {})", token.lexeme(), field_symbol);
+            self.insert(field_symbol, field_type);
         }
 
         self.build_functions(&methods);
@@ -242,27 +262,26 @@ impl SymbolTableBuilder {
         let init_symbol = Symbol::init_symbol(self.context.last());
         if !self.contains_symbol(&init_symbol) {
             let instance_type = NodeType::Type(name.get_symbol().unwrap().clone());
-            let init_type = NodeType::Function(field_types.clone(), Box::new(instance_type.clone()));
+            let init_type =
+                NodeType::Function(field_types.clone(), Box::new(instance_type.clone()));
             self.insert(init_symbol.clone(), init_type.clone());
 
-            self.insert_func_metadata(init_symbol.clone(), FunctionMetadata {
-                symbol: init_symbol,
-                generics: Vec::new(),
-                parameters: field_types.clone(),
-                return_type: instance_type,
-            })
-            
-            // self.insert_func_metadata(new_symbol.clone(), FunctionMetadata {
-            //     symbol: type_symbol.clone(),
-            //     generics: Vec::new(),
-            //     parameters: field_types,
-            //     return_type: instance_type,
-            // })
+            self.insert_func_metadata(
+                init_symbol.clone(),
+                FunctionMetadata {
+                    symbol: init_symbol,
+                    generics: Vec::new(),
+                    parameters: field_types.clone(),
+                    return_type: instance_type,
+                },
+            )
         }
 
         self.context.pop(); // Meta pop
 
         self.context.pop(); // Type pop
+
+        trace!(target: "symbol_table", "Finished building type {}", name.token.lexeme());
     }
 
     fn build_functions(&mut self, stmts: &[Stmt]) {
@@ -273,7 +292,9 @@ impl SymbolTableBuilder {
 
     fn build_function(&mut self, stmt: &Stmt) {
         let (name, generics, params, return_type) = match &stmt.kind {
-            StmtKind::FunctionDecl(name, generics, params, return_type, ..) => (name, generics, params, return_type),
+            StmtKind::FunctionDecl(name, generics, params, return_type, ..) => {
+                (name, generics, params, return_type)
+            }
             StmtKind::Builtin(internal) => {
                 guard!(StmtKind::FunctionDecl[name, generics, params, return_type, _body, _meta] = &internal.kind);
                 (name, generics, params, return_type)
@@ -283,12 +304,18 @@ impl SymbolTableBuilder {
 
         let function_symbol = Symbol::new(self.context.last(), &name.token);
 
+        trace!(target: "symbol_table", "Building function {} (symbol = {})", name.token.lexeme(), function_symbol);
+
         self.context.push(function_symbol.clone());
 
         let mut generic_symbols = Vec::new();
         for (index, generic) in generics.iter().enumerate() {
             let generic_symbol = Symbol::new(self.context.last(), &generic.token);
-            self.insert(generic_symbol.clone(), NodeType::Metatype(generic_symbol.clone()));
+            self.insert(
+                generic_symbol.clone(),
+                NodeType::Metatype(generic_symbol.clone()),
+            );
+            trace!(target: "symbol_table", "Inserting generic {} (symbol = {})", generic.token.lexeme(), generic_symbol);
             generic_symbols.push(generic_symbol);
         }
 
@@ -311,6 +338,8 @@ impl SymbolTableBuilder {
         };
         self.insert_func_metadata(function_symbol.clone(), function_metadata);
 
+        trace!(target: "symbol_table", "Finished building function {} -- {}", name.token.lexeme(), new_type);
+
         self.insert(function_symbol, new_type.clone());
         name.set_type(new_type.clone());
     }
@@ -323,61 +352,11 @@ impl SymbolTableBuilder {
 
     fn resolve_explicit_type(&self, explicit_type: &ExplicitType) -> NodeType {
         if let Some(node_type) = explicit_type.resolve(&self.lib, &self.context) {
+            trace!(target: "symbol_table", "Resolved explicit type {} to {}", explicit_type.span().lexeme(), node_type);
             node_type
         } else {
             // Isn't a real type; make a fake type and type checker will catch the error
             NodeType::Type(Symbol::new_str(None, "_fake_type"))
         }
     }
-
-    /*
-    fn symbol_for_type_token(&self, token: &Token) -> Symbol {
-        for parent in self.context.iter().rev() {
-            let non_top_level_symbol = Symbol::new(Some(parent), token);
-            if let Some(NodeType::Metatype(_)) = self.table.get_type(&non_top_level_symbol) {
-                return non_top_level_symbol;
-            }
-        }
-
-        let top_level_symbol = Symbol::new(None, token);
-
-        if let Some(NodeType::Metatype(_)) = self.table.get_type(&top_level_symbol) {
-            top_level_symbol
-        } else if let Some(NodeType::Metatype(_)) = self.lib.resolve_symbol(&top_level_symbol) {
-            top_level_symbol
-        } else {
-            // Isn't a real type; make a fake type and type checker will catch the error
-            Symbol::new(None, token)
-        }
-    }
-
-    fn resolve_explicit_type_expr(&self, type_expr: &Expr) -> NodeType {
-        guard!(ExprKind::ExplicitType[category] = &type_expr.kind);
-
-        let node_type = match category {
-            ExplicitTypeCategory::Simple(token) => {
-                if let Some(primitive) = NodeType::primitive(&token.token) {
-                    primitive
-                } else {
-                    NodeType::Type(self.symbol_for_type_token(&token.token))
-                }
-            }
-            ExplicitTypeCategory::Pointer(to) => {
-                let inner = self.resolve_explicit_type_expr(to);
-                NodeType::Pointer(Box::new(inner))
-            }
-            ExplicitTypeCategory::Array(of, count_token) => {
-                let inner = self.resolve_explicit_type_expr(of);
-                match count_token.lexeme().parse::<usize>() {
-                    Ok(count) => {
-                        let size = ArraySize::Known(count);
-                        NodeType::Array(Box::new(inner), size)
-                    }
-                    Err(..) => NodeType::Array(Box::new(inner), ArraySize::Unknown),
-                }
-            }
-        };
-
-        type_expr.set_type(node_type).ok().unwrap()
-    }*/
 }

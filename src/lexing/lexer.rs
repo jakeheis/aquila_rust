@@ -1,6 +1,7 @@
 use super::token::*;
 use crate::diagnostic::*;
 use crate::source::*;
+use log::trace;
 use std::rc::Rc;
 
 pub struct Lexer {
@@ -29,6 +30,7 @@ impl Lexer {
             self.start = self.current;
             let new_token = self.token();
             if let Some(new) = new_token {
+                trace!(target: "lexer", "New token: {}", new);
                 tokens.push(new);
             }
         }

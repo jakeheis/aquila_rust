@@ -75,11 +75,7 @@ impl CWriter {
         self.writeln(&(whole + ";"));
     }
 
-    pub fn type_and_name(
-        &self,
-        var_type: &NodeType,
-        name: &str,
-    ) -> String {
+    pub fn type_and_name(&self, var_type: &NodeType, name: &str) -> String {
         let (t, n) = self.convert_type(var_type, String::from(name));
         format!("{} {}", t, n)
     }
@@ -146,11 +142,7 @@ impl CWriter {
         self.writeln(&line);
     }
 
-    pub fn convert_type(
-        &self,
-        node_type: &NodeType,
-        name: String,
-    ) -> (String, String) {
+    pub fn convert_type(&self, node_type: &NodeType, name: String) -> (String, String) {
         let simple = match node_type {
             NodeType::Void => Some("void"),
             NodeType::Int => Some("int"),
@@ -176,7 +168,7 @@ impl CWriter {
             NodeType::Array(ty, count) => {
                 let (type_portion, name_portion) = self.convert_type(ty, name);
                 (type_portion, format!("{}[{}]", name_portion, count))
-            },
+            }
             other_type => panic!("Can't convert type {}", other_type),
         }
     }
