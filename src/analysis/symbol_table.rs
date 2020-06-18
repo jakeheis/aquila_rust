@@ -29,10 +29,10 @@ impl Symbol {
         Symbol::new_str(parent, "init")
     }
 
-    // pub fn generic_symbol(parent: Option<&Symbol>, index: usize) -> Self {
+    pub fn generic_symbol(parent: Option<&Symbol>, index: usize) -> Self {
         // Symbol::new_str(parent, &format!("{}__Specialization", name.lexeme()))
-        // Symbol::new_str(parent, &format!("{}", index))
-    // }
+        Symbol::new_str(parent, &format!("{}", index))
+    }
 
     // pub fn
 
@@ -90,27 +90,23 @@ impl std::fmt::Display for Symbol {
 #[derive(Clone)]
 pub struct SymbolTable {
     type_map: HashMap<Symbol, NodeType>,
-    function_map: HashMap<Symbol, FunctionMetadata>,
-}
-
-#[derive(Clone)]
-pub struct FunctionMetadata {
-    symbol: Symbol,
-    generics: Vec<Symbol>,
-    parameters: Vec<NodeType>,
-    return_type: NodeType,
+    function_metadata: HashMap<Symbol, FunctionMetadata>,
 }
 
 impl SymbolTable {
     pub fn new() -> Self {
         SymbolTable {
             type_map: HashMap::new(),
-            function_map: HashMap::new(),
+            function_metadata: HashMap::new(),
         }
     }
 
     pub fn insert(&mut self, symbol: Symbol, node_type: NodeType) {
         self.type_map.insert(symbol, node_type);
+    }
+
+    pub fn insert_func_metadata(&mut self, symbol: Symbol, metadata: FunctionMetadata) {
+        self.function_metadata.insert(symbol, metadata);
     }
 
     pub fn get_type(&self, symbol: &Symbol) -> Option<&NodeType> {
@@ -124,7 +120,33 @@ impl std::fmt::Display for SymbolTable {
         for (symbol, node_type) in self.type_map.iter() {
             writeln!(f, "  {} -> {}", symbol, node_type)?;
         }
+        writeln!(f, "Function metadata:")?;
+        for (symbol, meta) in self.function_metadata.iter() {
+            writeln!(f, "  {} -> {}", symbol, meta)?;
+        }
         Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct FunctionMetadata {
+    symbol: Symbol,
+    generics: Vec<Symbol>,
+    parameters: Vec<NodeType>,
+    return_type: NodeType,
+}
+
+impl std::fmt::Display for FunctionMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let generics: Vec<String> = self.generics.iter().map(|g| g.last_component().to_string()).collect();
+        let generic_porition = if generics.is_empty() {
+            String::new()
+        } else {
+            format!("|{}|", generics.join(","))
+        };
+        let parameters: Vec<String> = self.parameters.iter().map(|p| p.to_string()).collect();
+        let parameters = parameters.join(",");
+        write!(f, "Function(def {}{}({}): {})", self.symbol.mangled(), generic_porition, parameters, self.return_type)
     }
 }
 
@@ -160,6 +182,10 @@ impl SymbolTableBuilder {
 
     fn insert(&mut self, symbol: Symbol, node_type: NodeType) {
         self.lib.symbols.borrow_mut().insert(symbol, node_type);
+    }
+
+    fn insert_func_metadata(&mut self, symbol: Symbol, metadata: FunctionMetadata) {
+        self.lib.symbols.borrow_mut().insert_func_metadata(symbol, metadata)
     }
 
     fn contains_symbol(&mut self, symbol: &Symbol) -> bool {
@@ -229,9 +255,9 @@ impl SymbolTableBuilder {
             _ => unreachable!(),
         };
 
-        let new_symbol = Symbol::new(self.context.last(), &name.token);
+        let function_symbol = Symbol::new(self.context.last(), &name.token);
 
-        self.context.push(new_symbol.clone());
+        self.context.push(function_symbol.clone());
 
         let mut generic_symbols = Vec::new();
         for (index, generic) in generics.iter().enumerate() {
@@ -249,9 +275,17 @@ impl SymbolTableBuilder {
 
         self.context.pop();
 
-        let new_type = NodeType::Function(param_types, generic_symbols, Box::new(return_type));
+        let new_type = NodeType::Function(param_types.clone(), generic_symbols.clone(), Box::new(return_type.clone()));
 
-        self.insert(new_symbol, new_type.clone());
+        let function_metadata = FunctionMetadata {
+            symbol: function_symbol.clone(),
+            generics: generic_symbols,
+            parameters: param_types.clone(),
+            return_type: return_type,
+        };
+        self.insert_func_metadata(function_symbol.clone(), function_metadata);
+
+        self.insert(function_symbol, new_type.clone());
         name.set_type(new_type.clone());
     }
 
