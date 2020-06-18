@@ -37,10 +37,14 @@ impl Scope {
 
         trace!(target: "type_checker", "Defining {} (symbol = {}) as {}", name.span().lexeme(), new_symbol, var_type);
 
-        self.symbols.insert(new_symbol.clone(), var_type.clone());
+        self.symbols.insert(new_symbol.clone(), var_type.clone(), name.span().clone());
 
         name.set_symbol(new_symbol);
         name.set_type(var_type.clone());
+    }
+
+    fn put_in_scope(&mut self, symbol: &Symbol, var_type: &NodeType) {
+        self.symbols.insert(symbol.clone(), var_type.clone(), Span::empty());
     }
 }
 
@@ -145,6 +149,13 @@ impl TypeChecker {
         self.push_scope(symbol, None);
     }
 
+    fn push_type_scope(&mut self, name: &TypedToken) -> (Symbol, TypeMetadata) {
+        let symbol = Symbol::new(self.current_symbol(), &name.token);
+        let metadata = self.lib.type_metadata(&symbol).unwrap();
+        self.push_scope(symbol.clone(), None);
+        (symbol, metadata)
+    }
+
     fn push_function_scope(&mut self, name: &TypedToken) -> (Symbol, FunctionMetadata) {
         let symbol = Symbol::new(self.current_symbol(), &name.token);
         let metadata = self.lib.function_metadata(&symbol).unwrap();
@@ -242,37 +253,6 @@ impl TypeChecker {
         node_type.clone()
     }
 
-    // fn specialize_type<T: ContainsSpan>(&self, span: &T, node_type: &NodeType, map: &HashMap<Symbol, NodeType>) -> Result {
-    //     match node_type {
-    //         NodeType::Type(potential_generic) => {
-    //             if map.contains_key(&potential_generic) {
-    //                 return Err(Diagnostic::error(span, "Can only use generics behind a pointer"))
-    //             }
-    //         },
-    //         NodeType::Pointer(to) => {
-    //             let to: &NodeType = &to;
-    //             match to {
-    //                 NodeType::Type(potential_generic) => {
-    //                     if let Some(mapped) = map.get(&potential_generic) {
-    //                         return Ok(NodeType::pointer_to(mapped.clone()));
-    //                     }
-    //                 },
-    //                 _ => {
-    //                     let new_inner = self.specialize_type(span, to, map)?;
-    //                     return Ok(NodeType::pointer_to(new_inner));
-    //                 }
-    //             }
-    //         },
-    //         NodeType::Array(of, size) => {
-    //             let inner = self.specialize_type(span, of, map)?;
-    //             return Ok(NodeType::Array(Box::new(inner), *size));
-    //         },
-    //         _ => (),
-    //     }
-
-    //     Ok(node_type.clone())
-    // }
-
     fn resolve_explicit_type(&mut self, explicit_type: &ExplicitType) -> Result {
         let context: Vec<Symbol> = self
             .scopes
@@ -306,23 +286,22 @@ impl StmtVisitor for TypeChecker {
         methods: &[Stmt],
         meta_methods: &[Stmt],
     ) -> Analysis {
-        let symbol = self.push_scope_named(name.span().lexeme());
-        name.set_symbol(symbol);
+        let (_, metadata) = self.push_type_scope(name);
 
         self.push_scope_meta();
+        for meta_method in &metadata.meta_methods {
+            let method_type = self.lib.resolve_symbol(&meta_method).unwrap();
+            self.current_scope().put_in_scope(meta_method, &method_type);
+        }
         self.check_list(meta_methods);
         self.pop_scope();
 
         self.check_list(fields);
 
-        for method in methods {
-            guard!(StmtKind::FunctionDecl[name, _generics, _one, _two, _three, _four] = &method.kind);
-            let name = name.clone();
-            let symbol = Symbol::new(self.current_symbol(), &name.token);
-            let function_type = self.lib.resolve_symbol(&symbol).unwrap().clone();
-            self.current_scope().define_var(&name, &function_type);
+        for method in &metadata.methods {
+            let method_type = self.lib.resolve_symbol(&method).unwrap();
+            self.current_scope().put_in_scope(method, &method_type);
         }
-
         self.check_list(methods);
 
         self.pop_scope();

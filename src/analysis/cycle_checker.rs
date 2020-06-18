@@ -3,34 +3,26 @@ use crate::diagnostic::*;
 use crate::guard;
 use crate::library::*;
 use crate::parsing::*;
-use crate::source::*;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 pub struct CycleChecker {
-    field_map: HashMap<Symbol, (Span, HashSet<Symbol>)>,
+    field_map: HashMap<Symbol, HashSet<Symbol>>,
     reporter: Rc<dyn Reporter>,
 }
 
 impl CycleChecker {
     pub fn check(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Lib {
-        let mut field_map: HashMap<Symbol, (Span, HashSet<Symbol>)> = HashMap::new();
+        let mut field_map: HashMap<Symbol, HashSet<Symbol>> = HashMap::new();
 
-        for stmt in &lib.type_decls {
-            guard!(StmtKind::TypeDecl[name, fields, _methods, _meta_methods] = &stmt.kind);
-
-            let type_symbol = name.get_symbol().unwrap();
-
+        for (type_symbol, type_info) in &lib.symbols.borrow().type_metadata {
             let mut field_set: HashSet<Symbol> = HashSet::new();
-
-            for field in fields {
-                guard!(StmtKind::VariableDecl[name, _explicit_type, _init_value] = &field.kind);
-                if let NodeType::Type(field_type) = name.get_type().unwrap() {
+            for field in &type_info.fields {
+                if let Some(NodeType::Type(field_type)) = lib.resolve_symbol(field) {
                     field_set.insert(field_type.clone());
                 }
             }
-
-            field_map.insert(type_symbol, (name.span().clone(), field_set));
+            field_map.insert(type_symbol.clone(), field_set);
         }
 
         let mut checker = CycleChecker {
@@ -47,7 +39,7 @@ impl CycleChecker {
         let mut visited = HashSet::new();
         for type_symbol in self.field_map.keys() {
             let mut chain = vec![type_symbol.clone()];
-            self.visit(&mut chain, &mut visited);
+            self.visit(&mut chain, &mut visited, lib);
         }
 
         if !self.reporter.has_errored() {
@@ -72,7 +64,7 @@ impl CycleChecker {
         }
     }
 
-    fn visit(&self, chain: &mut Vec<Symbol>, visited: &mut HashSet<Symbol>) {
+    fn visit(&self, chain: &mut Vec<Symbol>, visited: &mut HashSet<Symbol>, lib: &Lib) {
         let cur_symbol = chain.last().unwrap().clone();
 
         if visited.contains(&cur_symbol) {
@@ -81,11 +73,11 @@ impl CycleChecker {
 
         visited.insert(cur_symbol.clone());
 
-        let (span, fields) = self.field_map.get(&cur_symbol).unwrap();
+        let fields = self.field_map.get(&cur_symbol).unwrap();
         for field_symbol in fields {
             if field_symbol == &cur_symbol {
                 self.reporter.report(Diagnostic::error(
-                    span,
+                    &lib.symbol_span(&cur_symbol).unwrap(),
                     "Cannot contain a property of the same type",
                 ));
             } else if chain.contains(field_symbol) {
@@ -94,10 +86,13 @@ impl CycleChecker {
                     cur_symbol.mangled(),
                     field_symbol.mangled()
                 );
-                self.reporter.report(Diagnostic::error(span, &message));
+                self.reporter.report(Diagnostic::error(
+                    &lib.symbol_span(&cur_symbol).unwrap(),
+                    &message
+                ));
             } else {
                 chain.push(field_symbol.clone());
-                self.visit(chain, visited);
+                self.visit(chain, visited, lib);
                 chain.pop();
             }
         }
@@ -115,7 +110,7 @@ impl CycleChecker {
 
         visited.insert(cur_symbol.clone());
 
-        let (_, fields) = self.field_map.get(&cur_symbol).unwrap();
+        let fields = self.field_map.get(&cur_symbol).unwrap();
         for field_symbol in fields {
             self.post_order(list, visited, field_symbol.clone());
         }

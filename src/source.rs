@@ -62,6 +62,19 @@ impl Span {
         }
     }
 
+    pub fn empty() -> Self {
+        let source = SourceImpl {
+            name: String::from("<none>"),
+            content: String::from(""),
+        };
+        Span {
+            source: Rc::new(source),
+            index: 0,
+            length: 0,
+            line: 1,
+        }
+    }
+
     pub fn join<T, U>(lhs: &T, rhs: &U) -> Span
     where
         T: ContainsSpan,

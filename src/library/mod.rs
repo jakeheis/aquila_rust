@@ -6,6 +6,7 @@ use crate::parsing::*;
 use crate::source::{self, Source};
 use std::cell::RefCell;
 use std::rc::Rc;
+use crate::source::*;
 
 pub struct Lib {
     pub name: String,
@@ -118,12 +119,38 @@ impl Lib {
         }
     }
 
+    pub fn type_metadata(&self, symbol: &Symbol) -> Option<TypeMetadata> {
+        if let Some(found) = self.symbols.borrow().get_type_metadata(symbol) {
+            Some(found.clone())
+        } else {
+            for dep in &self.dependencies {
+                if let Some(found) = dep.type_metadata(symbol) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+    }
+
     pub fn function_metadata(&self, symbol: &Symbol) -> Option<FunctionMetadata> {
         if let Some(found) = self.symbols.borrow().get_func_metadata(symbol) {
             Some(found.clone())
         } else {
             for dep in &self.dependencies {
                 if let Some(found) = dep.function_metadata(symbol) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+    }
+
+    pub fn symbol_span(&self, symbol: &Symbol) -> Option<Span> {
+        if let Some(found) = self.symbols.borrow().span_map.get(symbol) {
+            Some(found.clone())
+        } else {
+            for dep in &self.dependencies {
+                if let Some(found) = dep.symbol_span(symbol) {
                     return Some(found);
                 }
             }
