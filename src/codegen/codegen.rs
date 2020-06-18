@@ -58,9 +58,6 @@ impl Codegen {
 
     fn write(lib: Rc<Lib>, writer: CWriter) -> CWriter {
         let mut writer = writer;
-        for dep in &lib.dependencies {
-            writer = Codegen::write(Rc::clone(dep), writer);
-        }
 
         writer.writeln(&format!("\n// {}", lib.name));
 
@@ -76,17 +73,45 @@ impl Codegen {
         };
 
         codegen.stage = CodegenStage::ForwardStructDecls;
+        
         codegen.gen_stmts(&lib.type_decls);
+        for dep in &lib.dependencies {
+            // TOOD: this will only work with lib chains 1 deep
+            codegen.gen_stmts(&dep.type_decls);
+        }
+
         codegen.stage = CodegenStage::StructBodies;
         codegen.gen_stmts(&lib.type_decls);
+        for dep in &lib.dependencies {
+            // TOOD: this will only work with lib chains 1 deep
+            codegen.gen_stmts(&dep.type_decls);
+        }
 
         codegen.stage = CodegenStage::FuncPrototypes;
         codegen.gen_stmts(&lib.type_decls);
+        for dep in &lib.dependencies {
+            // TOOD: this will only work with lib chains 1 deep
+            codegen.gen_stmts(&dep.type_decls);
+        }
+
         codegen.gen_stmts(&lib.function_decls);
+        for dep in &lib.dependencies {
+            // TOOD: this will only work with lib chains 1 deep
+            codegen.gen_stmts(&dep.function_decls);
+        }
 
         codegen.stage = CodegenStage::FuncBodies;
         codegen.gen_stmts(&lib.type_decls);
+        for dep in &lib.dependencies {
+            // TOOD: this will only work with lib chains 1 deep
+            codegen.gen_stmts(&dep.type_decls);
+        }
+
         codegen.gen_stmts(&lib.function_decls);
+        for dep in &lib.dependencies {
+            // TOOD: this will only work with lib chains 1 deep
+            codegen.gen_stmts(&dep.function_decls);
+        }
 
         if !lib.other.is_empty() {
             codegen.write_main(&lib.other);
@@ -144,6 +169,20 @@ impl Codegen {
         self.writer.end_conditional_block();
     }
 
+    fn function_name(&self, symbol: &Symbol, specializations: &[NodeType]) -> String {
+        let function_name = symbol.mangled();
+
+        let special_part = specializations.iter().map(|s| {
+            match s {
+                NodeType::Type(ty) => ty.mangled(),
+                NodeType::Int | NodeType::Void | NodeType::Bool | NodeType::Byte => s.to_string(),
+                _ => panic!(),
+            }
+        }).collect::<Vec<_>>().join("__");
+
+        function_name + &special_part
+    }
+
     fn write_function(&mut self, name: &TypedToken, params: &[Stmt], body: &[Stmt], specializations: Vec<NodeType>, is_meta: bool) {
         let func_symbol = name.get_symbol().unwrap();
         let func_type = name.get_type().unwrap();
@@ -180,6 +219,8 @@ impl Codegen {
             );
         }
 
+        let function_name = self.function_name(&func_symbol, &self.specializations);
+
         if self.stage == CodegenStage::FuncPrototypes {
             if self.is_builtin {
                 if core::should_write_builtin(&func_symbol) {
@@ -191,7 +232,7 @@ impl Codegen {
                 }
             } else {
                 self.writer
-                    .write_function_prototype(&ret_type, &func_symbol.mangled(), &params);
+                    .write_function_prototype(&ret_type, &function_name, &params);
             }
         } else {
             if self.is_builtin {
@@ -203,7 +244,7 @@ impl Codegen {
                 }
             } else {
                 self.writer
-                    .start_decl_func(&ret_type, &func_symbol.mangled(), &params);
+                    .start_decl_func(&ret_type, &function_name, &params);
                 self.gen_stmts(body);
                 self.writer.end_decl_func();
             }
@@ -471,10 +512,9 @@ impl ExprVisitor for Codegen {
         let resolved = self.lib.resolve_symbol(&function_symbol).unwrap();
         guard!(NodeType::Function[_one, _two] = resolved);
 
-        // for (specialization, generic) in specializations.iter().zip(&metadata.generics) {
-        //     let gen_type = specialization.guarantee_resolved();
-        //     self.specialization_map.insert(generic.clone(), gen_type);
-        // }
+        let specs = specializations.iter().map(|s| s.guarantee_resolved()).collect::<Vec<_>>();
+
+        let function_name = self.function_name(&function_symbol, &specs);
 
         let rendered = if let Some(target) = target {
             let target_str = target.accept(self);
@@ -494,7 +534,7 @@ impl ExprVisitor for Codegen {
                 args.insert(0, main);
             }
 
-            format!("{}({})", function_symbol.mangled(), args.join(","))
+            format!("{}({})", function_name, args.join(","))
         } else {
             if let Some(parent_symbol) = function_symbol.parent() {
                 if let Some(NodeType::Metatype(_)) = self.lib.resolve_symbol(&parent_symbol) {
@@ -504,7 +544,7 @@ impl ExprVisitor for Codegen {
 
             format!(
                 "{}({})",
-                function.get_symbol().unwrap().mangled(),
+                function_name,
                 args.join(",")
             )
         };

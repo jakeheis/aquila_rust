@@ -88,8 +88,8 @@ type Vec {
         count = count + 1;
     }
 
-    def get(index: int): ptr any {
-        return ptr_offset(storage, index * element_size);
+    def get|T|(index: int): ptr T {
+        return cast|ptr T|(ptr_offset(storage, index * element_size));
     }
 
 }
