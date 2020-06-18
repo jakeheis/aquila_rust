@@ -711,7 +711,7 @@ impl ExprVisitor for TypeChecker {
         specializations: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult {
-        let result: DiagnosticResult<(Vec<NodeType>, Vec<Symbol>, Box<NodeType>)> = if let Some(target) = target {
+        let func_symbol = if let Some(target) = target {
             let target_type = target.accept(self)?;
 
             let object_symbol = match target_type {
@@ -726,9 +726,8 @@ impl ExprVisitor for TypeChecker {
             let method_symbol = Symbol::new(Some(&object_symbol), &function.token);
 
             match self.lib.resolve_symbol(&method_symbol) {
-                Some(NodeType::Function(params, generics, ret_val)) => {
-                    function.set_symbol(method_symbol.clone());
-                    Ok((params, generics, ret_val))
+                Some(NodeType::Function(..)) => {
+                    Ok(method_symbol)
                 },
                 Some(_) => Err(Diagnostic::error(
                     &Span::join(target, function),
@@ -755,47 +754,42 @@ impl ExprVisitor for TypeChecker {
             let (found_symbol, node_type) = resolved.unwrap();
 
             match node_type {
-                NodeType::Function(params, generics, ret) => {
-                    function.set_symbol(found_symbol);
-                    Ok((params, generics, ret))
+                NodeType::Function(..) => {
+                    Ok(found_symbol)
                 }
                 NodeType::Metatype(symbol) => {
                     let meta_symbol = Symbol::meta_symbol(Some(&symbol));
-                    let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
-    
-                    function.set_symbol(init_symbol.clone());
-    
-                    let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
-                    guard!(NodeType::Function[p, generics, r] = init_type);
-                    Ok((p, generics, r))
+                    Ok(Symbol::init_symbol(Some(&meta_symbol)))
                 }
                 _ => Err(Diagnostic::error(
                     function,
                     &format!("Cannot call type {}", node_type),
                 )),
             }
-        };
+        }?;
 
-        let (params, generics, return_type) = result?;
+        function.set_symbol(func_symbol.clone());
+        
+        let metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
         let mut specialization_map: HashMap<Symbol, NodeType> = HashMap::new();
 
         let specializations: std::result::Result<Vec<NodeType>, _> = specializations.iter().map(|s| self.resolve_explicit_type(s)).collect();
         let specializations = specializations?;
 
-        if specializations.len() != generics.len() {
-            let message = format!("Expected {} specializations, got {}", generics.len(), specializations.len());
+        if specializations.len() != metadata.generics.len() {
+            let message = format!("Expected {} specializations, got {}", metadata.generics.len(), specializations.len());
             return Err(Diagnostic::error(function, &message))
         }
 
-        for (spec, gen) in specializations.iter().zip(generics) {
+        for (spec, gen) in specializations.iter().zip(metadata.generics) {
             specialization_map.insert(gen, spec.clone());
         }
 
-        let return_type: NodeType = (*return_type).clone();
+        let return_type: NodeType = metadata.return_type.clone();
         let return_type = self.specialize_type(&return_type, &specialization_map);
 
-        self.check_function_arguments(expr, &function.get_symbol().unwrap(), &specialization_map, &params, args)?;
+        self.check_function_arguments(expr, &function.get_symbol().unwrap(), &specialization_map, &metadata.parameters, args)?;
 
         expr.set_type(return_type)
     }

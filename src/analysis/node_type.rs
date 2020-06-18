@@ -13,7 +13,7 @@ pub enum NodeType {
     Type(Symbol),
     Pointer(Box<NodeType>),
     Array(Box<NodeType>, usize),
-    Function(Vec<NodeType>, Vec<Symbol>, Box<NodeType>),
+    Function(Vec<NodeType>, Box<NodeType>),
     // Generic(Symbol, usize),
     Metatype(Symbol),
     FlexibleFunction(fn(&[NodeType]) -> bool),
@@ -87,7 +87,7 @@ impl NodeType {
             NodeType::Ambiguous => true,
             NodeType::Pointer(ptr) => ptr.contains_ambiguity(),
             NodeType::Array(of, _) => of.contains_ambiguity(),
-            NodeType::Function(params, _, ret) => {
+            NodeType::Function(params, ret) => {
                 for param in params {
                     if param.contains_ambiguity() {
                         return true;
@@ -151,7 +151,7 @@ impl NodeType {
                 true
             }
             (NodeType::Pointer(lhs), NodeType::Pointer(rhs)) => lhs.matches(&rhs),
-            (NodeType::Function(lhs_params, _, lhs_ret), NodeType::Function(rhs_params, _, rhs_ret))
+            (NodeType::Function(lhs_params, lhs_ret), NodeType::Function(rhs_params, rhs_ret))
                 if lhs_params.len() == rhs_params.len() =>
             {
                 if !lhs_ret.matches(&rhs_ret) {
@@ -238,15 +238,8 @@ impl std::fmt::Display for NodeType {
             NodeType::Bool => String::from("bool"),
             NodeType::Byte => String::from("byte"),
             NodeType::Any => String::from("any"),
-            NodeType::Function(params, generics, ret) => {
+            NodeType::Function(params, ret) => {
                 let mut string = String::from("def");
-                if !generics.is_empty() {
-                    let generics: Vec<String> = generics.iter().map(|g| g.id.clone()).collect();
-                    let generics = generics.join(",");
-                    string += "|";
-                    string += &generics;
-                    string += "|";
-                }
                 string += "(";
                 if let Some(first) = params.first() {
                     string += &first.to_string()

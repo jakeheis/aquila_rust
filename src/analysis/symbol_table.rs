@@ -112,6 +112,10 @@ impl SymbolTable {
     pub fn get_type(&self, symbol: &Symbol) -> Option<&NodeType> {
         self.type_map.get(symbol)
     }
+
+    pub fn get_func_metadata(&self, symbol: &Symbol) -> Option<&FunctionMetadata> {
+        self.function_metadata.get(symbol)
+    }
 }
 
 impl std::fmt::Display for SymbolTable {
@@ -130,10 +134,16 @@ impl std::fmt::Display for SymbolTable {
 
 #[derive(Clone)]
 pub struct FunctionMetadata {
-    symbol: Symbol,
-    generics: Vec<Symbol>,
-    parameters: Vec<NodeType>,
-    return_type: NodeType,
+    pub symbol: Symbol,
+    pub generics: Vec<Symbol>,
+    pub parameters: Vec<NodeType>,
+    pub return_type: NodeType,
+}
+
+impl FunctionMetadata {
+    fn full_type(&self) -> NodeType {
+        NodeType::Function(self.parameters.clone(), Box::new(self.return_type.clone()))
+    }
 }
 
 impl std::fmt::Display for FunctionMetadata {
@@ -213,7 +223,9 @@ impl SymbolTableBuilder {
     fn build_type_internal(&mut self, decl: &Stmt) {
         guard!(StmtKind::TypeDecl[name, fields, methods, meta_methods] = &decl.kind);
 
-        self.context.push(name.get_symbol().unwrap().clone());
+        let type_symbol = name.get_symbol().unwrap();
+
+        self.context.push(type_symbol.clone());
 
         let mut field_types: Vec<NodeType> = Vec::new();
         for field in fields {
@@ -230,8 +242,22 @@ impl SymbolTableBuilder {
         let init_symbol = Symbol::init_symbol(self.context.last());
         if !self.contains_symbol(&init_symbol) {
             let instance_type = NodeType::Type(name.get_symbol().unwrap().clone());
-            let init_type = NodeType::Function(field_types, Vec::new(), Box::new(instance_type));
-            self.insert(init_symbol, init_type.clone());
+            let init_type = NodeType::Function(field_types.clone(), Box::new(instance_type.clone()));
+            self.insert(init_symbol.clone(), init_type.clone());
+
+            self.insert_func_metadata(init_symbol.clone(), FunctionMetadata {
+                symbol: init_symbol,
+                generics: Vec::new(),
+                parameters: field_types.clone(),
+                return_type: instance_type,
+            })
+            
+            // self.insert_func_metadata(new_symbol.clone(), FunctionMetadata {
+            //     symbol: type_symbol.clone(),
+            //     generics: Vec::new(),
+            //     parameters: field_types,
+            //     return_type: instance_type,
+            // })
         }
 
         self.context.pop(); // Meta pop
@@ -275,7 +301,7 @@ impl SymbolTableBuilder {
 
         self.context.pop();
 
-        let new_type = NodeType::Function(param_types.clone(), generic_symbols.clone(), Box::new(return_type.clone()));
+        let new_type = NodeType::Function(param_types.clone(), Box::new(return_type.clone()));
 
         let function_metadata = FunctionMetadata {
             symbol: function_symbol.clone(),

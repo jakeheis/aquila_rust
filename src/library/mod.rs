@@ -118,6 +118,19 @@ impl Lib {
         }
     }
 
+    pub fn function_metadata(&self, symbol: &Symbol) -> Option<FunctionMetadata> {
+        if let Some(found) = self.symbols.borrow().get_func_metadata(symbol) {
+            Some(found.clone())
+        } else {
+            for dep in &self.dependencies {
+                if let Some(found) = dep.function_metadata(symbol) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+    }
+
     fn organize_stms(stmts: Vec<Stmt>) -> (Vec<Stmt>, Vec<Stmt>, Vec<Stmt>) {
         let mut type_decls: Vec<Stmt> = Vec::new();
         let mut function_decls: Vec<Stmt> = Vec::new();

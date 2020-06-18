@@ -5,5 +5,5 @@ mod type_checker;
 
 pub use cycle_checker::CycleChecker;
 pub use node_type::{NodeType};
-pub use symbol_table::{Symbol, SymbolTable, SymbolTableBuilder};
+pub use symbol_table::{Symbol, SymbolTable, FunctionMetadata, SymbolTableBuilder};
 pub use type_checker::TypeChecker;

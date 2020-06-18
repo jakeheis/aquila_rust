@@ -210,7 +210,7 @@ impl StmtVisitor for Codegen {
                 let meta_symbol = Symbol::meta_symbol(Some(&struct_symbol));
                 let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
                 let init_type = self.lib.resolve_symbol(&init_symbol).unwrap();
-                guard!(NodeType::Function[field_types, specializations, ret_type] = init_type);
+                guard!(NodeType::Function[field_types, ret_type] = init_type);
 
                 let field_list: Vec<_> = field_types
                     .iter()
@@ -259,7 +259,7 @@ impl StmtVisitor for Codegen {
 
         self.current_func = Some(func_symbol.clone());
 
-        guard!(NodeType::Function[param_types, generics, ret_type] = func_type);
+        guard!(NodeType::Function[param_types, ret_type] = func_type);
         let ret_type: &NodeType = &ret_type;
         let ret_type = self.flatten_generic(&func_symbol, ret_type);
 
@@ -479,21 +479,22 @@ impl ExprVisitor for Codegen {
         let function_symbol = function.get_symbol().unwrap();
         let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
 
+        let metadata = self.lib.function_metadata(&function_symbol).unwrap();
         let resolved = self.lib.resolve_symbol(&function_symbol).unwrap();
-        guard!(NodeType::Function[_one, generics, _two] = resolved);
+        guard!(NodeType::Function[_one, _two] = resolved);
 
-        for (specialization, generic) in specializations.iter().zip(generics) {
+        for (specialization, generic) in specializations.iter().zip(&metadata.generics) {
             let gen_type = specialization.guarantee_resolved();
-            self.specialization_map.insert(generic, gen_type);
+            self.specialization_map.insert(generic.clone(), gen_type);
         }
 
         let rendered = if let Some(target) = target {
             let target_str = target.accept(self);
             let target_str = match &target.kind {
-                ExprKind::FunctionCall(_, first_called, generics, _) => {
+                ExprKind::FunctionCall(_, first_called, _, _) => {
                     let first_called_symbol = first_called.get_symbol().unwrap();
                     let first_called_type = self.lib.resolve_symbol(&first_called_symbol).unwrap();
-                    guard!(NodeType::Function[_params, specializations, first_called_ret_type] = first_called_type);
+                    guard!(NodeType::Function[_params, first_called_ret_type] = first_called_type);
     
                     self.write_temp(&first_called_ret_type, target_str)
                 },
@@ -539,7 +540,7 @@ impl ExprVisitor for Codegen {
             ExprKind::FunctionCall(_, function, generics, _) => {
                 let target_symbol = function.get_symbol().unwrap();
                 let target_type = self.lib.resolve_symbol(&target_symbol).unwrap();
-                guard!(NodeType::Function[_params, specializations, ret_type] = target_type);
+                guard!(NodeType::Function[_params, ret_type] = target_type);
 
                 let temp_name = self.write_temp(&ret_type, target_str);
 
