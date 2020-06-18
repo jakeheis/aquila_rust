@@ -140,7 +140,7 @@ impl std::fmt::Display for SymbolTable {
             writeln!(f, "  {} -> {}", symbol, node_type)?;
         }
         writeln!(f, "Type metadata:")?;
-        for (symbol, metadata) in self.type_metadata.iter() {
+        for (_, metadata) in self.type_metadata.iter() {
             writeln!(f, "{}", metadata)?;
         }
         writeln!(f, "Function metadata:")?;
@@ -159,11 +159,11 @@ pub struct FunctionMetadata {
     pub return_type: NodeType,
 }
 
-impl FunctionMetadata {
-    fn full_type(&self) -> NodeType {
-        NodeType::Function(self.parameters.clone(), Box::new(self.return_type.clone()))
-    }
-}
+// impl FunctionMetadata {
+//     fn full_type(&self) -> NodeType {
+//         NodeType::Function(self.parameters.clone(), Box::new(self.return_type.clone()))
+//     }
+// }
 
 impl std::fmt::Display for FunctionMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -371,7 +371,7 @@ impl SymbolTableBuilder {
             let generic_symbol = Symbol::new(self.context.last(), &generic.token);
             self.insert(
                 generic_symbol.clone(),
-                NodeType::Metatype(generic_symbol.clone()),
+                NodeType::Generic(function_symbol.clone(), index),
                 generic,
             );
             trace!(target: "symbol_table", "Inserting generic {} (symbol = {})", generic.token.lexeme(), generic_symbol);

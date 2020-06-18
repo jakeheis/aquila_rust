@@ -8,7 +8,6 @@ use crate::parsing::*;
 use crate::source::*;
 use log::trace;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 type Result = DiagnosticResult<NodeType>;
@@ -206,12 +205,11 @@ impl TypeChecker {
     fn check_function_arguments(
         &mut self,
         expr: &Expr,
-        function_symbol: &Symbol,
-        map: &HashMap<Symbol, NodeType>,
+        _function_symbol: &Symbol,
+        specializations: &[NodeType],
         param_types: &[NodeType],
         args: &[Expr],
     ) -> DiagnosticResult<()> {
-        println!("checking params of {}", function_symbol);
         let arg_types: DiagnosticResult<Vec<NodeType>> =
             args.iter().map(|a| a.accept(self)).collect();
         let arg_types = arg_types?;
@@ -228,29 +226,23 @@ impl TypeChecker {
         }
 
         for ((index, param), arg) in param_types.iter().enumerate().zip(arg_types) {
-            let param_spec = self.specialize_type(param, &map);
+            let param_spec = self.specialize_type(param, &specializations);
             self.check_type_match(&args[index], &arg, &param_spec)?;
         }
 
         Ok(())
     }
 
-    fn specialize_type(&self, node_type: &NodeType, map: &HashMap<Symbol, NodeType>) -> NodeType {
+    fn specialize_type(&self, node_type: &NodeType, specializations: &[NodeType]) -> NodeType {
         match node_type {
-            NodeType::Type(potential_generic) => {
-                if let Some(node_type) = map.get(&potential_generic) {
-                    return node_type.clone();
-                }
-            }
-            NodeType::Pointer(to) => return NodeType::pointer_to(self.specialize_type(&to, map)),
+            NodeType::Generic(_, index) => specializations[*index].clone(),
+            NodeType::Pointer(to) => NodeType::pointer_to(self.specialize_type(&to, specializations)),
             NodeType::Array(of, size) => {
-                let specialized = self.specialize_type(&of, map);
+                let specialized = self.specialize_type(&of, specializations);
                 return NodeType::Array(Box::new(specialized), *size);
             }
-            _ => (),
+            _ => node_type.clone(),
         }
-
-        node_type.clone()
     }
 
     fn resolve_explicit_type(&mut self, explicit_type: &ExplicitType) -> Result {
@@ -321,12 +313,12 @@ impl StmtVisitor for TypeChecker {
         body: &[Stmt],
         _is_meta: bool,
     ) -> Analysis {
-        let (symbol, metadata) = self.push_function_scope(name);
-        name.set_symbol(symbol.clone());
+        let (func_symbol, metadata) = self.push_function_scope(name);
+        name.set_symbol(func_symbol.clone());
 
-        for (token, symbol) in generics.iter().zip(&metadata.generics) {
-            self.current_scope()
-                .define_var(token, &NodeType::Metatype(symbol.clone()));
+        for (index, token) in generics.iter().enumerate() {
+            let generic_type = NodeType::Generic(func_symbol.clone(), index);
+            self.current_scope().define_var(token, &generic_type);
         }
 
         let explicit_type_span = explicit_return_type.as_ref();
@@ -696,7 +688,7 @@ impl ExprVisitor for TypeChecker {
                 None => Err(Diagnostic::error(
                     &Span::join(target, function),
                     &format!(
-                        "Type '{}' does not has method '{}'",
+                        "Type '{}' does not have method '{}'",
                         object_symbol.id,
                         function.span().lexeme()
                     ),
@@ -726,8 +718,6 @@ impl ExprVisitor for TypeChecker {
 
         let metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
-        let mut specialization_map: HashMap<Symbol, NodeType> = HashMap::new();
-
         let specializations: std::result::Result<Vec<NodeType>, _> = specializations
             .iter()
             .map(|s| self.resolve_explicit_type(s))
@@ -743,17 +733,13 @@ impl ExprVisitor for TypeChecker {
             return Err(Diagnostic::error(function, &message));
         }
 
-        for (spec, gen) in specializations.iter().zip(metadata.generics) {
-            specialization_map.insert(gen, spec.clone());
-        }
-
         let return_type: NodeType = metadata.return_type.clone();
-        let return_type = self.specialize_type(&return_type, &specialization_map);
+        let return_type = self.specialize_type(&return_type, &specializations);
 
         self.check_function_arguments(
             expr,
             &function.get_symbol().unwrap(),
-            &specialization_map,
+            &specializations,
             &metadata.parameters,
             args,
         )?;

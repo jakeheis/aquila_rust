@@ -154,14 +154,7 @@ impl Codegen {
 
     fn flatten_generic(&self, function: &Symbol, node_type: &NodeType) -> NodeType {
         match &node_type {
-            NodeType::Type(ty) => {
-                // let meta_symbol =
-                if function.owns(ty) && self.lib.resolve_symbol(&ty).is_some() {
-                    NodeType::Void
-                } else {
-                    node_type.clone()
-                }
-            }
+            NodeType::Generic(..) => NodeType::Void,
             NodeType::Pointer(to) => NodeType::pointer_to(self.flatten_generic(function, to)),
             NodeType::Array(of, size) => {
                 let of = self.flatten_generic(function, of);

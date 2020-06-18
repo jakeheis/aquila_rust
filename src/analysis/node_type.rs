@@ -1,8 +1,8 @@
 use super::symbol_table::*;
-use crate::guard;
 use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::*;
+use log::trace;
 
 #[derive(Clone)]
 pub enum NodeType {
@@ -14,7 +14,7 @@ pub enum NodeType {
     Pointer(Box<NodeType>),
     Array(Box<NodeType>, usize),
     Function(Vec<NodeType>, Box<NodeType>),
-    // Generic(Symbol, usize),
+    Generic(Symbol, usize),
     Metatype(Symbol),
     FlexibleFunction(fn(&[NodeType]) -> bool),
     Ambiguous,
@@ -47,7 +47,7 @@ impl NodeType {
                 if let Some(primitive) = NodeType::primitive(&token.token) {
                     primitive
                 } else {
-                    NodeType::Type(NodeType::symbol_for_type_token(&token.token, lib, context)?)
+                    NodeType::symbol_for_type_token(&token.token, lib, context)?
                 }
             }
             ExplicitTypeKind::Pointer(to) => {
@@ -66,21 +66,32 @@ impl NodeType {
         Some(node_type)
     }
 
-    fn symbol_for_type_token(token: &Token, lib: &Lib, context: &[Symbol]) -> Option<Symbol> {
-        // println!("trying to find {} -- {}", token.span.entire_line().0, token.lexeme());
+    fn symbol_for_type_token(token: &Token, lib: &Lib, context: &[Symbol]) -> Option<NodeType> {
+        trace!(target: "symbol_table", "Trying to find symbol for {} -- ({})", token.lexeme(), token.span.entire_line().0);
 
         for parent in context.iter().rev() {
             let non_top_level_symbol = Symbol::new(Some(parent), token);
-            // println!("checking {}", non_top_level_symbol);
-            if let Some(NodeType::Metatype(_)) = lib.resolve_symbol(&non_top_level_symbol) {
-                // println!("found {}", non_top_level_symbol);
-                return Some(non_top_level_symbol);
+            let resolved = lib.resolve_symbol(&non_top_level_symbol);
+            match resolved {
+                Some(NodeType::Metatype(metatype)) => {
+                    let instance_type = NodeType::Type(metatype);
+                    trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), instance_type);
+                    return Some(instance_type);
+                },
+                Some(NodeType::Generic(..)) => {
+                    let instance_type = resolved.unwrap();
+                    trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), instance_type);
+                    return Some(instance_type);
+                },
+                _ => (),
             }
         }
 
         let top_level_symbol = Symbol::new(None, token);
-        if let Some(NodeType::Metatype(_)) = lib.resolve_symbol(&top_level_symbol) {
-            Some(top_level_symbol)
+        if let Some(NodeType::Metatype(metatype)) = lib.resolve_symbol(&top_level_symbol) {
+            let instance_type = NodeType::Type(metatype);
+            trace!(target: "symbol_table", "Resolving {} as Typ({}", token.lexeme(), instance_type);
+            Some(instance_type)
         } else {
             None
         }
@@ -177,6 +188,7 @@ impl NodeType {
 
                 lhs_size == rhs_size
             }
+            (NodeType::Generic(f1, n1), NodeType::Generic(f2, n2)) if f1 == f2 && n1 == n2 => true,
             (NodeType::Ambiguous, _) => true,
             (_, NodeType::Any) => true,
             _ => false,
@@ -259,7 +271,7 @@ impl std::fmt::Display for NodeType {
             NodeType::Array(ty, size) => format!("Array<{}, count={}>", ty, size),
             NodeType::Type(ty) => format!("Type({})", ty.id),
             NodeType::Metatype(ty) => format!("Metatype({})", ty.id),
-            // NodeType::Generic(symbol, index) => format!("Generic({}, index: {})", symbol, index),
+            NodeType::Generic(symbol, index) => format!("Generic({}, index: {})", symbol, index),
             NodeType::Ambiguous => String::from("<ambiguous>"),
             NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
         };
