@@ -37,38 +37,29 @@ impl NodeType {
         NodeType::Pointer(Box::new(pointee))
     }
 
-    pub fn deduce_from(expr: &Expr, lib: &Lib, context: &[Symbol]) -> Option<Self> {
-        // println!("trying to deduce {} -- {}", expr.span.entire_line().0, expr.lexeme());
-
-        if let Some(already_typed) = expr.get_type() {
-            // println!("already typed {}", already_typed);
-            return Some(already_typed.clone());
-        }
-
-        guard!(ExprKind::ExplicitType[category] = &expr.kind);
-
-        let node_type = match category {
-            ExplicitTypeCategory::Simple(token) => {
+    pub fn deduce_from(explicit_type: &ExplicitType, lib: &Lib, context: &[Symbol]) -> Option<Self> {
+        let node_type = match &explicit_type.kind {
+            ExplicitTypeKind::Simple(token) => {
                 if let Some(primitive) = NodeType::primitive(&token.token) {
                     primitive
                 } else {
                     NodeType::Type(NodeType::symbol_for_type_token(&token.token, lib, context)?)
                 }
             }
-            ExplicitTypeCategory::Pointer(to) => {
+            ExplicitTypeKind::Pointer(to) => {
+                let to: &ExplicitType = &to;
                 let inner = NodeType::deduce_from(to, lib, context)?;
                 NodeType::Pointer(Box::new(inner))
             }
-            ExplicitTypeCategory::Array(of, count_token) => {
+            ExplicitTypeKind::Array(of, count_token) => {
+                let of: &ExplicitType = &of;
                 let inner = NodeType::deduce_from(of, lib, context)?;
                 let count = count_token.lexeme().parse::<usize>().ok().unwrap();
                 NodeType::Array(Box::new(inner), count)
             }
         };
 
-        // println!("setting {} -- {} -- to {}", expr.span.entire_line().0, expr.lexeme(), node_type);
-
-        expr.set_type(node_type).ok()
+        Some(node_type)
     }
 
     fn symbol_for_type_token(token: &Token, lib: &Lib, context: &[Symbol]) -> Option<Symbol> {

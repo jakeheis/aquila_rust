@@ -250,7 +250,7 @@ impl StmtVisitor for Codegen {
         name: &TypedToken,
         generics: &[TypedToken],
         params: &[Stmt],
-        _return_type: &Option<Expr>,
+        _return_type: &Option<ExplicitType>,
         body: &[Stmt],
         is_meta: bool,
     ) -> Self::StmtResult {
@@ -326,7 +326,7 @@ impl StmtVisitor for Codegen {
         &mut self,
         _stmt: &Stmt,
         name: &TypedToken,
-        _kind: &Option<Expr>,
+        _kind: &Option<ExplicitType>,
         value: &Option<Expr>,
     ) -> Self::StmtResult {
         let var_symbol = name.get_symbol().unwrap();
@@ -472,7 +472,7 @@ impl ExprVisitor for Codegen {
         &mut self,
         expr: &Expr,
         function: &ResolvedToken,
-        specializations: &[Expr],
+        specializations: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult {
         println!("Making args for {}", function.token.lexeme());
@@ -484,7 +484,7 @@ impl ExprVisitor for Codegen {
         guard!(NodeType::Function[_one, generics, _two] = resolved);
 
         for (specialization, generic) in specializations.iter().zip(generics) {
-            let gen_type = specialization.get_type().unwrap();
+            let gen_type = specialization.guarantee_resolved();
             println!("inserting toija {} -> {}", generic, gen_type);
             self.specialization_map.insert(generic, gen_type);
         }
@@ -511,7 +511,7 @@ impl ExprVisitor for Codegen {
         _expr: &Expr,
         object: &Expr,
         method: &ResolvedToken,
-        generics: &[Expr],
+        generics: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult {
         let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
@@ -617,20 +617,12 @@ impl ExprVisitor for Codegen {
         format!("{}[{}]", target, index)
     }
 
-    fn visit_cast_expr(&mut self, _expr: &Expr, explicit_type: &Expr, value: &Expr) -> Self::ExprResult {
-        let cast_type = explicit_type.get_type().unwrap();
+    fn visit_cast_expr(&mut self, _expr: &Expr, explicit_type: &ExplicitType, value: &Expr) -> Self::ExprResult {
+        let cast_type = explicit_type.guarantee_resolved();
         let cast_type = self.flatten_generic_opt(&self.current_func, &cast_type);
         let (cast_type, _) = self.writer.convert_type(&cast_type, String::new());
         let value = value.accept(self);
         
         format!("({})({})", cast_type, value)
-    }
-
-    fn visit_explicit_type_expr(
-        &mut self,
-        _expr: &Expr,
-        _category: &ExplicitTypeCategory,
-    ) -> Self::ExprResult {
-        unreachable!()
     }
 }

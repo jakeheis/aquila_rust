@@ -90,12 +90,22 @@ impl std::fmt::Display for Symbol {
 #[derive(Clone)]
 pub struct SymbolTable {
     type_map: HashMap<Symbol, NodeType>,
+    function_map: HashMap<Symbol, FunctionMetadata>,
+}
+
+#[derive(Clone)]
+pub struct FunctionMetadata {
+    symbol: Symbol,
+    generics: Vec<Symbol>,
+    parameters: Vec<NodeType>,
+    return_type: NodeType,
 }
 
 impl SymbolTable {
     pub fn new() -> Self {
         SymbolTable {
             type_map: HashMap::new(),
+            function_map: HashMap::new(),
         }
     }
 
@@ -234,7 +244,7 @@ impl SymbolTableBuilder {
 
         let return_type = return_type
             .as_ref()
-            .map(|r| self.resolve_explicit_type_expr(r))
+            .map(|r| self.resolve_explicit_type(r))
             .unwrap_or(NodeType::Void);
 
         self.context.pop();
@@ -247,12 +257,12 @@ impl SymbolTableBuilder {
 
     fn var_decl_type<'a>(&self, var_decl: &'a Stmt) -> (&'a Token, NodeType) {
         guard!(StmtKind::VariableDecl[name, explicit_type, _value] = &var_decl.kind);
-        let explicit_type = self.resolve_explicit_type_expr(explicit_type.as_ref().unwrap());
+        let explicit_type = self.resolve_explicit_type(explicit_type.as_ref().unwrap());
         (&name.token, explicit_type)
     }
 
-    fn resolve_explicit_type_expr(&self, expr: &Expr) -> NodeType {
-        if let Some(node_type) = NodeType::deduce_from(expr, &self.lib, &self.context) {
+    fn resolve_explicit_type(&self, explicit_type: &ExplicitType) -> NodeType {
+        if let Some(node_type) = explicit_type.resolve(&self.lib, &self.context) {
             node_type
         } else {
             // Isn't a real type; make a fake type and type checker will catch the error

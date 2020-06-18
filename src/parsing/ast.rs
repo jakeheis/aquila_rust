@@ -3,11 +3,12 @@ use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::source::*;
 use std::cell::RefCell;
+use crate::library::Lib;
 
 pub enum StmtKind {
     TypeDecl(TypedToken, Vec<Stmt>, Vec<Stmt>, Vec<Stmt>),
-    FunctionDecl(TypedToken, Vec<TypedToken>, Vec<Stmt>, Option<Expr>, Vec<Stmt>, bool),
-    VariableDecl(TypedToken, Option<Expr>, Option<Expr>),
+    FunctionDecl(TypedToken, Vec<TypedToken>, Vec<Stmt>, Option<ExplicitType>, Vec<Stmt>, bool),
+    VariableDecl(TypedToken, Option<ExplicitType>, Option<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     WhileStmt(Expr, Vec<Stmt>),
     ForStmt(TypedToken, Expr, Vec<Stmt>),
@@ -76,7 +77,7 @@ impl Stmt {
         name: Token,
         generics: Vec<Token>,
         params: Vec<Stmt>,
-        return_type: Option<Expr>,
+        return_type: Option<ExplicitType>,
         body: Vec<Stmt>,
         right_brace_span: Span,
         is_meta: bool,
@@ -89,7 +90,7 @@ impl Stmt {
         )
     }
 
-    pub fn variable_decl(name: Token, explicit_type: Option<Expr>, value: Option<Expr>) -> Self {
+    pub fn variable_decl(name: Token, explicit_type: Option<ExplicitType>, value: Option<Expr>) -> Self {
         let end_span: &Span = if let Some(value) = &value {
             value.span()
         } else if let Some(explicit_type) = &explicit_type {
@@ -178,7 +179,7 @@ pub trait StmtVisitor {
         name: &TypedToken,
         generics: &[TypedToken],
         params: &[Stmt],
-        return_type: &Option<Expr>,
+        return_type: &Option<ExplicitType>,
         body: &[Stmt],
         is_meta: bool,
     ) -> Self::StmtResult;
@@ -187,7 +188,7 @@ pub trait StmtVisitor {
         &mut self,
         stmt: &Stmt,
         name: &TypedToken,
-        kind: &Option<Expr>,
+        explicit_type: &Option<ExplicitType>,
         value: &Option<Expr>,
     ) -> Self::StmtResult;
 
@@ -296,25 +297,57 @@ impl ContainsSpan for ResolvedToken {
     }
 }
 
-pub enum ExplicitTypeCategory {
+pub enum ExplicitTypeKind {
     Simple(ResolvedToken),
-    Array(Box<Expr>, Token),
-    Pointer(Box<Expr>),
+    Array(Box<ExplicitType>, Token),
+    Pointer(Box<ExplicitType>),
+}
+
+pub struct ExplicitType {
+    pub kind: ExplicitTypeKind,
+    span: Span,
+    cached_type: RefCell<Option<NodeType>>
+}
+
+impl ExplicitType {
+    pub fn new(start: Span, kind: ExplicitTypeKind, end: &Span) -> Self {
+        let span = Span::join(&start, end);
+        ExplicitType {
+            kind,
+            span,
+            cached_type: RefCell::new(None),
+        }
+    }
+
+    pub fn resolve(&self, lib: &Lib, context: &[Symbol]) -> Option<NodeType> {
+        let result = NodeType::deduce_from(self, lib, context);
+        self.cached_type.replace(result.clone());
+        result
+    }
+
+    pub fn guarantee_resolved(&self) -> NodeType {
+        self.cached_type.borrow().as_ref().unwrap().clone()
+    }
+}
+
+impl ContainsSpan for ExplicitType {
+    fn span(&self) -> &Span {
+        &self.span
+    }
 }
 
 pub enum ExprKind {
     Assignment(Box<Expr>, Box<Expr>),
     Binary(Box<Expr>, Token, Box<Expr>),
     Unary(Token, Box<Expr>),
-    FunctionCall(ResolvedToken, Vec<Expr>, Vec<Expr>),
-    MethodCall(Box<Expr>, ResolvedToken, Vec<Expr>, Vec<Expr>),
+    FunctionCall(ResolvedToken, Vec<ExplicitType>, Vec<Expr>),
+    MethodCall(Box<Expr>, ResolvedToken, Vec<ExplicitType>, Vec<Expr>),
     Field(Box<Expr>, ResolvedToken),
     Literal(Token),
     Variable(ResolvedToken),
     Array(Vec<Expr>),
     Subscript(Box<Expr>, Box<Expr>),
-    Cast(Box<Expr>, Box<Expr>),
-    ExplicitType(ExplicitTypeCategory),
+    Cast(Box<ExplicitType>, Box<Expr>),
 }
 
 pub struct Expr {
@@ -360,7 +393,6 @@ impl Expr {
             ExprKind::Array(elements) => visitor.visit_array_expr(&self, elements),
             ExprKind::Subscript(target, arg) => visitor.visit_subscript_expr(&self, target, arg),
             ExprKind::Cast(exp_type, value) => visitor.visit_cast_expr(&self, &exp_type, &value),
-            ExprKind::ExplicitType(category) => visitor.visit_explicit_type_expr(&self, &category),
         }
     }
 
@@ -385,7 +417,7 @@ impl Expr {
         Expr::new(ExprKind::Unary(op, Box::new(expr)), span)
     }
 
-    pub fn function_call(function: ResolvedToken, generics: Vec<Expr>, args: Vec<Expr>, right_paren: &Token) -> Self {
+    pub fn function_call(function: ResolvedToken, generics: Vec<ExplicitType>, args: Vec<Expr>, right_paren: &Token) -> Self {
         let span = Span::join(&function, right_paren);
         Expr::new(ExprKind::FunctionCall(function, generics, args), span)
     }
@@ -393,13 +425,13 @@ impl Expr {
     pub fn method_call(
         object: Box<Expr>,
         method: ResolvedToken,
-        generics: Vec<Expr>,
+        specializations: Vec<ExplicitType>,
         args: Vec<Expr>,
         right_paren: &Token,
     ) -> Self {
         let object_ref: &Expr = &object;
         let span = Span::join(object_ref, right_paren);
-        Expr::new(ExprKind::MethodCall(object, method, generics, args), span)
+        Expr::new(ExprKind::MethodCall(object, method, specializations, args), span)
     }
 
     pub fn field(target: Expr, name: &Token) -> Self {
@@ -429,14 +461,9 @@ impl Expr {
         Expr::new(ExprKind::Subscript(Box::new(target), Box::new(index)), span)
     }
 
-    pub fn cast(cast_span: Span, explicit_type: Expr, value: Expr, right_paren: &Token) -> Self {
+    pub fn cast(cast_span: Span, explicit_type: ExplicitType, value: Expr, right_paren: &Token) -> Self {
         let span = Span::join(&cast_span, right_paren);
         Expr::new(ExprKind::Cast(Box::new(explicit_type), Box::new(value)), span)
-    }
-
-    pub fn explicit_type(first: Span, category: ExplicitTypeCategory, last: &Span) -> Self {
-        let span = Span::join(&first, last);
-        Expr::new(ExprKind::ExplicitType(category), span)
     }
 
     pub fn lexeme(&self) -> &str {
@@ -465,7 +492,7 @@ pub trait ExprVisitor {
         &mut self,
         expr: &Expr,
         function: &ResolvedToken,
-        generics: &[Expr],
+        specializations: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult;
     fn visit_method_call_expr(
@@ -473,7 +500,7 @@ pub trait ExprVisitor {
         expr: &Expr,
         object: &Expr,
         method: &ResolvedToken,
-        generics: &[Expr],
+        specializations: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult;
     fn visit_field_expr(
@@ -486,10 +513,5 @@ pub trait ExprVisitor {
     fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult;
     fn visit_array_expr(&mut self, expr: &Expr, elements: &[Expr]) -> Self::ExprResult;
     fn visit_subscript_expr(&mut self, expr: &Expr, target: &Expr, arg: &Expr) -> Self::ExprResult;
-    fn visit_cast_expr(&mut self, expr: &Expr, explicit_type: &Expr, value: &Expr) -> Self::ExprResult;
-    fn visit_explicit_type_expr(
-        &mut self,
-        expr: &Expr,
-        category: &ExplicitTypeCategory,
-    ) -> Self::ExprResult;
+    fn visit_cast_expr(&mut self, expr: &Expr, explicit_type: &ExplicitType, value: &Expr) -> Self::ExprResult;
 }

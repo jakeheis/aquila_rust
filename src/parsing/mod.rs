@@ -3,7 +3,7 @@ mod ast_printer;
 mod parser;
 
 pub use ast::{
-    ExplicitTypeCategory, Expr, ExprKind, ExprVisitor, ResolvedToken, Stmt, StmtKind,
+    ExplicitType, ExplicitTypeKind, Expr, ExprKind, ExprVisitor, ResolvedToken, Stmt, StmtKind,
     StmtVisitor, TypedToken,
 };
 pub use parser::Parser;

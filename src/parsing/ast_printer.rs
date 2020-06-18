@@ -63,6 +63,36 @@ impl ASTPrinter {
         block(self);
         self.indent -= 1;
     }
+
+    fn write_explicit_type(&mut self, explicit_type: &ExplicitType) {
+        match &explicit_type.kind {
+            ExplicitTypeKind::Simple(token) => {
+                let symbol = token
+                    .get_symbol()
+                    .map(|s| s.id.clone())
+                    .unwrap_or(String::from("<none>"));
+                self.write_ln(&format!(
+                    "ExplicitType(name: {}, symbol: {})",
+                    token.span().lexeme(),
+                    symbol
+                ));
+            }
+            ExplicitTypeKind::Pointer(to) => {
+                self.write_ln("ExplicitType(ptr)");
+                self.indent(|visitor| {
+                    let to: &ExplicitType = &to;
+                    visitor.write_explicit_type(to);
+                })
+            }
+            ExplicitTypeKind::Array(of, count) => {
+                self.write_ln(&format!("ExplicitType(array<count={}>)", count));
+                self.indent(|visitor| {
+                    let of: &ExplicitType = &of;
+                    visitor.write_explicit_type(of);
+                })
+            }
+        }
+    }
 }
 
 impl StmtVisitor for ASTPrinter {
@@ -107,7 +137,7 @@ impl StmtVisitor for ASTPrinter {
         name: &TypedToken,
         generics: &[TypedToken],
         params: &[Stmt],
-        return_type: &Option<Expr>,
+        return_type: &Option<ExplicitType>,
         body: &[Stmt],
         is_meta: bool,
     ) {
@@ -122,15 +152,20 @@ impl StmtVisitor for ASTPrinter {
         let generics: Vec<_> = generics.iter().map(|g| g.token.lexeme()).collect();
         let generics = format!("<{}>", generics.join(","));
         self.write_ln(&format!(
-            "FunctionDecl(name: {}, generics: {}, return_type: {}, symbol: {}, resolved_type: {}, meta: {})",
+            "FunctionDecl(name: {}, generics: {}, symbol: {}, resolved_type: {}, meta: {})",
             name.span().lexeme(),
             generics,
-            return_type.as_ref().map(|r| r.lexeme()).unwrap_or("<void>"),
             symbol,
             resolved_type,
-            is_meta
+            is_meta,
         ));
         self.indent(|visitor| {
+            if let Some(return_type) = return_type.as_ref() {
+                visitor.write_ln("Return");
+                visitor.indent(|visitor| {
+                    visitor.write_explicit_type(return_type)
+                });
+            }
             visitor.write_ln("Params");
             visitor.indent(|visitor| {
                 params.iter().for_each(|p| p.accept(visitor));
@@ -146,7 +181,7 @@ impl StmtVisitor for ASTPrinter {
         &mut self,
         _stmt: &Stmt,
         name: &TypedToken,
-        explicit_type: &Option<Expr>,
+        explicit_type: &Option<ExplicitType>,
         value: &Option<Expr>,
     ) {
         let symbol = name
@@ -164,8 +199,8 @@ impl StmtVisitor for ASTPrinter {
             resolved_type,
         ));
         self.indent(|visitor| {
-            if let Some(e) = explicit_type {
-                e.accept(visitor);
+            if let Some(e) = explicit_type.as_ref() {
+                visitor.write_explicit_type(e);
             }
             if let Some(v) = value {
                 v.accept(visitor);
@@ -287,7 +322,7 @@ impl ExprVisitor for ASTPrinter {
         &mut self,
         _expr: &Expr,
         function: &ResolvedToken,
-        generics: &[Expr],
+        generics: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult {
         let symbol = function
@@ -303,7 +338,7 @@ impl ExprVisitor for ASTPrinter {
             if generics.len() > 0 {
                 visitor.write_ln("Specializations");
                 visitor.indent(|visitor| {
-                    generics.iter().for_each(|a| a.accept(visitor));
+                    generics.iter().for_each(|a| visitor.write_explicit_type(a));
                 });
             }
             visitor.write_ln("Arguments");
@@ -318,7 +353,7 @@ impl ExprVisitor for ASTPrinter {
         _expr: &Expr,
         object: &Expr,
         method: &ResolvedToken,
-        generics: &[Expr],
+        generics: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult {
         let symbol = method
@@ -338,7 +373,7 @@ impl ExprVisitor for ASTPrinter {
             if generics.len() > 0 {
                 visitor.write_ln("Specializations");
                 visitor.indent(|visitor| {
-                    generics.iter().for_each(|a| a.accept(visitor));
+                    generics.iter().for_each(|a| visitor.write_explicit_type(a));
                 });
             }
             visitor.write_ln("Arguments");
@@ -399,39 +434,11 @@ impl ExprVisitor for ASTPrinter {
         })
     }
 
-    fn visit_cast_expr(&mut self, _expr: &Expr, explicit_type: &Expr, value: &Expr) -> Self::ExprResult {
+    fn visit_cast_expr(&mut self, _expr: &Expr, explicit_type: &ExplicitType, value: &Expr) -> Self::ExprResult {
         self.write_ln("Cast");
         self.indent(|writer| {
-            explicit_type.accept(writer);
+            writer.write_explicit_type(explicit_type);
             value.accept(writer);
         });
-    }
-
-    fn visit_explicit_type_expr(&mut self, _expr: &Expr, category: &ExplicitTypeCategory) {
-        match category {
-            ExplicitTypeCategory::Simple(token) => {
-                let symbol = token
-                    .get_symbol()
-                    .map(|s| s.id.clone())
-                    .unwrap_or(String::from("<none>"));
-                self.write_ln(&format!(
-                    "ExplicitType(name: {}, symbol: {})",
-                    token.span().lexeme(),
-                    symbol
-                ));
-            }
-            ExplicitTypeCategory::Pointer(to) => {
-                self.write_ln("ExplicitType(ptr)");
-                self.indent(|visitor| {
-                    (*to).accept(visitor);
-                })
-            }
-            ExplicitTypeCategory::Array(of, count) => {
-                self.write_ln(&format!("ExplicitType(array<count={}>)", count));
-                self.indent(|visitor| {
-                    (*of).accept(visitor);
-                })
-            }
-        }
     }
 }

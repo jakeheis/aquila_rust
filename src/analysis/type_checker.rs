@@ -291,6 +291,27 @@ impl TypeChecker {
 
     //     Ok(node_type.clone())
     // }
+
+    fn resolve_explicit_type(
+        &mut self,
+        explicit_type: &ExplicitType,
+    ) -> Result {
+        let context: Vec<Symbol> = self
+            .scopes
+            .iter()
+            .flat_map(|s| s.id.as_ref().map(|id| id.clone()))
+            .collect();
+
+        if let Some(deduced) = explicit_type.resolve(&self.lib, &context) {
+            if let (&NodeType::Any, false) = (&deduced, self.is_builtin) {
+                Err(Diagnostic::error(explicit_type, "Cannot have type any; must be ptr any"))
+            } else {
+                Ok(deduced)
+            }
+        } else {
+            Err(Diagnostic::error(explicit_type, "Undefined type"))
+        }
+    }
 }
 
 impl StmtVisitor for TypeChecker {
@@ -336,7 +357,7 @@ impl StmtVisitor for TypeChecker {
         name: &TypedToken,
         generics: &[TypedToken],
         params: &[Stmt],
-        return_type_expr: &Option<Expr>,
+        explicit_return_type: &Option<ExplicitType>,
         body: &[Stmt],
         _is_meta: bool,
     ) -> Analysis {
@@ -354,17 +375,24 @@ impl StmtVisitor for TypeChecker {
             // self.current_scope().define_var(generic, &gen_type);
         }
         
-        let return_type = return_type_expr
-            .as_ref()
-            .and_then(|r| self.check_expr(r))
-            .unwrap_or(NodeType::Void);
-
-        if let NodeType::Array(..) = return_type {
-            self.report_error(Diagnostic::error(
-                return_type_expr.as_ref().unwrap(),
-                "Cannot return an array",
-            ));
-        }
+        let return_type = if let Some(explicit_return_type) = explicit_return_type.as_ref() {
+            match self.resolve_explicit_type(explicit_return_type) {
+                Ok(NodeType::Array(..)) => {
+                    self.report_error(Diagnostic::error(
+                        explicit_return_type,
+                        "Cannot return an array",
+                    ));
+                    NodeType::Ambiguous
+                },
+                Ok(node_type) => node_type,
+                Err(diag) => {
+                    self.report_error(diag);
+                    NodeType::Ambiguous
+                }
+            }
+        } else {
+            NodeType::Void
+        };
 
         self.current_scope().function_return_type = Some(return_type.clone());
 
@@ -387,7 +415,7 @@ impl StmtVisitor for TypeChecker {
         {
             let last_param = params.last().map(|p| p.span.clone());
             let span_params = Span::join_opt(name, &last_param);
-            let span = Span::join_opt(&span_params, return_type_expr);
+            let span = Span::join_opt(&span_params, explicit_return_type);
             self.report_error(Diagnostic::error(&span, "Function may not return"));
         }
 
@@ -400,10 +428,10 @@ impl StmtVisitor for TypeChecker {
         &mut self,
         _stmt: &Stmt,
         name: &TypedToken,
-        kind: &Option<Expr>,
+        explicit_type: &Option<ExplicitType>,
         value: &Option<Expr>,
     ) -> Analysis {
-        let explicit_type = kind.as_ref().and_then(|k| match k.accept(self) {
+        let explicit_type = explicit_type.as_ref().and_then(|k| match self.resolve_explicit_type(k) {
             Ok(explicit_type) => Some(explicit_type),
             Err(diagnostic) => {
                 self.report_error(diagnostic);
@@ -679,7 +707,7 @@ impl ExprVisitor for TypeChecker {
         &mut self,
         expr: &Expr,
         function: &ResolvedToken,
-        specializations: &[Expr],
+        specializations: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult {
         let resolved = self.resolve_var(function.span().lexeme());
@@ -711,7 +739,7 @@ impl ExprVisitor for TypeChecker {
 
         let mut specialization_map: HashMap<Symbol, NodeType> = HashMap::new();
 
-        let specializations: std::result::Result<Vec<NodeType>, _> = specializations.iter().map(|s| s.accept(self)).collect();
+        let specializations: std::result::Result<Vec<NodeType>, _> = specializations.iter().map(|s| self.resolve_explicit_type(s)).collect();
         let specializations = specializations?;
 
         if specializations.len() != generics.len() {
@@ -736,7 +764,7 @@ impl ExprVisitor for TypeChecker {
         expr: &Expr,
         object: &Expr,
         method: &ResolvedToken,
-        specializations: &[Expr],
+        specializations: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult {
         let object_type = object.accept(self)?;
@@ -758,7 +786,7 @@ impl ExprVisitor for TypeChecker {
 
                 let mut specialization_map: HashMap<Symbol, NodeType> = HashMap::new();
 
-                let specializations: std::result::Result<Vec<NodeType>, _> = specializations.iter().map(|s| s.accept(self)).collect();
+                let specializations: std::result::Result<Vec<NodeType>, _> = specializations.iter().map(|s| self.resolve_explicit_type(s)).collect();
                 let specializations = specializations?;
         
                 if specializations.len() != generics.len() {
@@ -892,32 +920,9 @@ impl ExprVisitor for TypeChecker {
         }
     }
 
-    fn visit_cast_expr(&mut self, _expr: &Expr, explicit_type: &Expr, value: &Expr) -> Self::ExprResult {
+    fn visit_cast_expr(&mut self, _expr: &Expr, explicit_type: &ExplicitType, value: &Expr) -> Self::ExprResult {
         value.accept(self)?;
-        explicit_type.accept(self)
-    }
-
-    fn visit_explicit_type_expr(
-        &mut self,
-        expr: &Expr,
-        _category: &ExplicitTypeCategory,
-    ) -> Self::ExprResult {
-        // println!("VISITNG {} -- {}", expr.span().entire_line().0, expr.span().lexeme());
-        let context: Vec<Symbol> = self
-            .scopes
-            .iter()
-            .flat_map(|s| s.id.as_ref().map(|id| id.clone()))
-            .collect();
-
-        if let Some(deduced) = NodeType::deduce_from(expr, &self.lib, &context) {
-            if let (&NodeType::Any, false) = (&deduced, self.is_builtin) {
-                Err(Diagnostic::error(expr, "Cannot have type any; must be ptr any"))
-            } else {
-                Ok(deduced)
-            }
-        } else {
-            Err(Diagnostic::error(expr, "Undefined type"))
-        }
+        self.resolve_explicit_type(explicit_type)
     }
 }
 

@@ -558,7 +558,7 @@ impl Parser {
         Ok(Expr::cast(cast_span, specialization.remove(0), value, right_paren))
     }
 
-    fn parse_generic_specialization(&mut self) -> Result<Vec<Expr>> {
+    fn parse_generic_specialization(&mut self) -> Result<Vec<ExplicitType>> {
         let mut specialized_types = Vec::new();
         while !self.is_at_end() && self.peek() != TokenKind::Bar {
             let specialized_type = self.parse_explicit_type()?;
@@ -571,9 +571,9 @@ impl Parser {
         Ok(specialized_types)
     }
 
-    fn parse_var(&mut self, allow_type: bool, require_type: bool) -> Result<(Token, Option<Expr>)> {
+    fn parse_var(&mut self, allow_type: bool, require_type: bool) -> Result<(Token, Option<ExplicitType>)> {
         let name = self.previous().clone();
-        let mut explicit_type: Option<Expr> = None;
+        let mut explicit_type: Option<ExplicitType> = None;
 
         if self.matches(TokenKind::Colon) {
             if allow_type {
@@ -593,12 +593,12 @@ impl Parser {
         Ok((name, explicit_type))
     }
 
-    fn parse_explicit_type(&mut self) -> Result<Expr> {
+    fn parse_explicit_type(&mut self) -> Result<ExplicitType> {
         let start = self.current().span.clone();
 
         let category = if self.matches(TokenKind::Ptr) {
             let inside = self.parse_explicit_type()?;
-            ExplicitTypeCategory::Pointer(Box::new(inside))
+            ExplicitTypeKind::Pointer(Box::new(inside))
         } else if self.matches(TokenKind::LeftBracket) {
             let inside = self.parse_explicit_type()?;
             self.consume(
@@ -609,17 +609,17 @@ impl Parser {
                 .consume(TokenKind::Number, "Expect array count after ';'")?
                 .clone();
             self.consume(TokenKind::RightBracket, "Expect ']' after array count")?;
-            ExplicitTypeCategory::Array(Box::new(inside), count)
+            ExplicitTypeKind::Array(Box::new(inside), count)
         } else {
             let name = self
                 .consume(TokenKind::Identifier, "Expected variable type")?
                 .clone();
-            ExplicitTypeCategory::Simple(ResolvedToken::new(name))
+                ExplicitTypeKind::Simple(ResolvedToken::new(name))
         };
 
         let end = &self.previous().span;
 
-        Ok(Expr::explicit_type(start, category, end))
+        Ok(ExplicitType::new(start, category, end))
     }
 
     fn peek(&self) -> TokenKind {
