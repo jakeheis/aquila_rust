@@ -477,7 +477,7 @@ impl ExprVisitor for Codegen {
 
     fn visit_function_call_expr(
         &mut self,
-        expr: &Expr,
+        _expr: &Expr,
         target: Option<&Expr>,
         function: &ResolvedToken,
         specializations: &[ExplicitType],
@@ -544,7 +544,7 @@ impl ExprVisitor for Codegen {
         let field_symbol = field.get_symbol().unwrap();
 
         match &target.kind {
-            ExprKind::FunctionCall(_, function, generics, _) => {
+            ExprKind::FunctionCall(_, function, _, _) => {
                 let target_symbol = function.get_symbol().unwrap();
                 let target_type = self.lib.resolve_symbol(&target_symbol).unwrap();
                 guard!(NodeType::Function[_params, ret_type] = target_type);

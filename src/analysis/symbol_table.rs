@@ -356,7 +356,7 @@ impl SymbolTableBuilder {
             node_type
         } else {
             // Isn't a real type; make a fake type and type checker will catch the error
-            NodeType::Type(Symbol::new_str(None, "_fake_type"))
+            NodeType::Ambiguous
         }
     }
 }

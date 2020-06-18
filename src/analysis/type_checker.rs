@@ -16,15 +16,15 @@ type Result = DiagnosticResult<NodeType>;
 struct Scope {
     id: Option<Symbol>,
     symbols: SymbolTable,
-    function_return_type: Option<NodeType>,
+    function_metadata: Option<FunctionMetadata>,
 }
 
 impl Scope {
-    fn new(id: Option<Symbol>, return_type: Option<NodeType>) -> Self {
+    fn new(id: Option<Symbol>, function_metadata: Option<FunctionMetadata>) -> Self {
         Scope {
             id,
             symbols: SymbolTable::new(),
-            function_return_type: return_type,
+            function_metadata,
         }
     }
 
@@ -125,29 +125,36 @@ impl TypeChecker {
         self.scopes.last_mut().unwrap()
     }
 
+    fn current_scope_immut(&self) -> &Scope {
+        self.scopes.last().unwrap()
+    }
+
     fn current_symbol(&self) -> Option<&Symbol> {
         self.scopes.last().unwrap().id.as_ref()
     }
 
     fn push_scope_named(&mut self, name: &str) -> Symbol {
         let symbol = Symbol::new_str(self.current_symbol(), name);
-        let ret_type = self.current_scope().function_return_type.clone();
-
-        trace!(target: "type_checker", "Pushing scope {} -- {}", name, symbol);
-
-        self.scopes.push(Scope::new(Some(symbol.clone()), ret_type));
+        let function_metadata = self.current_scope().function_metadata.clone();
+        self.push_scope(symbol.clone(), function_metadata);
         symbol
     }
 
-    fn push_scope_meta(&mut self) -> Symbol {
+    fn push_scope_meta(&mut self) {
         let symbol = Symbol::meta_symbol(self.current_symbol());
-        let ret_type = self.current_scope().function_return_type.clone();
+        self.push_scope(symbol, None);
+    }
 
-        trace!(target: "type_checker", "Pushing meta scope -- {}", symbol);
+    fn push_function_scope(&mut self, name: &TypedToken) -> (Symbol, FunctionMetadata) {
+        let symbol = Symbol::new(self.current_symbol(), &name.token);
+        let metadata = self.lib.function_metadata(&symbol).unwrap();
+        self.push_scope(symbol.clone(), Some(metadata.clone()));
+        (symbol, metadata)
+    }
 
-        self.scopes.push(Scope::new(Some(symbol.clone()), ret_type));
-
-        symbol
+    fn push_scope(&mut self, id: Symbol, metadata: Option<FunctionMetadata>) {
+        trace!(target: "type_checker", "Pushing scope -- {}", id);
+        self.scopes.push(Scope::new(Some(id), metadata));
     }
 
     fn pop_scope(&mut self) {
@@ -309,7 +316,7 @@ impl StmtVisitor for TypeChecker {
         self.check_list(fields);
 
         for method in methods {
-            guard!(StmtKind::FunctionDecl[name, generics, _one, _two, _three, _four] = &method.kind);
+            guard!(StmtKind::FunctionDecl[name, _generics, _one, _two, _three, _four] = &method.kind);
             let name = name.clone();
             let symbol = Symbol::new(self.current_symbol(), &name.token);
             let function_type = self.lib.resolve_symbol(&symbol).unwrap().clone();
@@ -335,58 +342,48 @@ impl StmtVisitor for TypeChecker {
         body: &[Stmt],
         _is_meta: bool,
     ) -> Analysis {
-        let symbol = self.push_scope_named(name.token.lexeme());
+        let (symbol, metadata) = self.push_function_scope(name);
         name.set_symbol(symbol.clone());
 
-        let mut generic_symbols: Vec<Symbol> = Vec::new();
-
-        for (index, generic) in generics.iter().enumerate() {
-            let generic_symbol = Symbol::new(self.current_symbol(), &generic.token);
+        for (token, symbol) in generics.iter().zip(&metadata.generics) {
             self.current_scope()
-                .define_var(generic, &NodeType::Metatype(generic_symbol.clone()));
-            generic_symbols.push(generic_symbol);
-
-            // let gen_type = NodeType::Generic(self.current_symbol().unwrap().clone(), index);
-            // self.current_scope().define_var(generic, &gen_type);
+                .define_var(token, &NodeType::Metatype(symbol.clone()));
         }
 
-        let return_type = if let Some(explicit_return_type) = explicit_return_type.as_ref() {
-            match self.resolve_explicit_type(explicit_return_type) {
-                Ok(NodeType::Array(..)) => {
-                    self.report_error(Diagnostic::error(
-                        explicit_return_type,
-                        "Cannot return an array",
-                    ));
-                    NodeType::Ambiguous
-                }
-                Ok(node_type) => node_type,
-                Err(diag) => {
-                    self.report_error(diag);
-                    NodeType::Ambiguous
-                }
+        let explicit_type_span = explicit_return_type.as_ref();
+        let return_type = match &metadata.return_type {
+            NodeType::Array(..) => {
+                self.report_error(Diagnostic::error(
+                    explicit_type_span.unwrap(),
+                    "Cannot return an array",
+                ));
+                &NodeType::Ambiguous
             }
-        } else {
-            NodeType::Void
+            NodeType::Ambiguous => {
+                self.report_error(Diagnostic::error(
+                    explicit_type_span.unwrap(),
+                    "Undefined type",
+                ));
+                &NodeType::Ambiguous
+            }
+            value => value,
         };
 
-        self.current_scope().function_return_type = Some(return_type.clone());
-
         self.check_list(params);
-        for param in params {
-            if let StmtKind::VariableDecl(name, ..) = &param.kind {
-                if let Some(NodeType::Type(ty)) = name.get_type() {
-                    if generic_symbols.contains(&ty) {
-                        self.report_error(Diagnostic::error(
-                            param,
-                            "Can only refer to generic types behind a pointer",
-                        ));
-                    }
+
+        for (index, param_type) in metadata.parameters.iter().enumerate() {
+            if let NodeType::Type(ty) = param_type {
+                if metadata.generics.contains(&ty) {
+                    self.report_error(Diagnostic::error(
+                        &params[index],
+                        "Can only refer to generic types behind a pointer",
+                    ));
                 }
             }
         }
 
         let analysis = self.check_list(body);
-        // self.pop_scope();
+
         self.pop_scope();
 
         if !analysis.guarantees_return && !return_type.matches(&NodeType::Void) && !self.is_builtin
@@ -531,11 +528,12 @@ impl StmtVisitor for TypeChecker {
             .and_then(|e| self.check_expr(e))
             .unwrap_or(NodeType::Void);
 
-        let expected_return = &self.current_scope().function_return_type;
-        let expected_return = expected_return
+        let expected_return = self
+            .current_scope_immut()
+            .function_metadata
             .as_ref()
-            .map(|f| f.clone())
-            .unwrap_or(NodeType::Void);
+            .map(|m| &m.return_type);
+        let expected_return = expected_return.unwrap_or(&NodeType::Void);
 
         if let Some(expr) = expr.as_ref() {
             if let Err(diag) = self.check_type_match(expr, &ret_type, &expected_return) {
