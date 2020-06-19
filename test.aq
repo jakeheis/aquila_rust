@@ -34,8 +34,8 @@ def second|T|(object: T) {
     4 + 5;
 }
 
-first|ptr byte|("hello");
-first|int|(3);
+first("hello");
+first(3);
 
 let numbers =  [1,2,3];
 
@@ -60,14 +60,14 @@ type Adder {
 }
 
 let vec_int = Vec.new|int|();
-vec_int.insert|int|(&4);
-vec_int.insert|int|(&6);
+vec_int.insert(&4);
+vec_int.insert(&6);
 print *(vec_int.get|int|(1));
 
 let vec = Vec.new|Adder|();
  
-vec.insert|Adder|(&Adder(10, 2));
-vec.insert|Adder|(&Adder(3, 4));
+vec.insert(&Adder(10, 2));
+vec.insert(&Adder(3, 4));
 
 print (*vec.get|Adder|(1)).add(2);
 
@@ -78,6 +78,21 @@ let adders: [Adder; 3] = [Adder(1, 2), Adder(3,4), Adder(5,6)];
 for add in adders {
   print (*add).add(5);
 }
+
+let dyn = String.from("hello");
+
+let combo1 = dyn.append_literal(" world");
+combo1.print_str();
+
+let combo2 = combo1.append_literal(" ag");
+combo2.print_str();
+
+dyn.append_literal(" world").append_literal(" again").print_str();
+
+print dyn.append_literal(" world").append_literal(" again 2").storage;
+
+let here = dyn.append_literal(" world").append_literal(" again 3");
+print here.storage;
 
 /*
 let first_adder = vec.get|Adder|(0);
@@ -116,20 +131,6 @@ enum Hello {
 // let input = read_line();
 // String.from("Got: ").append(input).print_str();
 
-let dyn = String.from("hello");
-
-let combo1 = dyn.append_literal(" world");
-combo1.print_str();
-
-let combo2 = combo1.append_literal(" ag");
-combo2.print_str();
-
-dyn.append_literal(" world").append_literal(" again").print_str();
-
-print dyn.append_literal(" world").append_literal(" again 2").storage;
-
-let here = dyn.append_literal(" world").append_literal(" again 3");
-print here.storage;
 
 /*let sum = Adder(4, 5);
 print sum.add(6);

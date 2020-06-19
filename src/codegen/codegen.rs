@@ -9,6 +9,7 @@ use log::trace;
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
+// use crate::source::*;
 
 #[derive(PartialEq)]
 enum CodegenStage {
@@ -423,45 +424,43 @@ impl ExprVisitor for Codegen {
         args: &[Expr],
     ) -> Self::ExprResult {
         let function_symbol = function.get_symbol().unwrap();
+        let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
 
+        let specialization = if specializations.is_empty() {
+            let arg_types: Vec<_> = args.iter().map(|a| a.get_type().unwrap()).collect();
+            GenericSpecialization::infer(&function_metadata, &arg_types).ok().unwrap()
+        } else {
+            let explicit_types: Vec<_> = specializations.iter().map(|s| s.guarantee_resolved()).collect::<Vec<_>>();
+            GenericSpecialization::new(&function_symbol, explicit_types)
+        };
+
+        let specialization = if let Some(caller_specs) = self.specialization.as_ref() {
+            specialization.resolve_generics_using(caller_specs)
+        } else {
+            specialization
+        };
+
+        let function_name = specialization.id;
         let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
-
-        let specs = specializations
-            .iter()
-            .map(|s| s.guarantee_resolved())
-            .collect::<Vec<_>>();
-
-        let specs: Vec<_> = specs.iter().map(|arg_type| {
-            match arg_type {
-                NodeType::Generic(_, index) => {
-                    self.specialization.as_ref().unwrap().node_types[*index].clone()
-                },
-                _ => arg_type.clone(),
-            }
-        }).collect();
-
-        let function_name = GenericSpecialization::new(&function_symbol, specs).id;
 
         let rendered = if let Some(target) = target {
             let target_str = target.accept(self);
             let target_str = match &target.kind {
                 ExprKind::FunctionCall(..) => {
                     self.write_temp(&target.get_type().unwrap(), target_str)
-                }
+                },
                 _ => target_str,
             };
 
-            if !function_symbol.is_meta_owned() {
+            if let FunctionKind::Method(..) = function_metadata.kind {
                 let main = format!("&({})", target_str);
                 args.insert(0, main);
             }
 
             format!("{}({})", function_name, args.join(","))
         } else {
-            if let Some(parent_symbol) = function_symbol.parent() {
-                if let Some(NodeType::Metatype(_)) = self.lib.resolve_symbol(&parent_symbol) {
-                    args.insert(0, String::from("self"));
-                }
+            if let FunctionKind::Method(..) = function_metadata.kind {
+                args.insert(0, String::from("self"));
             }
 
             format!("{}({})", function_name, args.join(","))

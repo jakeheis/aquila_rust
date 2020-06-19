@@ -291,6 +291,18 @@ impl NodeType {
         }
     }
 
+    pub fn infer_generic_type(param: &NodeType, arg: &NodeType) -> Option<(usize, NodeType)> {
+        match (param, arg) {
+            (NodeType::Generic(_, index), arg) => {
+                Some((*index, arg.clone()))
+            },
+            (NodeType::Pointer(param_to), NodeType::Pointer(arg_to)) => {
+                NodeType::infer_generic_type(param_to, arg_to)
+            },
+            _ => None,
+        }
+    }
+
     // pub fn can_automatically_cast_to(&self, other: &NodeType) -> {
     //     if self.exact_match(other) {
     //         true

@@ -596,12 +596,12 @@ impl ExprVisitor for TypeChecker {
 
         if let TokenKind::Ampersand = op.kind {
             let boxed_type = Box::new(operand_type.clone());
-            return Ok(NodeType::Pointer(boxed_type));
+            return expr.set_type(NodeType::Pointer(boxed_type));
         }
 
         if let TokenKind::Star = op.kind {
             return match operand_type {
-                NodeType::Pointer(inner) => Ok((*inner).clone()),
+                NodeType::Pointer(inner) => expr.set_type((*inner).clone()),
                 _ => {
                     let message = format!("Cannot dereference object of type {}", operand_type);
                     Err(Diagnostic::error(operand, &message))
@@ -702,39 +702,44 @@ impl ExprVisitor for TypeChecker {
             ));
         }
 
-        let specialization: std::result::Result<Vec<NodeType>, _> = specializations
-            .iter()
-            .map(|s| self.resolve_explicit_type(s))
-            .collect();
-        let specialization = specialization?;
-        let specialization = if specialization.is_empty() {
+        let specialization = if specializations.is_empty() {
+            match GenericSpecialization::infer(&metadata, &arg_types) {
+                Ok(spec) => spec,
+                Err(index) => {
+                    let message = format!("Couldn't infer generic type {}", metadata.generics[index].last_component());
+                    return Err(Diagnostic::error(expr, &message));
+                }
+            }
+        } else {
+            if specializations.len() != metadata.generics.len() {
+                let message = format!(
+                    "Expected {} specializations, got {}",
+                    metadata.generics.len(),
+                    specializations.len()
+                );
+                return Err(Diagnostic::error(function, &message));
+            }
+
+            let specialization: std::result::Result<Vec<NodeType>, _> = specializations
+                .iter()
+                .map(|s| self.resolve_explicit_type(s))
+                .collect();
+            
+            GenericSpecialization::new(&func_symbol, specialization?)
+        };
+
+        let enclosing_func = self.current_scope().function_metadata.as_ref().map(|f| f.symbol.clone()).unwrap_or(Symbol::main_symbol());
+        let save_spec = if specialization.node_types.is_empty() {
             None
         } else {
-            Some(GenericSpecialization::new(&func_symbol, specialization))
+            Some(specialization.clone())
         };
-
-        let caller = self.current_scope().function_metadata.as_ref().map(|f| f.symbol.clone()).unwrap_or(Symbol::main_symbol());
         self.call_map
-            .entry(caller)
-            .or_insert(Vec::new())
-            .push((func_symbol.clone(), specialization.clone()));
+                .entry(enclosing_func)
+                .or_insert(Vec::new())
+                .push((func_symbol.clone(), save_spec));
 
-        if specializations.len() != metadata.generics.len() {
-            let message = format!(
-                "Expected {} specializations, got {}",
-                metadata.generics.len(),
-                specializations.len()
-            );
-            return Err(Diagnostic::error(function, &message));
-        }
-
-        let (param_types, return_type) = if let Some(spec) = specialization.as_ref() {
-            metadata.specialize(spec)
-        } else {
-            (metadata.parameter_types, metadata.return_type)
-        };
-
-        // Function arguments
+        let (param_types, return_type) = metadata.specialize(&specialization);
 
         for ((index, param), arg) in param_types.into_iter().enumerate().zip(arg_types) {
             if let Err(diag) = self.ensure_no_amibguity(&args[index], &arg) {
@@ -841,12 +846,12 @@ impl ExprVisitor for TypeChecker {
 
     fn visit_cast_expr(
         &mut self,
-        _expr: &Expr,
+        expr: &Expr,
         explicit_type: &ExplicitType,
         value: &Expr,
     ) -> Self::ExprResult {
         value.accept(self)?;
-        self.resolve_explicit_type(explicit_type)
+        expr.set_type(self.resolve_explicit_type(explicit_type)?)
     }
 }
 

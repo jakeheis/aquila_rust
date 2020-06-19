@@ -244,6 +244,7 @@ impl std::fmt::Display for FunctionMetadata {
 
 #[derive(Clone)]
 pub struct GenericSpecialization {
+    pub function: Symbol,
     pub id: String,
     pub node_types: Vec<NodeType>,
 }
@@ -257,9 +258,39 @@ impl GenericSpecialization {
             .join("__");
 
         GenericSpecialization {
+            function: function.clone(),
             id: function.mangled() + &special_part,
             node_types,
         }
+    }
+
+    pub fn infer(metadata: &FunctionMetadata, arg_types: &[NodeType]) -> Result<Self, usize> {
+        let mut specializations: Vec<_> = std::iter::repeat(NodeType::Ambiguous).take(metadata.generics.len()).collect();
+        for (param_type, arg_type) in metadata.parameter_types.iter().zip(arg_types).rev() {
+            if let Some((index, specialized_type)) = NodeType::infer_generic_type(param_type, arg_type) {
+                specializations[index] = specialized_type;
+            }
+        }
+        for (index, spec) in specializations.iter().enumerate() {
+            if spec.contains_ambiguity() {
+                return Err(index);
+            }
+        }
+        
+        Ok(GenericSpecialization::new(&metadata.symbol, specializations))
+    }
+
+    pub fn resolve_generics_using(&self, specialization: &GenericSpecialization) -> GenericSpecialization {
+        let node_types: Vec<_> = self.node_types.iter().map(|arg_type| {
+            match arg_type {
+                NodeType::Generic(_, index) => {
+                    specialization.node_types[*index].clone()
+                },
+                _ => arg_type.clone(),
+            }
+        }).collect();
+        
+        GenericSpecialization::new(&self.function, node_types)
     }
 }
 

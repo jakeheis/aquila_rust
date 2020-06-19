@@ -19,7 +19,7 @@ impl<'a> SpecializationPropagator<'a> {
                 } else {
                     String::new()
                 };
-                trace!(target: "spec_propagate", "Entry: {} -> {}{}", caller, call, suffix);
+                trace!(target: "spec_propagate", "Call entry: {} -> {}{}", caller, call, suffix);
             }
         }
 
