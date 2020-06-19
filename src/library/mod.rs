@@ -88,7 +88,7 @@ impl Lib {
             println!("{}", lib.symbols);
         }
 
-        let lib = TypeChecker::check(lib, Rc::clone(&reporter));
+        let mut lib = TypeChecker::check(lib, Rc::clone(&reporter));
 
         if LOG_TYPE_CHECKER {
             let mut printer = ASTPrinter::new();
@@ -101,7 +101,7 @@ impl Lib {
             return Err("Type checker failed");
         }
 
-        let lib = CycleChecker::check(lib, Rc::clone(&reporter));
+        CycleChecker::check(&mut lib, Rc::clone(&reporter));
 
         if reporter.has_errored() {
             return Err("Cycle checker failed");

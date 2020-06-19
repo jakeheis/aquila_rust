@@ -12,7 +12,7 @@ pub struct CycleChecker {
 }
 
 impl CycleChecker {
-    pub fn check(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Lib {
+    pub fn check(lib: &mut Lib, reporter: Rc<dyn Reporter>) {
         let mut field_map: HashMap<Symbol, HashSet<Symbol>> = HashMap::new();
 
         for (type_symbol, type_info) in &lib.symbols.type_metadata {
@@ -30,9 +30,7 @@ impl CycleChecker {
             reporter,
         };
 
-        checker.run(&mut lib);
-
-        lib
+        checker.run(lib);
     }
 
     fn run(&mut self, lib: &mut Lib) {

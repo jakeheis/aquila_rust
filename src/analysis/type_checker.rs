@@ -28,7 +28,7 @@ impl Scope {
     }
 
     fn define_var(&mut self, name: &TypedToken, var_type: &NodeType) {
-        if let NodeType::Ambiguous = var_type {
+        if var_type.contains_ambiguity() {
             panic!("Should never define var as ambiguous");
         }
 
@@ -688,6 +688,20 @@ impl ExprVisitor for TypeChecker {
 
         let metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
+        let arg_types: DiagnosticResult<Vec<NodeType>> = args.iter().map(|a| a.accept(self)).collect();
+        let arg_types = arg_types?;
+
+        if metadata.parameter_types.len() != arg_types.len() {
+            return Err(Diagnostic::error(
+                expr,
+                &format!(
+                    "Expected {} argument(s), got {}",
+                    metadata.parameter_types.len(),
+                    arg_types.len()
+                ),
+            ));
+        }
+
         let specialization: std::result::Result<Vec<NodeType>, _> = specializations
             .iter()
             .map(|s| self.resolve_explicit_type(s))
@@ -721,21 +735,6 @@ impl ExprVisitor for TypeChecker {
         };
 
         // Function arguments
-
-        let arg_types: DiagnosticResult<Vec<NodeType>> =
-            args.iter().map(|a| a.accept(self)).collect();
-        let arg_types = arg_types?;
-
-        if param_types.len() != arg_types.len() {
-            return Err(Diagnostic::error(
-                expr,
-                &format!(
-                    "Expected {} argument(s), got {}",
-                    param_types.len(),
-                    arg_types.len()
-                ),
-            ));
-        }
 
         for ((index, param), arg) in param_types.into_iter().enumerate().zip(arg_types) {
             if let Err(diag) = self.ensure_no_amibguity(&args[index], &arg) {

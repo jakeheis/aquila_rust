@@ -252,13 +252,7 @@ impl GenericSpecialization {
     pub fn new(function: &Symbol, node_types: Vec<NodeType>) -> Self {
         let special_part = node_types
             .iter()
-            .map(|s| match s {
-                NodeType::Type(ty) => ty.mangled(),
-                NodeType::Int | NodeType::Void | NodeType::Bool | NodeType::Byte => s.to_string(),
-                NodeType::Generic(sy, index) => format!("{}__{}", sy.mangled(), index),
-                // NodeType::Pointer(other)
-                other => panic!("can't specialize with type {}", other),
-            })
+            .map(|s| s.symbolic_form())
             .collect::<Vec<_>>()
             .join("__");
 

@@ -279,6 +279,18 @@ impl NodeType {
         }
     }
 
+    pub fn symbolic_form(&self) -> String {
+        match self {
+            NodeType::Type(ty) => ty.mangled(),
+            NodeType::Int | NodeType::Void | NodeType::Bool | NodeType::Byte => self.to_string(),
+            NodeType::Pointer(to) => {
+                format!("ptr__{}", to.symbolic_form())
+            }
+            NodeType::Generic(sy, index) => format!("{}__{}", sy.mangled(), index),
+            _ => panic!("can't get symbolic form of type {}", self),
+        }
+    }
+
     // pub fn can_automatically_cast_to(&self, other: &NodeType) -> {
     //     if self.exact_match(other) {
     //         true

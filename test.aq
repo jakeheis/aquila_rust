@@ -34,7 +34,7 @@ def second|T|(object: T) {
     4 + 5;
 }
 
-first|bool|(false);
+first|ptr byte|("hello");
 first|int|(3);
 
 let numbers =  [1,2,3];

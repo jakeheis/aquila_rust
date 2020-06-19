@@ -8,13 +8,37 @@ builtin def ptr_offset(pointer: ptr any, distance: int): ptr any {}
 builtin def _read_line(): ptr byte {}
 
 type Memory {
+
+    meta def size|T|(): int {
+        return sizeof(T);
+    }
+
+    meta def size_instance|T|(instance: T): int {
+        return sizeof(instance);
+    }
     
     meta def allocate|T|(): ptr T {
-        return cast|ptr T|(malloc(sizeof(T)));
+        return cast|ptr T|(malloc(size|T|()));
     }
 
     meta def allocate_block|T|(count: int): ptr T {
-        return cast|ptr T|(malloc(sizeof(T) * count));
+        return cast|ptr T|(malloc(size|T|() * count));
+    }
+
+    meta def reallocate|T|(current: ptr T, count: int): ptr T {
+        return cast|ptr T|(realloc(current, count * sizeof(T)));
+    }
+
+    meta def copy|T|(from: ptr T, to: ptr T) {
+        copy_block|T|(from, to, 1);
+    }
+
+    meta def copy_block|T|(from: ptr T, to: ptr T, count: int) {
+        memcpy(to, from, count * sizeof(T));
+    }
+
+    meta def offset|T|(pointer: ptr T, count: int): ptr T {
+        return cast|ptr T|(ptr_offset(pointer, count * sizeof(T)));
     }
 
 }
@@ -45,11 +69,10 @@ type String {
         let new_size = size + strlen(lit);
 
         let new_storage = Memory.allocate_block|byte|(new_size);
-        
-        memcpy(new_storage, storage, size - 1);
+        Memory.copy_block|byte|(storage, new_storage, size - 1);
 
-        let second = ptr_offset(new_storage, size - 1);
-        memcpy(second, lit, strlen(lit) + 1);
+        let second_part = Memory.offset|byte|(new_storage, size - 1);
+        Memory.copy_block|byte|(lit, second_part, strlen(lit) + 1);
 
         return String(new_storage, new_size);
     }
@@ -73,23 +96,23 @@ type Vec {
 
     meta def new|T|(): Vec {
         let storage = Memory.allocate_block|T|(10);
-        return Vec(storage, 0, 0, sizeof(T));
+        return Vec(storage, 0, 0, Memory.size|T|());
     }
 
     def insert|T|(object: ptr T) {
         if count == capacity {
             capacity = capacity * 2;
-            storage = realloc(storage, capacity * element_size);
+            storage = Memory.reallocate|T|(cast|ptr T|(storage), capacity);
         }
 
-        let insertion_location = ptr_offset(storage, count * element_size);
-        memcpy(insertion_location, object, element_size);
+        let insertion_location = Memory.offset|T|(cast|ptr T|(storage), count);
+        Memory.copy|T|(object, insertion_location);
 
         count = count + 1;
     }
 
     def get|T|(index: int): ptr T {
-        return cast|ptr T|(ptr_offset(storage, index * element_size));
+        return Memory.offset|T|(cast|ptr T|(storage), index);
     }
 
 }
