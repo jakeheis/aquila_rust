@@ -5,11 +5,11 @@ use crate::guard;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
+use log::trace;
 use std::cell::RefCell;
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
-use log::trace;
 
 #[derive(PartialEq)]
 enum CodegenStage {
@@ -73,7 +73,7 @@ impl Codegen {
         };
 
         codegen.stage = CodegenStage::ForwardStructDecls;
-        
+
         codegen.gen_stmts(&lib.type_decls);
         for dep in &lib.dependencies {
             // TOOD: this will only work with lib chains 1 deep
@@ -155,8 +155,17 @@ impl Codegen {
         temp_name
     }
 
-    fn write_function(&mut self, name: &TypedToken, params: &[Stmt], body: &[Stmt], specialization: Option<&GenericSpecialization>, is_meta: bool) {
-        let func_symbol = name.get_symbol().unwrap();
+    fn write_function(
+        &mut self,
+        func_symbol: &Symbol,
+        body: &[Stmt],
+        specialization: Option<&GenericSpecialization>,
+        is_meta: bool,
+    ) {
+        if !core::should_write_builtin(&func_symbol) {
+            return;
+        }
+
         let func_metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
         let (param_types, ret_type) = if let Some(specialization) = specialization {
@@ -185,35 +194,22 @@ impl Codegen {
             );
         }
 
-        let function_name = specialization.map(|s| s.id.clone()).unwrap_or(func_symbol.mangled());
+        let function_name = specialization
+            .map(|s| s.id.clone())
+            .unwrap_or(func_symbol.mangled());
 
         if self.stage == CodegenStage::FuncPrototypes {
-            if self.is_builtin {
-                if core::should_write_builtin(&func_symbol) {
-                    self.writer.write_function_prototype(
-                        &ret_type,
-                        &func_symbol.mangled(),
-                        &params,
-                    );
-                }
-            } else {
-                self.writer
-                    .write_function_prototype(&ret_type, &function_name, &params);
-            }
+            self.writer
+                .write_function_prototype(&ret_type, &function_name, &params);
         } else {
+            self.writer
+                .start_decl_func(&ret_type, &function_name, &params);
             if self.is_builtin {
-                if core::should_write_builtin(&func_symbol) {
-                    self.writer
-                        .start_decl_func(&ret_type, &func_symbol.mangled(), &params);
-                    core::write(&func_symbol, &mut self.writer);
-                    self.writer.end_decl_func();
-                }
+                core::write(&func_symbol, &mut self.writer);
             } else {
-                self.writer
-                    .start_decl_func(&ret_type, &function_name, &params);
                 self.gen_stmts(body);
-                self.writer.end_decl_func();
             }
+            self.writer.end_decl_func();
         }
 
         self.specialization = None;
@@ -295,7 +291,7 @@ impl StmtVisitor for Codegen {
         _stmt: &Stmt,
         name: &TypedToken,
         generics: &[TypedToken],
-        params: &[Stmt],
+        _params: &[Stmt],
         _return_type: &Option<ExplicitType>,
         body: &[Stmt],
         is_meta: bool,
@@ -308,10 +304,10 @@ impl StmtVisitor for Codegen {
 
         if !func_metadata.specializations.is_empty() {
             for spec in &func_metadata.specializations {
-                self.write_function(name, params, body, Some(spec), is_meta);   
+                self.write_function(&func_symbol, body, Some(spec), is_meta);
             }
         } else if generics.is_empty() {
-            self.write_function(name, params, body, None, is_meta);
+            self.write_function(&func_symbol, body, None, is_meta);
         }
 
         self.current_func = None;
@@ -476,7 +472,10 @@ impl ExprVisitor for Codegen {
 
         let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
 
-        let specs = specializations.iter().map(|s| s.guarantee_resolved()).collect::<Vec<_>>();
+        let specs = specializations
+            .iter()
+            .map(|s| s.guarantee_resolved())
+            .collect::<Vec<_>>();
         let function_name = GenericSpecialization::new(&function_symbol, specs).id;
 
         let rendered = if let Some(target) = target {
@@ -505,11 +504,7 @@ impl ExprVisitor for Codegen {
                 }
             }
 
-            format!(
-                "{}({})",
-                function_name,
-                args.join(",")
-            )
+            format!("{}({})", function_name, args.join(","))
         };
 
         rendered

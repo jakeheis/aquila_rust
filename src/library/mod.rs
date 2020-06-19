@@ -78,7 +78,11 @@ impl Lib {
             dependencies,
         };
 
-        lib.symbols = SymbolTableBuilder::build_symbols(&lib.type_decls, &lib.function_decls, &lib.dependencies);
+        lib.symbols = SymbolTableBuilder::build_symbols(
+            &lib.type_decls,
+            &lib.function_decls,
+            &lib.dependencies,
+        );
 
         if LOG_SYMBOL_MAKER {
             println!("{}", lib.symbols);

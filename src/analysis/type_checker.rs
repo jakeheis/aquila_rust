@@ -8,8 +8,8 @@ use crate::parsing::*;
 use crate::source::*;
 use log::trace;
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 type Result = DiagnosticResult<NodeType>;
 
@@ -69,7 +69,7 @@ impl TypeChecker {
         let mut checker = TypeChecker {
             reporter,
             lib: Rc::clone(&lib),
-            specialization_map: HashMap::new(), 
+            specialization_map: HashMap::new(),
             scopes: vec![top_level],
             is_builtin: false,
         };
@@ -132,6 +132,14 @@ impl TypeChecker {
     ) -> Diagnostic {
         let message = format!("Expected {}, got {}", expected, given);
         Diagnostic::error(span, &message)
+    }
+
+    fn ensure_no_amibguity(&self, expr: &Expr, node_type: &NodeType) -> DiagnosticResult<()> {
+        if node_type.contains_ambiguity() {
+            Err(Diagnostic::error(expr, "Cannot infer type"))
+        } else {
+            Ok(())
+        }
     }
 
     fn current_scope(&mut self) -> &mut Scope {
@@ -308,16 +316,14 @@ impl StmtVisitor for TypeChecker {
 
         self.check_list(params);
 
-        // for (index, param_type) in metadata.parameter_types.iter().enumerate() {
-        //     if let NodeType::Type(ty) = param_type {
-        //         if metadata.generics.contains(&ty) {
-        //             self.report_error(Diagnostic::error(
-        //                 &params[index],
-        //                 "Can only refer to generic types behind a pointer",
-        //             ));
-        //         }
-        //     }
-        // }
+        for (index, param_type) in metadata.parameter_types.iter().enumerate() {
+            if let NodeType::Array(_, 0) = param_type {
+                self.report_error(Diagnostic::error(
+                    &params[index],
+                    "A zero length array cannot be a parameter",
+                ));
+            }
+        }
 
         let analysis = self.check_list(body);
 
@@ -558,12 +564,8 @@ impl ExprVisitor for TypeChecker {
         let lhs_type = lhs.accept(self)?;
         let rhs_type = rhs.accept(self)?;
 
-        if lhs_type.contains_ambiguity() {
-            return Err(Diagnostic::error(lhs, "Cannot infer type"));
-        }
-        if rhs_type.contains_ambiguity() {
-            return Err(Diagnostic::error(lhs, "Cannot infer type"));
-        }
+        self.ensure_no_amibguity(lhs, &lhs_type)?;
+        self.ensure_no_amibguity(rhs, &rhs_type)?;
 
         let entries: &[BinaryEntry] = match op.kind {
             TokenKind::Plus => &ADDITION_ENTRIES,
@@ -591,9 +593,7 @@ impl ExprVisitor for TypeChecker {
     fn visit_unary_expr(&mut self, expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
         let operand_type = operand.accept(self)?;
 
-        if operand_type.contains_ambiguity() {
-            return Err(Diagnostic::error(operand, "Cannot infer type"));
-        }
+        self.ensure_no_amibguity(expr, &operand_type)?;
 
         if let TokenKind::Ampersand = op.kind {
             let boxed_type = Box::new(operand_type.clone());
@@ -716,8 +716,9 @@ impl ExprVisitor for TypeChecker {
         };
 
         // Function arguments
+
         let arg_types: DiagnosticResult<Vec<NodeType>> =
-        args.iter().map(|a| a.accept(self)).collect();
+            args.iter().map(|a| a.accept(self)).collect();
         let arg_types = arg_types?;
 
         if param_types.len() != arg_types.len() {
@@ -731,14 +732,23 @@ impl ExprVisitor for TypeChecker {
             ));
         }
 
-        for ((index, param), arg) in param_types.iter().enumerate().zip(arg_types) {
-            // TODO: this won't work when passing zero length arrays as arguments probably
+        for ((index, param), arg) in param_types.into_iter().enumerate().zip(arg_types) {
+            if let Err(diag) = self.ensure_no_amibguity(&args[index], &arg) {
+                self.report_error(diag);
+            }
             self.check_type_match(&args[index], &arg, &param)?;
         }
 
         if let Some(specialization) = specialization {
-            let vector = self.specialization_map.entry(func_symbol).or_insert(Vec::new());
-            if vector.iter().position(|s| s.id == specialization.id).is_none() {
+            let vector = self
+                .specialization_map
+                .entry(func_symbol)
+                .or_insert(Vec::new());
+            if vector
+                .iter()
+                .position(|s| s.id == specialization.id)
+                .is_none()
+            {
                 vector.push(specialization);
             }
         }

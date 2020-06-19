@@ -40,8 +40,9 @@ impl NodeType {
     pub fn deduce_from_lib(
         explicit_type: &ExplicitType,
         lib: &Lib,
-        context: &[Symbol]) -> Option<Self> {
-            NodeType::deduce_from(explicit_type, &lib.symbols, &lib.dependencies, context)
+        context: &[Symbol],
+    ) -> Option<Self> {
+        NodeType::deduce_from(explicit_type, &lib.symbols, &lib.dependencies, context)
     }
 
     pub fn deduce_from(
@@ -74,7 +75,12 @@ impl NodeType {
         Some(node_type)
     }
 
-    fn symbol_for_type_token(token: &Token, table: &SymbolTable, deps: &[Lib], context: &[Symbol]) -> Option<NodeType> {
+    fn symbol_for_type_token(
+        token: &Token,
+        table: &SymbolTable,
+        deps: &[Lib],
+        context: &[Symbol],
+    ) -> Option<NodeType> {
         trace!(target: "symbol_table", "Trying to find symbol for {} -- ({})", token.lexeme(), token.span.entire_line().0);
 
         for parent in context.iter().rev() {
@@ -96,7 +102,7 @@ impl NodeType {
         }
 
         let top_level_symbol = Symbol::new(None, token);
-        
+
         if let Some(NodeType::Metatype(metatype)) = table.get_type(&top_level_symbol) {
             let instance_type = NodeType::Type(metatype.clone());
             trace!(target: "symbol_table", "Resolving {} as Type({})", token.lexeme(), instance_type);
@@ -221,9 +227,7 @@ impl NodeType {
     pub fn specialize(&self, specialization: &GenericSpecialization) -> NodeType {
         match self {
             NodeType::Generic(_, index) => specialization.node_types[*index].clone(),
-            NodeType::Pointer(to) => {
-                NodeType::pointer_to(to.specialize(specialization))
-            }
+            NodeType::Pointer(to) => NodeType::pointer_to(to.specialize(specialization)),
             NodeType::Array(of, size) => {
                 let specialized = of.specialize(specialization);
                 return NodeType::Array(Box::new(specialized), *size);
@@ -309,7 +313,7 @@ impl std::fmt::Display for NodeType {
             NodeType::Type(ty) => format!("Type({})", ty.id),
             NodeType::Metatype(ty) => format!("Metatype({})", ty.id),
             NodeType::Generic(symbol, index) => format!("Generic({}, index: {})", symbol, index),
-            NodeType::Ambiguous => String::from("<ambiguous>"),
+            NodeType::Ambiguous => String::from("_"),
             NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
         };
         write!(f, "{}", kind)

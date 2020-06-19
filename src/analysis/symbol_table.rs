@@ -166,9 +166,11 @@ pub struct FunctionMetadata {
 
 impl FunctionMetadata {
     pub fn specialize(&self, specialization: &GenericSpecialization) -> (Vec<NodeType>, NodeType) {
-        let params: Vec<NodeType> = self.parameter_types.iter()
-        .map(|node_type| node_type.specialize(specialization))
-        .collect();
+        let params: Vec<NodeType> = self
+            .parameter_types
+            .iter()
+            .map(|node_type| node_type.specialize(specialization))
+            .collect();
         let ret = self.return_type.specialize(specialization);
         (params, ret)
     }
@@ -186,7 +188,8 @@ impl std::fmt::Display for FunctionMetadata {
         } else {
             format!("|{}|", generics.join(","))
         };
-        let parameters: Vec<String> = self.parameter_symbols
+        let parameters: Vec<String> = self
+            .parameter_symbols
             .iter()
             .zip(&self.parameter_types)
             .map(|(symbol, node_type)| format!("{}: {}", symbol.mangled(), node_type))
@@ -200,7 +203,7 @@ impl std::fmt::Display for FunctionMetadata {
             parameters,
             self.return_type
         )?;
-        
+
         if !self.specializations.is_empty() {
             for spec in &self.specializations {
                 write!(f, "\n  {}", spec)?;
@@ -219,13 +222,15 @@ pub struct GenericSpecialization {
 
 impl GenericSpecialization {
     pub fn new(function: &Symbol, node_types: Vec<NodeType>) -> Self {
-        let special_part = node_types.iter().map(|s| {
-            match s {
+        let special_part = node_types
+            .iter()
+            .map(|s| match s {
                 NodeType::Type(ty) => ty.mangled(),
                 NodeType::Int | NodeType::Void | NodeType::Bool | NodeType::Byte => s.to_string(),
                 _ => panic!(),
-            }
-        }).collect::<Vec<_>>().join("__");
+            })
+            .collect::<Vec<_>>()
+            .join("__");
 
         GenericSpecialization {
             id: function.mangled() + &special_part,
@@ -236,7 +241,12 @@ impl GenericSpecialization {
 
 impl std::fmt::Display for GenericSpecialization {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let descrs = self.node_types.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(",");
+        let descrs = self
+            .node_types
+            .iter()
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
         write!(f, "GenericSpecialization({})", descrs)
     }
 }
@@ -284,7 +294,11 @@ pub struct SymbolTableBuilder<'a> {
 }
 
 impl<'a> SymbolTableBuilder<'a> {
-    pub fn build_symbols(type_decls: &[Stmt], function_decls: &[Stmt], deps: &[Lib]) -> SymbolTable {
+    pub fn build_symbols(
+        type_decls: &[Stmt],
+        function_decls: &[Stmt],
+        deps: &[Lib],
+    ) -> SymbolTable {
         let mut builder = SymbolTableBuilder {
             symbols: SymbolTable::new(),
             deps: deps,
@@ -305,18 +319,15 @@ impl<'a> SymbolTableBuilder<'a> {
     }
 
     fn insert<S: ContainsSpan>(&mut self, symbol: Symbol, node_type: NodeType, span: &S) {
-        self.symbols
-            .insert(symbol, node_type, span.span().clone());
+        self.symbols.insert(symbol, node_type, span.span().clone());
     }
 
     fn insert_func_metadata(&mut self, symbol: Symbol, metadata: FunctionMetadata) {
-        self.symbols
-            .insert_func_metadata(symbol, metadata)
+        self.symbols.insert_func_metadata(symbol, metadata)
     }
 
     fn insert_type_metadata(&mut self, symbol: Symbol, metadata: TypeMetadata) {
-        self.symbols
-            .insert_type_metadata(symbol, metadata)
+        self.symbols.insert_type_metadata(symbol, metadata)
     }
 
     fn build_type_header(&mut self, decl: &Stmt) {
@@ -480,7 +491,9 @@ impl<'a> SymbolTableBuilder<'a> {
     }
 
     fn resolve_explicit_type(&self, explicit_type: &ExplicitType) -> NodeType {
-        if let Some(node_type) = NodeType::deduce_from(explicit_type, &self.symbols, self.deps, &self.context) {
+        if let Some(node_type) =
+            NodeType::deduce_from(explicit_type, &self.symbols, self.deps, &self.context)
+        {
             trace!(target: "symbol_table", "Resolved explicit type {} to {}", explicit_type.span().lexeme(), node_type);
             node_type
         } else {

@@ -1,7 +1,7 @@
 pub use crate::analysis::NodeType;
+use crate::source::ContainsSpan;
 use std::fs::File;
 use std::io::Write;
-use crate::source::ContainsSpan;
 
 pub struct CWriter {
     file: File,
