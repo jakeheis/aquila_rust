@@ -6,6 +6,7 @@ mod type_checker;
 pub use cycle_checker::CycleChecker;
 pub use node_type::NodeType;
 pub use symbol_table::{
-    FunctionMetadata, GenericSpecialization, Symbol, SymbolTable, SymbolTableBuilder, TypeMetadata,
+    FunctionKind, FunctionMetadata, GenericSpecialization, Symbol, SymbolTable, SymbolTableBuilder,
+    TypeMetadata,
 };
 pub use type_checker::TypeChecker;

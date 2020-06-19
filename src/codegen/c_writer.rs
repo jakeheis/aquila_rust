@@ -1,4 +1,5 @@
 pub use crate::analysis::NodeType;
+use crate::analysis::{FunctionKind, FunctionMetadata, GenericSpecialization};
 use crate::source::ContainsSpan;
 use std::fs::File;
 use std::io::Write;
@@ -42,22 +43,18 @@ impl CWriter {
 
     pub fn write_function_prototype(
         &mut self,
-        ret_type: &NodeType,
-        name: &str,
-        params: &[(NodeType, String)],
+        function: &FunctionMetadata,
+        specialization: Option<&GenericSpecialization>,
     ) {
-        self.writeln("");
-        self.write_function_header(ret_type, name, params, ";");
+        self.write_function_header(function, specialization, ";");
     }
 
     pub fn start_decl_func(
         &mut self,
-        ret_type: &NodeType,
-        name: &str,
-        params: &[(NodeType, String)],
+        function: &FunctionMetadata,
+        specialization: Option<&GenericSpecialization>,
     ) {
-        self.writeln("");
-        self.write_function_header(ret_type, name, params, " {");
+        self.write_function_header(function, specialization, " {");
         self.indent += 1;
     }
 
@@ -120,19 +117,41 @@ impl CWriter {
 
     fn write_function_header(
         &mut self,
-        ret_type: &NodeType,
-        name: &str,
-        params: &[(NodeType, String)],
+        function: &FunctionMetadata,
+        specialization: Option<&GenericSpecialization>,
         terminator: &str,
     ) {
-        let param_str: Vec<String> = params
+        let (param_types, ret_type) = if let Some(specialization) = specialization {
+            function.specialize(specialization)
+        } else {
+            (
+                function.parameter_types.clone(),
+                function.return_type.clone(),
+            )
+        };
+
+        let mut param_str: Vec<String> = param_types
             .iter()
-            .map(|(param_type, name)| self.type_and_name(param_type, &name))
+            .zip(&function.parameter_symbols)
+            .map(|(param_type, name)| self.type_and_name(param_type, &name.mangled()))
             .collect();
+
+        if let FunctionKind::Method(owner) = &function.kind {
+            param_str.insert(
+                0,
+                self.type_and_name(&NodeType::pointer_to(NodeType::Type(owner.clone())), "self"),
+            );
+        }
+
         let param_str = param_str.join(",");
+        let function_name = specialization
+            .map(|s| s.id.clone())
+            .unwrap_or(function.symbol.mangled());
+
+        self.writeln("");
         self.writeln(&format!(
             "{}({}){}",
-            self.type_and_name(ret_type, name),
+            self.type_and_name(&ret_type, &function_name),
             param_str,
             terminator
         ));

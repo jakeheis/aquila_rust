@@ -259,11 +259,7 @@ impl StmtVisitor for ASTPrinter {
         }
     }
 
-    fn visit_print_stmt(
-        &mut self,
-        _stmt: &Stmt,
-        expr: &Option<Expr>,
-    ) {
+    fn visit_print_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) {
         self.write_ln("PrintStmt");
         if let Some(expr) = expr.as_ref() {
             self.indent(|visitor| {

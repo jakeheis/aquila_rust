@@ -496,11 +496,7 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
-    fn visit_print_stmt(
-        &mut self,
-        _stmt: &Stmt,
-        expr: &Option<Expr>,
-    ) -> Analysis {
+    fn visit_print_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) -> Analysis {
         if let Some(expr) = expr.as_ref() {
             if let Some(node_type) = self.check_expr(expr) {
                 match node_type {

@@ -7,7 +7,7 @@ builtin def sizeof(object: any): int {}
 builtin def ptr_offset(pointer: ptr any, distance: int): ptr any {}
 builtin def _read_line(): ptr byte {}
 
-/*type Memory {
+type Memory {
     
     meta def allocate|T|(): ptr T {
         return cast|ptr T|(malloc(sizeof(T)));
@@ -17,7 +17,7 @@ builtin def _read_line(): ptr byte {}
         return cast|ptr T|(malloc(sizeof(T) * count));
     }
 
-}*/
+}
 
 def read_line(): String {
     return String.from(_read_line());

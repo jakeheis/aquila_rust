@@ -63,9 +63,7 @@ impl Stmt {
                 visitor.visit_for_stmt(&self, variable, array, &body)
             }
             StmtKind::ReturnStmt(expr) => visitor.visit_return_stmt(&self, expr),
-            StmtKind::PrintStmt(expr) => {
-                visitor.visit_print_stmt(&self, expr)
-            }
+            StmtKind::PrintStmt(expr) => visitor.visit_print_stmt(&self, expr),
             StmtKind::ExpressionStmt(expr) => visitor.visit_expression_stmt(&self, expr),
             StmtKind::Builtin(stmt) => visitor.visit_builtin_stmt(&self, &stmt),
         }
@@ -242,11 +240,7 @@ pub trait StmtVisitor {
 
     fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult;
 
-    fn visit_print_stmt(
-        &mut self,
-        stmt: &Stmt,
-        expr: &Option<Expr>,
-    ) -> Self::StmtResult;
+    fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult;
 
     fn visit_expression_stmt(&mut self, stmt: &Stmt, expr: &Expr) -> Self::StmtResult;
 

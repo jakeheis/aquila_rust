@@ -155,8 +155,16 @@ impl std::fmt::Display for SymbolTable {
 }
 
 #[derive(Clone)]
+pub enum FunctionKind {
+    TopLevel,
+    Method(Symbol),
+    MetaMethod(Symbol),
+}
+
+#[derive(Clone)]
 pub struct FunctionMetadata {
     pub symbol: Symbol,
+    pub kind: FunctionKind,
     pub generics: Vec<Symbol>,
     pub parameter_symbols: Vec<Symbol>,
     pub parameter_types: Vec<NodeType>,
@@ -194,10 +202,18 @@ impl std::fmt::Display for FunctionMetadata {
             .zip(&self.parameter_types)
             .map(|(symbol, node_type)| format!("{}: {}", symbol.mangled(), node_type))
             .collect();
+
+        let start = match &self.kind {
+            FunctionKind::TopLevel => String::from("Function("),
+            FunctionKind::Method(owner) => format!("Method(object: {}, ", owner.mangled()),
+            FunctionKind::MetaMethod(owner) => format!("MetaMethod(object: {}, ", owner.mangled()),
+        };
+
         let parameters = parameters.join(",");
         write!(
             f,
-            "Function(def {}{}({}): {})",
+            "{}def {}{}({}): {})",
+            start,
             self.symbol.mangled(),
             generic_porition,
             parameters,
@@ -255,7 +271,8 @@ impl std::fmt::Display for GenericSpecialization {
 pub struct TypeMetadata {
     pub symbol: Symbol,
     // pub generics: Vec<Symbol>,
-    pub fields: Vec<Symbol>,
+    pub field_symbols: Vec<Symbol>,
+    pub field_types: Vec<NodeType>,
     pub methods: Vec<Symbol>,
     pub meta_methods: Vec<Symbol>,
 }
@@ -264,9 +281,10 @@ impl std::fmt::Display for TypeMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         writeln!(f, "Type {}", self.symbol.mangled())?;
         let fields = self
-            .fields
+            .field_symbols
             .iter()
-            .map(|f| f.mangled())
+            .zip(&self.field_types)
+            .map(|(symbol, field_type)| format!("{}: {}", symbol.mangled(), field_type))
             .collect::<Vec<_>>()
             .join(",");
         writeln!(f, "  fields: {}", fields)?;
@@ -388,9 +406,10 @@ impl<'a> SymbolTableBuilder<'a> {
                 init_symbol.clone(),
                 FunctionMetadata {
                     symbol: init_symbol,
+                    kind: FunctionKind::MetaMethod(type_symbol.clone()),
                     generics: Vec::new(),
                     parameter_symbols: field_symbols.clone(),
-                    parameter_types: field_types,
+                    parameter_types: field_types.clone(),
                     return_type: instance_type,
                     specializations: Vec::new(),
                 },
@@ -407,7 +426,8 @@ impl<'a> SymbolTableBuilder<'a> {
             type_symbol.clone(),
             TypeMetadata {
                 symbol: type_symbol,
-                fields: field_symbols,
+                field_symbols,
+                field_types,
                 methods: method_symbols,
                 meta_methods: meta_method_symbols,
             },
@@ -455,7 +475,6 @@ impl<'a> SymbolTableBuilder<'a> {
             param_types.push(node_type);
             param_symbols.push(Symbol::new(Some(&function_symbol), token));
         }
-        let param_types: Vec<_> = params.iter().map(|p| self.var_decl_type(p).1).collect();
 
         let return_type = return_type
             .as_ref()
@@ -465,9 +484,21 @@ impl<'a> SymbolTableBuilder<'a> {
         self.context.pop();
 
         let new_type = NodeType::Function(param_types.clone(), Box::new(return_type.clone()));
+        let function_kind = match function_symbol.parent() {
+            Some(p) if p.is_meta() => FunctionKind::MetaMethod(p),
+            Some(p) => {
+                if let Some(NodeType::Metatype(_)) = self.symbols.get_type(&p) {
+                    FunctionKind::Method(p)
+                } else {
+                    FunctionKind::TopLevel
+                }
+            }
+            _ => FunctionKind::TopLevel,
+        };
 
         let function_metadata = FunctionMetadata {
             symbol: function_symbol.clone(),
+            kind: function_kind,
             generics: generic_symbols,
             parameter_symbols: param_symbols,
             parameter_types: param_types,
