@@ -20,7 +20,7 @@ pub enum StmtKind {
     WhileStmt(Expr, Vec<Stmt>),
     ForStmt(TypedToken, Expr, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
-    PrintStmt(Option<Expr>, RefCell<Option<NodeType>>),
+    PrintStmt(Option<Expr>),
     ExpressionStmt(Expr),
     Builtin(Box<Stmt>),
 }
@@ -63,8 +63,8 @@ impl Stmt {
                 visitor.visit_for_stmt(&self, variable, array, &body)
             }
             StmtKind::ReturnStmt(expr) => visitor.visit_return_stmt(&self, expr),
-            StmtKind::PrintStmt(expr, print_type) => {
-                visitor.visit_print_stmt(&self, expr, print_type)
+            StmtKind::PrintStmt(expr) => {
+                visitor.visit_print_stmt(&self, expr)
             }
             StmtKind::ExpressionStmt(expr) => visitor.visit_expression_stmt(&self, expr),
             StmtKind::Builtin(stmt) => visitor.visit_builtin_stmt(&self, &stmt),
@@ -172,7 +172,7 @@ impl Stmt {
 
     pub fn print_stmt(print_keyword: Span, expr: Option<Expr>) -> Self {
         let span = Span::join_opt(&print_keyword, &expr);
-        Stmt::new(StmtKind::PrintStmt(expr, RefCell::new(None)), span)
+        Stmt::new(StmtKind::PrintStmt(expr), span)
     }
 
     pub fn expression(expr: Expr) -> Self {
@@ -246,7 +246,6 @@ pub trait StmtVisitor {
         &mut self,
         stmt: &Stmt,
         expr: &Option<Expr>,
-        print_type: &RefCell<Option<NodeType>>,
     ) -> Self::StmtResult;
 
     fn visit_expression_stmt(&mut self, stmt: &Stmt, expr: &Expr) -> Self::StmtResult;

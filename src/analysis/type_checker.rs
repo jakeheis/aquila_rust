@@ -7,7 +7,6 @@ use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
 use log::trace;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -501,19 +500,20 @@ impl StmtVisitor for TypeChecker {
         &mut self,
         _stmt: &Stmt,
         expr: &Option<Expr>,
-        print_type: &RefCell<Option<NodeType>>,
     ) -> Analysis {
-        if let Some(node_type) = expr.as_ref().and_then(|e| self.check_expr(e)) {
-            match node_type {
-                NodeType::Int | NodeType::Bool => {
-                    print_type.replace(Some(node_type));
-                }
-                node_type if node_type.is_pointer_to(NodeType::Byte) => {
-                    print_type.replace(Some(node_type));
-                }
-                _ => {
-                    let message = format!("Can't print object of type {}", node_type);
-                    self.report_error(Diagnostic::error(expr.as_ref().unwrap(), &message));
+        if let Some(expr) = expr.as_ref() {
+            if let Some(node_type) = self.check_expr(expr) {
+                match node_type {
+                    NodeType::Int | NodeType::Bool => {
+                        let _ = expr.set_type(node_type);
+                    }
+                    node_type if node_type.is_pointer_to(NodeType::Byte) => {
+                        let _ = expr.set_type(node_type);
+                    }
+                    _ => {
+                        let message = format!("Can't print object of type {}", node_type);
+                        self.report_error(Diagnostic::error(expr, &message));
+                    }
                 }
             }
         }

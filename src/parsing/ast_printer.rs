@@ -1,8 +1,6 @@
 use super::*;
-use crate::analysis::*;
 use crate::lexing::*;
 use crate::source::*;
-use std::cell::RefCell;
 
 enum ASTPrinterMode {
     Stdout,
@@ -265,7 +263,6 @@ impl StmtVisitor for ASTPrinter {
         &mut self,
         _stmt: &Stmt,
         expr: &Option<Expr>,
-        _print_type: &RefCell<Option<NodeType>>,
     ) {
         self.write_ln("PrintStmt");
         if let Some(expr) = expr.as_ref() {

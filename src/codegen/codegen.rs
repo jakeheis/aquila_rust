@@ -6,7 +6,6 @@ use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
 use log::trace;
-use std::cell::RefCell;
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
@@ -392,14 +391,11 @@ impl StmtVisitor for Codegen {
         &mut self,
         _stmt: &Stmt,
         expr: &Option<Expr>,
-        print_type: &RefCell<Option<NodeType>>,
     ) -> Self::StmtResult {
-        let borrowed_type = print_type.borrow();
-
         if let Some(expr) = expr.as_ref() {
-            let expr = expr.accept(self);
-            self.writer
-                .write_print(Some((borrowed_type.as_ref().unwrap(), expr)));
+            let expr_str = expr.accept(self);
+            let print_type = expr.get_type().unwrap();
+            self.writer.write_print(Some((&print_type, expr_str)));
         } else {
             self.writer.write_print(None);
         }

@@ -48,12 +48,6 @@ type Adder {
   }
 }
 
-def take_array(ar: [int; 2]) {
-
-}
-
-take_array([]);
-
 let vec_int = Vec.new|int|();
 vec_int.insert|int|(&4);
 vec_int.insert|int|(&6);
