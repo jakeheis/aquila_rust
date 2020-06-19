@@ -158,16 +158,21 @@ impl std::fmt::Display for SymbolTable {
 pub struct FunctionMetadata {
     pub symbol: Symbol,
     pub generics: Vec<Symbol>,
-    pub parameters: Vec<NodeType>,
+    pub parameter_symbols: Vec<Symbol>,
+    pub parameter_types: Vec<NodeType>,
     pub return_type: NodeType,
     pub specializations: Vec<GenericSpecialization>,
 }
 
-// impl FunctionMetadata {
-//     fn full_type(&self) -> NodeType {
-//         NodeType::Function(self.parameters.clone(), Box::new(self.return_type.clone()))
-//     }
-// }
+impl FunctionMetadata {
+    pub fn specialize(&self, specialization: &GenericSpecialization) -> (Vec<NodeType>, NodeType) {
+        let params: Vec<NodeType> = self.parameter_types.iter()
+        .map(|node_type| node_type.specialize(specialization))
+        .collect();
+        let ret = self.return_type.specialize(specialization);
+        (params, ret)
+    }
+}
 
 impl std::fmt::Display for FunctionMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -181,7 +186,11 @@ impl std::fmt::Display for FunctionMetadata {
         } else {
             format!("|{}|", generics.join(","))
         };
-        let parameters: Vec<String> = self.parameters.iter().map(|p| p.to_string()).collect();
+        let parameters: Vec<String> = self.parameter_symbols
+            .iter()
+            .zip(&self.parameter_types)
+            .map(|(symbol, node_type)| format!("{}: {}", symbol.mangled(), node_type))
+            .collect();
         let parameters = parameters.join(",");
         write!(
             f,
@@ -369,7 +378,8 @@ impl<'a> SymbolTableBuilder<'a> {
                 FunctionMetadata {
                     symbol: init_symbol,
                     generics: Vec::new(),
-                    parameters: field_types.clone(),
+                    parameter_symbols: field_symbols.clone(),
+                    parameter_types: field_types,
                     return_type: instance_type,
                     specializations: Vec::new(),
                 },
@@ -427,6 +437,13 @@ impl<'a> SymbolTableBuilder<'a> {
             generic_symbols.push(generic_symbol);
         }
 
+        let mut param_types: Vec<NodeType> = Vec::new();
+        let mut param_symbols: Vec<Symbol> = Vec::new();
+        for param in params {
+            let (token, node_type) = self.var_decl_type(param);
+            param_types.push(node_type);
+            param_symbols.push(Symbol::new(Some(&function_symbol), token));
+        }
         let param_types: Vec<_> = params.iter().map(|p| self.var_decl_type(p).1).collect();
 
         let return_type = return_type
@@ -441,7 +458,8 @@ impl<'a> SymbolTableBuilder<'a> {
         let function_metadata = FunctionMetadata {
             symbol: function_symbol.clone(),
             generics: generic_symbols,
-            parameters: param_types.clone(),
+            parameter_symbols: param_symbols,
+            parameter_types: param_types,
             return_type: return_type,
             specializations: Vec::new(),
         };

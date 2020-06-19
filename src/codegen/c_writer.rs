@@ -1,6 +1,7 @@
 pub use crate::analysis::NodeType;
 use std::fs::File;
 use std::io::Write;
+use crate::source::ContainsSpan;
 
 pub struct CWriter {
     file: File,
@@ -140,6 +141,20 @@ impl CWriter {
     pub fn write_assignment(&mut self, target: &str, value: &str) {
         let line = format!("{} = {};", target, value);
         self.writeln(&line);
+    }
+
+    pub fn write_guard<T: ContainsSpan>(&mut self, guard: String, message: &str, span: &T) {
+        self.start_condition_block("if", guard);
+
+        let message = format!(
+            "\\nFatal error: {}\\n\\n{}\\n",
+            message,
+            span.span().location(),
+        );
+
+        self.writeln(&format!("printf(\"{}\\n\");", message));
+        self.writeln("exit(1);");
+        self.end_conditional_block();
     }
 
     pub fn convert_type(&self, node_type: &NodeType, name: String) -> (String, String) {

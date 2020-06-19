@@ -211,38 +211,6 @@ impl TypeChecker {
         }
     }
 
-    fn check_function_arguments(
-        &mut self,
-        expr: &Expr,
-        _function_symbol: &Symbol,
-        specialization: &Option<GenericSpecialization>,
-        param_types: &[NodeType],
-        args: &[Expr],
-    ) -> DiagnosticResult<()> {
-        let arg_types: DiagnosticResult<Vec<NodeType>> =
-            args.iter().map(|a| a.accept(self)).collect();
-        let arg_types = arg_types?;
-
-        if param_types.len() != arg_types.len() {
-            return Err(Diagnostic::error(
-                expr,
-                &format!(
-                    "Expected {} argument(s), got {}",
-                    param_types.len(),
-                    arg_types.len()
-                ),
-            ));
-        }
-
-        for ((index, param), arg) in param_types.iter().enumerate().zip(arg_types) {
-            let param_spec = param.specialize(specialization.as_ref());
-            // TODO: this won't work when passing zero length arrays as arguments probably
-            self.check_type_match(&args[index], &arg, &param_spec)?;
-        }
-
-        Ok(())
-    }
-
     fn resolve_explicit_type(&mut self, explicit_type: &ExplicitType) -> Result {
         let context: Vec<Symbol> = self
             .scopes
@@ -340,16 +308,16 @@ impl StmtVisitor for TypeChecker {
 
         self.check_list(params);
 
-        for (index, param_type) in metadata.parameters.iter().enumerate() {
-            if let NodeType::Type(ty) = param_type {
-                if metadata.generics.contains(&ty) {
-                    self.report_error(Diagnostic::error(
-                        &params[index],
-                        "Can only refer to generic types behind a pointer",
-                    ));
-                }
-            }
-        }
+        // for (index, param_type) in metadata.parameter_types.iter().enumerate() {
+        //     if let NodeType::Type(ty) = param_type {
+        //         if metadata.generics.contains(&ty) {
+        //             self.report_error(Diagnostic::error(
+        //                 &params[index],
+        //                 "Can only refer to generic types behind a pointer",
+        //             ));
+        //         }
+        //     }
+        // }
 
         let analysis = self.check_list(body);
 
@@ -741,15 +709,32 @@ impl ExprVisitor for TypeChecker {
             return Err(Diagnostic::error(function, &message));
         }
 
-        let return_type = metadata.return_type.specialize(specialization.as_ref());
+        let (param_types, return_type) = if let Some(spec) = specialization.as_ref() {
+            metadata.specialize(spec)
+        } else {
+            (metadata.parameter_types, metadata.return_type)
+        };
 
-        self.check_function_arguments(
-            expr,
-            &function.get_symbol().unwrap(),
-            &specialization,
-            &metadata.parameters,
-            args,
-        )?;
+        // Function arguments
+        let arg_types: DiagnosticResult<Vec<NodeType>> =
+        args.iter().map(|a| a.accept(self)).collect();
+        let arg_types = arg_types?;
+
+        if param_types.len() != arg_types.len() {
+            return Err(Diagnostic::error(
+                expr,
+                &format!(
+                    "Expected {} argument(s), got {}",
+                    param_types.len(),
+                    arg_types.len()
+                ),
+            ));
+        }
+
+        for ((index, param), arg) in param_types.iter().enumerate().zip(arg_types) {
+            // TODO: this won't work when passing zero length arrays as arguments probably
+            self.check_type_match(&args[index], &arg, &param)?;
+        }
 
         if let Some(specialization) = specialization {
             let vector = self.specialization_map.entry(func_symbol).or_insert(Vec::new());

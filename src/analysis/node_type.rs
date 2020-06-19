@@ -211,12 +211,16 @@ impl NodeType {
         }
     }
 
-    pub fn specialize(&self, specialization: Option<&GenericSpecialization>) -> NodeType {
-        if specialization.is_none() {
-            return self.clone();
+    pub fn specialize_opt(&self, specialization: Option<&GenericSpecialization>) -> NodeType {
+        match specialization {
+            Some(spec) => self.specialize(spec),
+            None => self.clone(),
         }
+    }
+
+    pub fn specialize(&self, specialization: &GenericSpecialization) -> NodeType {
         match self {
-            NodeType::Generic(_, index) => specialization.unwrap().node_types[*index].clone(),
+            NodeType::Generic(_, index) => specialization.node_types[*index].clone(),
             NodeType::Pointer(to) => {
                 NodeType::pointer_to(to.specialize(specialization))
             }

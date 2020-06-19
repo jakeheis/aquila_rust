@@ -5,7 +5,6 @@ use crate::guard;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
-use crate::source::*;
 use std::cell::RefCell;
 use std::fs::{self, File};
 use std::process::Command;
@@ -156,44 +155,24 @@ impl Codegen {
         temp_name
     }
 
-    fn write_guard<T: ContainsSpan>(&mut self, guard: String, message: &str, span: &T) {
-        self.writer.start_condition_block("if", guard);
-
-        let message = format!(
-            "\\nFatal error: {}\\n\\n{}\\n",
-            message,
-            span.span().location(),
-        );
-
-        self.writer.writeln(&format!("printf(\"{}\\n\");", message));
-        self.writer.writeln("exit(1);");
-        self.writer.end_conditional_block();
-    }
-
     fn write_function(&mut self, name: &TypedToken, params: &[Stmt], body: &[Stmt], specialization: Option<&GenericSpecialization>, is_meta: bool) {
         let func_symbol = name.get_symbol().unwrap();
-        let func_type = name.get_type().unwrap();
+        let func_metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
-        if let Some(specialization) = specialization {
+        let (param_types, ret_type) = if let Some(specialization) = specialization {
             trace!(target: "codegen", "Writing function {} with specialization {}", func_symbol, specialization);
+            func_metadata.specialize(specialization)
         } else {
-            trace!(target: "codegen", "Writing function {}", func_symbol);
-        }
-
-        guard!(NodeType::Function[param_types, ret_type] = func_type);
+            trace!(target: "codegen", "Writings function {}", func_symbol);
+            (func_metadata.parameter_types, func_metadata.return_type)
+        };
 
         self.specialization = specialization.map(|s| s.clone());
-        
-        let ret_type = ret_type.specialize(specialization);
 
-        let mut params: Vec<(NodeType, String)> = param_types
+        let mut params: Vec<_> = param_types
             .iter()
-            .zip(params)
-            .map(|(param_type, param_stmt)| {
-                let param_symbol = self.decl_symbol(param_stmt);
-                let spec_param_type = param_type.specialize(specialization);
-                (spec_param_type.clone(), param_symbol.mangled())
-            })
+            .zip(func_metadata.parameter_symbols)
+            .map(|(node_type, symbol)| (node_type.clone(), symbol.mangled()))
             .collect();
 
         if let (Some(current_type), false) = (&self.current_type, is_meta) {
@@ -352,7 +331,7 @@ impl StmtVisitor for Codegen {
             var_type = NodeType::Pointer(of.clone());
         }
 
-        let var_type = var_type.specialize(self.specialization.as_ref());
+        let var_type = var_type.specialize_opt(self.specialization.as_ref());
 
         let value = value.as_ref().map(|v| v.accept(self));
         self.writer
@@ -497,11 +476,7 @@ impl ExprVisitor for Codegen {
 
         let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
 
-        let resolved = self.lib.resolve_symbol(&function_symbol).unwrap();
-        guard!(NodeType::Function[_one, _two] = resolved);
-
         let specs = specializations.iter().map(|s| s.guarantee_resolved()).collect::<Vec<_>>();
-
         let function_name = GenericSpecialization::new(&function_symbol, specs).id;
 
         let rendered = if let Some(target) = target {
@@ -577,12 +552,6 @@ impl ExprVisitor for Codegen {
             return self.writer.convert_type(specialized_type, String::new()).0;
         }
 
-        // match 
-
-        // if let Some(matching) = self.specializations.iter().find(|s| s == &symbol) {
-        //     return matching.to_string();
-        // }
-
         if self
             .current_type
             .as_ref()
@@ -614,7 +583,7 @@ impl ExprVisitor for Codegen {
         let index = self.write_temp(&NodeType::Int, arg);
 
         guard!(NodeType::Array[_inside, count] = target_expr.get_type().unwrap());
-        self.write_guard(
+        self.writer.write_guard(
             format!("{} >= {}", index, count),
             "index out of bounds",
             index_expr,
@@ -630,7 +599,7 @@ impl ExprVisitor for Codegen {
         value: &Expr,
     ) -> Self::ExprResult {
         let cast_type = explicit_type.guarantee_resolved();
-        let cast_type = cast_type.specialize(self.specialization.as_ref());
+        let cast_type = cast_type.specialize_opt(self.specialization.as_ref());
         let (cast_type, _) = self.writer.convert_type(&cast_type, String::new());
         let value = value.accept(self);
 
