@@ -6,7 +6,6 @@ use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
-use super::SpecializationPropagator;
 use log::trace;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -91,7 +90,7 @@ impl TypeChecker {
         //     metadata.specializations = specs;
         // }
 
-        SpecializationPropagator::propogate(&mut lib, call_map);
+        lib.symbols.call_map = call_map;
 
         lib
     }

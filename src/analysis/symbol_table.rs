@@ -98,6 +98,7 @@ pub struct SymbolTable {
     pub type_metadata: HashMap<Symbol, TypeMetadata>,
     pub function_metadata: HashMap<Symbol, FunctionMetadata>,
     pub span_map: HashMap<Symbol, Span>,
+    pub call_map: HashMap<Symbol, Vec<(Symbol, Option<GenericSpecialization>)>>
 }
 
 impl SymbolTable {
@@ -107,6 +108,7 @@ impl SymbolTable {
             type_metadata: HashMap::new(),
             function_metadata: HashMap::new(),
             span_map: HashMap::new(),
+            call_map: HashMap::new(),
         }
     }
 

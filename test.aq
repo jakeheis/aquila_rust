@@ -115,7 +115,7 @@ enum Hello {
 
 // let input = read_line();
 // String.from("Got: ").append(input).print_str();
-/*
+
 let dyn = String.from("hello");
 
 let combo1 = dyn.append_literal(" world");
@@ -129,7 +129,7 @@ dyn.append_literal(" world").append_literal(" again").print_str();
 print dyn.append_literal(" world").append_literal(" again 2").storage;
 
 let here = dyn.append_literal(" world").append_literal(" again 3");
-print here.storage;*/
+print here.storage;
 
 /*let sum = Adder(4, 5);
 print sum.add(6);

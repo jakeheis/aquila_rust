@@ -43,7 +43,8 @@ type String {
 
     def append_literal(lit: ptr byte): String {
         let new_size = size + strlen(lit);
-        let new_storage = cast|ptr byte|(malloc(new_size));
+
+        let new_storage = Memory.allocate_block|byte|(new_size);
         
         memcpy(new_storage, storage, size - 1);
 
@@ -71,8 +72,7 @@ type Vec {
     let element_size: int;
 
     meta def new|T|(): Vec {
-        //let storage = Memory.allocate_block|T|(10);
-        let storage = malloc(sizeof(T) * 10);
+        let storage = Memory.allocate_block|T|(10);
         return Vec(storage, 0, 0, sizeof(T));
     }
 

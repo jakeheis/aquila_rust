@@ -52,7 +52,9 @@ impl Codegen {
             .unwrap();
     }
 
-    fn write(lib: Lib, writer: CWriter) -> CWriter {
+    fn write(mut lib: Lib, writer: CWriter) -> CWriter {
+        SpecializationPropagator::propogate(&mut lib);
+
         let mut writer = writer;
 
         writer.writeln(&format!("\n// {}", lib.name));
