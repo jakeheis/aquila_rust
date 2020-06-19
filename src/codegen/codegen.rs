@@ -22,7 +22,6 @@ pub struct Codegen {
     writer: CWriter,
     lib: Rc<Lib>,
     current_type: Option<Symbol>,
-    current_func: Option<Symbol>,
     stage: CodegenStage,
     is_builtin: bool,
     temp_count: u32,
@@ -64,7 +63,6 @@ impl Codegen {
             writer: writer,
             lib: Rc::clone(&lib),
             current_type: None,
-            current_func: None,
             stage: CodegenStage::ForwardStructDecls,
             is_builtin: false,
             temp_count: 0,
@@ -121,7 +119,7 @@ impl Codegen {
 
     fn write_main(&mut self, stmts: &[Stmt]) {
         let main_func = FunctionMetadata {
-            symbol: Symbol::new_str(None, "main"),
+            symbol: Symbol::main_symbol(),
             kind: FunctionKind::TopLevel,
             generics: Vec::new(),
             parameter_symbols: Vec::new(),
@@ -267,8 +265,6 @@ impl StmtVisitor for Codegen {
 
         let func_metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
-        self.current_func = Some(func_symbol.clone());
-
         if !func_metadata.specializations.is_empty() {
             for spec in &func_metadata.specializations {
                 self.write_function(&func_symbol, body, Some(spec));
@@ -276,8 +272,6 @@ impl StmtVisitor for Codegen {
         } else if generics.is_empty() {
             self.write_function(&func_symbol, body, None);
         }
-
-        self.current_func = None;
     }
 
     fn visit_variable_decl(
@@ -434,6 +428,16 @@ impl ExprVisitor for Codegen {
             .iter()
             .map(|s| s.guarantee_resolved())
             .collect::<Vec<_>>();
+
+        let specs: Vec<_> = specs.iter().map(|arg_type| {
+            match arg_type {
+                NodeType::Generic(_, index) => {
+                    self.specialization.as_ref().unwrap().node_types[*index].clone()
+                },
+                _ => arg_type.clone(),
+            }
+        }).collect();
+
         let function_name = GenericSpecialization::new(&function_symbol, specs).id;
 
         let rendered = if let Some(target) = target {
@@ -491,7 +495,7 @@ impl ExprVisitor for Codegen {
         let symbol = name.get_symbol().unwrap();
         let expr_type = expr.get_type().unwrap();
 
-        if let NodeType::Generic(_, num) = expr_type {
+        if let NodeType::GenericMeta(_, num) = expr_type {
             let specialized_type = &self.specialization.as_ref().unwrap().node_types[num];
             return self.writer.convert_type(specialized_type, String::new()).0;
         }

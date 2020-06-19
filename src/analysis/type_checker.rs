@@ -6,6 +6,7 @@ use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
+use super::SpecializationPropagator;
 use log::trace;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -52,7 +53,7 @@ impl Scope {
 pub struct TypeChecker {
     reporter: Rc<dyn Reporter>,
     lib: Rc<Lib>,
-    specialization_map: HashMap<Symbol, Vec<GenericSpecialization>>,
+    call_map: HashMap<Symbol, Vec<(Symbol, Option<GenericSpecialization>)>>,
     scopes: Vec<Scope>,
     is_builtin: bool,
 }
@@ -68,7 +69,7 @@ impl TypeChecker {
         let mut checker = TypeChecker {
             reporter,
             lib: Rc::clone(&lib),
-            specialization_map: HashMap::new(),
+            call_map: HashMap::new(),
             scopes: vec![top_level],
             is_builtin: false,
         };
@@ -80,15 +81,18 @@ impl TypeChecker {
         checker.check_list(&lib.other);
         checker.pop_scope();
 
-        let spec_map = std::mem::replace(&mut checker.specialization_map, HashMap::new());
+        let call_map = std::mem::replace(&mut checker.call_map, HashMap::new());
 
         std::mem::drop(checker);
 
         let mut lib = Rc::try_unwrap(lib).ok().unwrap();
-        for (symbol, specs) in spec_map {
-            let metadata = lib.function_metadata_mut(&symbol).unwrap();
-            metadata.specializations = specs;
-        }
+        // for (symbol, specs) in spec_map {
+        //     let metadata = lib.function_metadata_mut(&symbol).unwrap();
+        //     metadata.specializations = specs;
+        // }
+
+        SpecializationPropagator::propogate(&mut lib, call_map);
+
         lib
     }
 
@@ -290,7 +294,7 @@ impl StmtVisitor for TypeChecker {
         name.set_symbol(func_symbol.clone());
 
         for (index, token) in generics.iter().enumerate() {
-            let generic_type = NodeType::Generic(func_symbol.clone(), index);
+            let generic_type = NodeType::GenericMeta(func_symbol.clone(), index);
             self.current_scope().define_var(token, &generic_type);
         }
 
@@ -696,6 +700,12 @@ impl ExprVisitor for TypeChecker {
             Some(GenericSpecialization::new(&func_symbol, specialization))
         };
 
+        let caller = self.current_scope().function_metadata.as_ref().map(|f| f.symbol.clone()).unwrap_or(Symbol::main_symbol());
+        self.call_map
+            .entry(caller)
+            .or_insert(Vec::new())
+            .push((func_symbol.clone(), specialization.clone()));
+
         if specializations.len() != metadata.generics.len() {
             let message = format!(
                 "Expected {} specializations, got {}",
@@ -734,21 +744,7 @@ impl ExprVisitor for TypeChecker {
             }
             self.check_type_match(&args[index], &arg, &param)?;
         }
-
-        if let Some(specialization) = specialization {
-            let vector = self
-                .specialization_map
-                .entry(func_symbol)
-                .or_insert(Vec::new());
-            if vector
-                .iter()
-                .position(|s| s.id == specialization.id)
-                .is_none()
-            {
-                vector.push(specialization);
-            }
-        }
-
+        
         expr.set_type(return_type)
     }
 

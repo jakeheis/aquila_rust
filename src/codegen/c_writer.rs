@@ -144,14 +144,11 @@ impl CWriter {
         }
 
         let param_str = param_str.join(",");
-        let function_name = specialization
-            .map(|s| s.id.clone())
-            .unwrap_or(function.symbol.mangled());
 
         self.writeln("");
         self.writeln(&format!(
             "{}({}){}",
-            self.type_and_name(&ret_type, &function_name),
+            self.type_and_name(&ret_type, &function.function_name(specialization)),
             param_str,
             terminator
         ));

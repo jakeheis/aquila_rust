@@ -15,6 +15,7 @@ pub enum NodeType {
     Array(Box<NodeType>, usize),
     Function(Vec<NodeType>, Box<NodeType>),
     Generic(Symbol, usize),
+    GenericMeta(Symbol, usize),
     Metatype(Symbol),
     FlexibleFunction(fn(&[NodeType]) -> bool),
     Ambiguous,
@@ -92,8 +93,8 @@ impl NodeType {
                     trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), instance_type);
                     return Some(instance_type);
                 }
-                Some(NodeType::Generic(..)) => {
-                    let instance_type = resolved.unwrap();
+                Some(NodeType::GenericMeta(symbol, index)) => {
+                    let instance_type = NodeType::Generic(symbol.clone(), *index);
                     trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), instance_type);
                     return Some(instance_type.clone());
                 }
@@ -313,6 +314,7 @@ impl std::fmt::Display for NodeType {
             NodeType::Type(ty) => format!("Type({})", ty.id),
             NodeType::Metatype(ty) => format!("Metatype({})", ty.id),
             NodeType::Generic(symbol, index) => format!("Generic({}, index: {})", symbol, index),
+            NodeType::GenericMeta(symbol, index) => format!("GenericMeta({}, index: {})", symbol, index),
             NodeType::Ambiguous => String::from("_"),
             NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
         };

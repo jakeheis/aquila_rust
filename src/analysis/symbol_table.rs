@@ -35,6 +35,10 @@ impl Symbol {
         Symbol::new_str(parent, &format!("{}", index))
     }
 
+    pub fn main_symbol() -> Self {
+        Symbol::new_str(None, "main")
+    }
+
     // pub fn
 
     // pub fn is_generic(&self) -> bool {
@@ -182,6 +186,12 @@ impl FunctionMetadata {
         let ret = self.return_type.specialize(specialization);
         (params, ret)
     }
+
+    pub fn function_name(&self, specialization: Option<&GenericSpecialization>) -> String {
+        specialization
+            .map(|s| s.id.clone())
+            .unwrap_or(self.symbol.mangled())
+    }
 }
 
 impl std::fmt::Display for FunctionMetadata {
@@ -243,7 +253,9 @@ impl GenericSpecialization {
             .map(|s| match s {
                 NodeType::Type(ty) => ty.mangled(),
                 NodeType::Int | NodeType::Void | NodeType::Bool | NodeType::Byte => s.to_string(),
-                _ => panic!(),
+                NodeType::Generic(sy, index) => format!("{}__{}", sy.mangled(), index),
+                // NodeType::Pointer(other)
+                other => panic!("can't specialize with type {}", other),
             })
             .collect::<Vec<_>>()
             .join("__");
@@ -252,6 +264,12 @@ impl GenericSpecialization {
             id: function.mangled() + &special_part,
             node_types,
         }
+    }
+}
+
+impl PartialEq for GenericSpecialization {
+    fn eq(&self, rhs: &Self) -> bool { 
+        self.id == rhs.id
     }
 }
 
@@ -461,7 +479,7 @@ impl<'a> SymbolTableBuilder<'a> {
             let generic_symbol = Symbol::new(self.context.last(), &generic.token);
             self.insert(
                 generic_symbol.clone(),
-                NodeType::Generic(function_symbol.clone(), index),
+                NodeType::GenericMeta(function_symbol.clone(), index),
                 generic,
             );
             trace!(target: "symbol_table", "Inserting generic {} (symbol = {})", generic.token.lexeme(), generic_symbol);
