@@ -1,0 +1,7 @@
+#!/usr/local/bin/zsh
+
+set -e
+
+/usr/local/opt/llvm/bin/clang -g -Iinclude -I/Library/Developer/CommandLineTools/usr/include/c++/v1 -O0 /Users/jakeheiser/Desktop/Projects/Rust/aquila/build/main.c -o /Users/jakeheiser/Desktop/Projects/Rust/aquila/build/program
+
+./bin/run
