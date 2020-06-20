@@ -1,5 +1,6 @@
 use super::node_type::*;
 use super::symbol_table::*;
+use super::metadata::*;
 use crate::diagnostic::*;
 use crate::guard;
 use crate::lexing::*;

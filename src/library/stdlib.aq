@@ -3,6 +3,7 @@ builtin def realloc(location: ptr any, count: int): ptr any {}
 builtin def strlen(location: ptr byte): int {}
 builtin def memcpy(to: ptr any, from: ptr any, length: int): int {}
 builtin def sizeof(object: any): int {}
+builtin def exit(code: int) {}
 
 builtin def ptr_offset(pointer: ptr any, distance: int): ptr any {}
 builtin def _read_line(): ptr byte {}
@@ -45,6 +46,11 @@ type Memory {
 
 def read_line(): String {
     return String.from(_read_line());
+}
+
+def fatal_error(message: ptr byte) {
+    print String.from("Fatal error: ").append_literal(message).storage;
+    exit(1);
 }
 
 /*

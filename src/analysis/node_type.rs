@@ -1,4 +1,5 @@
 use super::symbol_table::*;
+use super::metadata::*;
 use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::*;

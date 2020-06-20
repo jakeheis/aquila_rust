@@ -5,7 +5,7 @@ use crate::library::Lib;
 pub fn should_write_builtin(symbol: &Symbol) -> bool {
     let id_ref: &str = &symbol.id;
     match id_ref {
-        "strlen" | "memcpy" | "malloc" | "sizeof" | "realloc" => false,
+        "strlen" | "memcpy" | "malloc" | "sizeof" | "realloc" | "exit" => false,
         _ => true,
     }
 }
