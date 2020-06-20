@@ -100,6 +100,7 @@ impl StmtVisitor for ASTPrinter {
         &mut self,
         _stmt: &Stmt,
         name: &TypedToken,
+        _generics: &[TypedToken],
         fields: &[Stmt],
         methods: &[Stmt],
         meta_methods: &[Stmt],

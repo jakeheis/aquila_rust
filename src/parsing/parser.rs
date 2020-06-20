@@ -196,6 +196,13 @@ impl Parser {
         let name = self
             .consume(TokenKind::Identifier, "Expect type name")?
             .clone();
+
+        let generics = if self.matches(TokenKind::Bar) {
+            self.parse_generic_list()?
+        } else {
+            Vec::new()
+        };
+
         self.consume(TokenKind::LeftBrace, "Expect '{' after type name")?;
 
         let mut fields: Vec<Stmt> = Vec::new();
@@ -221,6 +228,7 @@ impl Parser {
         Ok(Stmt::type_decl(
             type_span,
             name,
+            generics,
             fields,
             methods,
             meta_methods,
@@ -239,19 +247,11 @@ impl Parser {
             .consume(TokenKind::Identifier, "Expect function name")?
             .clone();
 
-        let mut generics: Vec<Token> = Vec::new();
-        if self.matches(TokenKind::Bar) {
-            while !self.is_at_end() && self.peek() != TokenKind::Bar {
-                let generic_type = self
-                    .consume(TokenKind::Identifier, "Expect generic type identifier")?
-                    .clone();
-                generics.push(generic_type);
-                if self.peek() != TokenKind::Bar {
-                    self.consume(TokenKind::Comma, "Expect ',' separating parameters")?;
-                }
-            }
-            self.consume(TokenKind::Bar, "Expect '|' after generic parameters")?;
-        }
+        let generics = if self.matches(TokenKind::Bar) {
+            self.parse_generic_list()?
+        } else {
+            Vec::new()
+        };
 
         let mut params: Vec<Stmt> = Vec::new();
         self.consume(TokenKind::LeftParen, "Expect '(' after function name")?;
@@ -498,7 +498,7 @@ impl Parser {
 
     fn call(&mut self, lhs: Expr, _can_assign: bool) -> Result<Expr> {
         let specialization = if self.previous().kind == TokenKind::Bar {
-            let result = self.parse_generic_specialization()?;
+            let result = self.parse_specialization()?;
             self.consume(TokenKind::LeftParen, "Expect '(' before function arguments")?;
             result
         } else {
@@ -601,7 +601,7 @@ impl Parser {
 
         self.consume(TokenKind::Bar, "Expect |cast type|")?;
 
-        let mut specialization = self.parse_generic_specialization()?;
+        let mut specialization = self.parse_specialization()?;
         if specialization.len() != 1 {
             return Err(Diagnostic::error(&cast_span, "Expect single cast type"));
         }
@@ -618,7 +618,22 @@ impl Parser {
         ))
     }
 
-    fn parse_generic_specialization(&mut self) -> Result<Vec<ExplicitType>> {
+    fn parse_generic_list(&mut self) -> Result<Vec<Token>> {
+        let mut generics = Vec::new();
+        while !self.is_at_end() && self.peek() != TokenKind::Bar {
+            let generic_type = self
+                .consume(TokenKind::Identifier, "Expect generic type identifier")?
+                .clone();
+            generics.push(generic_type);
+            if self.peek() != TokenKind::Bar {
+                self.consume(TokenKind::Comma, "Expect ',' separating generic types")?;
+            }
+        }
+        self.consume(TokenKind::Bar, "Expect '|' after generic types")?;
+        Ok(generics)
+    }
+
+    fn parse_specialization(&mut self) -> Result<Vec<ExplicitType>> {
         let mut specialized_types = Vec::new();
         while !self.is_at_end() && self.peek() != TokenKind::Bar {
             let specialized_type = self.parse_explicit_type()?;
@@ -627,7 +642,7 @@ impl Parser {
                 self.consume(TokenKind::Comma, "Expect ',' between generic types")?;
             }
         }
-        self.consume(TokenKind::Bar, "Expect '|' after generic specialization")?;
+        self.consume(TokenKind::Bar, "Expect '|' after generic types")?;
         Ok(specialized_types)
     }
 

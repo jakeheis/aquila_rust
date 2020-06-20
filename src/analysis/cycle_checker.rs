@@ -1,6 +1,5 @@
 use super::*;
 use crate::diagnostic::*;
-use crate::guard;
 use crate::library::*;
 use crate::parsing::*;
 use std::collections::{HashMap, HashSet};
@@ -49,15 +48,17 @@ impl CycleChecker {
             }
 
             lib.type_decls.sort_by(|lhs, rhs| {
-                guard!(StmtKind::TypeDecl[lhs, _fields, _methods, _meta_methods] = &lhs.kind);
-                guard!(StmtKind::TypeDecl[rhs, _fields, _methods, _meta_methods] = &rhs.kind);
-
-                let lhs_symbol = lhs.get_symbol().unwrap();
-                let rhs_symbol = rhs.get_symbol().unwrap();
-
-                let lhs_index = ordered.iter().position(|s| s == &lhs_symbol).unwrap();
-                let rhs_index = ordered.iter().position(|s| s == &rhs_symbol).unwrap();
-                lhs_index.cmp(&rhs_index)
+                match (&lhs.kind, &rhs.kind) {
+                    (StmtKind::TypeDecl(lhs, ..), StmtKind::TypeDecl(rhs, ..)) => {
+                        let lhs_symbol = lhs.get_symbol().unwrap();
+                        let rhs_symbol = rhs.get_symbol().unwrap();
+        
+                        let lhs_index = ordered.iter().position(|s| s == &lhs_symbol).unwrap();
+                        let rhs_index = ordered.iter().position(|s| s == &rhs_symbol).unwrap();
+                        lhs_index.cmp(&rhs_index)
+                    }
+                    _ => unreachable!()
+                }
             })
         }
     }

@@ -39,7 +39,7 @@ first(3);
 
 let numbers =  [1,2,3];
 
-type Adder {
+type Adder|T| {
   let lhs: int;
   let rhs: int;
 

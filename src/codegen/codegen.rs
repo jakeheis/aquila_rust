@@ -196,6 +196,7 @@ impl StmtVisitor for Codegen {
         &mut self,
         _stmt: &Stmt,
         name: &TypedToken,
+        generics: &[TypedToken],
         fields: &[Stmt],
         methods: &[Stmt],
         meta_methods: &[Stmt],

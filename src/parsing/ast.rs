@@ -6,7 +6,7 @@ use crate::source::*;
 use std::cell::RefCell;
 
 pub enum StmtKind {
-    TypeDecl(TypedToken, Vec<Stmt>, Vec<Stmt>, Vec<Stmt>),
+    TypeDecl(TypedToken, Vec<TypedToken>, Vec<Stmt>, Vec<Stmt>, Vec<Stmt>),
     FunctionDecl(
         TypedToken,
         Vec<TypedToken>,
@@ -38,8 +38,8 @@ impl Stmt {
 
     pub fn accept<V: StmtVisitor>(&self, visitor: &mut V) -> V::StmtResult {
         match &self.kind {
-            StmtKind::TypeDecl(name, fields, methods, meta_methods) => {
-                visitor.visit_type_decl(&self, &name, &fields, &methods, &meta_methods)
+            StmtKind::TypeDecl(name, generics, fields, methods, meta_methods) => {
+                visitor.visit_type_decl(&self, &name, generics, &fields, &methods, &meta_methods)
             }
             StmtKind::FunctionDecl(name, generics, params, return_type, body, is_meta) => visitor
                 .visit_function_decl(
@@ -76,14 +76,16 @@ impl Stmt {
     pub fn type_decl(
         type_span: Span,
         name: Token,
+        generics: Vec<Token>,
         fields: Vec<Stmt>,
         methods: Vec<Stmt>,
         meta_methods: Vec<Stmt>,
         right_brace: &Token,
     ) -> Self {
         let span = Span::join(&type_span, right_brace);
+        let generics: Vec<_> = generics.into_iter().map(|g| TypedToken::new(g)).collect();
         Stmt::new(
-            StmtKind::TypeDecl(TypedToken::new(name), fields, methods, meta_methods),
+            StmtKind::TypeDecl(TypedToken::new(name), generics, fields, methods, meta_methods),
             span,
         )
     }
@@ -200,6 +202,7 @@ pub trait StmtVisitor {
         &mut self,
         stmt: &Stmt,
         name: &TypedToken,
+        generics: &[TypedToken],
         fields: &[Stmt],
         methods: &[Stmt],
         meta_methods: &[Stmt],

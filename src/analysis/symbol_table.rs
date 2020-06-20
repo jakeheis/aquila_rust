@@ -193,7 +193,7 @@ impl<'a> SymbolTableBuilder<'a> {
     }
 
     fn build_type_header(&mut self, decl: &Stmt) {
-        guard!(StmtKind::TypeDecl[name, _fields, _method, _meta_methods] = &decl.kind);
+        guard!(StmtKind::TypeDecl[name, generics, _fields, _method, _meta_methods] = &decl.kind);
 
         let new_symbol = Symbol::new(self.context.last(), &name.token);
         let new_type = NodeType::Metatype(new_symbol.clone());
@@ -211,7 +211,7 @@ impl<'a> SymbolTableBuilder<'a> {
     }
 
     fn build_type_internal(&mut self, decl: &Stmt) {
-        guard!(StmtKind::TypeDecl[name, fields, methods, meta_methods] = &decl.kind);
+        guard!(StmtKind::TypeDecl[name, generics, fields, methods, meta_methods] = &decl.kind);
 
         let type_symbol = name.get_symbol().unwrap();
 
