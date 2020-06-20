@@ -60,14 +60,14 @@ type Adder {
 }
 
 let vec_int = Vec.new|int|();
-vec_int.insert(&4);
-vec_int.insert(&6);
+vec_int.insert(4);
+vec_int.insert(6);
 print *(vec_int.get|int|(1));
 
 let vec = Vec.new|Adder|();
  
-vec.insert(&Adder(10, 2));
-vec.insert(&Adder(3, 4));
+vec.insert(Adder(10, 2));
+vec.insert(Adder(3, 4));
 
 print (*vec.get|Adder|(1)).add(2);
 

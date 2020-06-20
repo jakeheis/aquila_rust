@@ -53,7 +53,7 @@ impl Codegen {
             .unwrap();
     }
 
-    fn write(mut lib: Lib, writer: CWriter) -> CWriter {
+    fn write(mut lib: Lib, writer: CWriter) {
         SpecializationPropagator::propogate(&mut lib);
 
         let mut writer = writer;
@@ -72,52 +72,40 @@ impl Codegen {
             specialization: None,
         };
 
-        codegen.stage = CodegenStage::ForwardStructDecls;
+        let lib = lib.as_ref();
 
-        codegen.gen_stmts(&lib.type_decls);
-        for dep in &lib.dependencies {
-            // TOOD: this will only work with lib chains 1 deep
-            codegen.gen_stmts(&dep.type_decls);
-        }
+        codegen.stage = CodegenStage::ForwardStructDecls;
+        codegen.chunk(lib, &mut |codegen, lib| {
+            codegen.gen_stmts(&lib.type_decls);
+        });
 
         codegen.stage = CodegenStage::StructBodies;
-        codegen.gen_stmts(&lib.type_decls);
-        for dep in &lib.dependencies {
-            // TOOD: this will only work with lib chains 1 deep
-            codegen.gen_stmts(&dep.type_decls);
-        }
+        codegen.chunk(lib, &mut |codegen, lib| {
+            codegen.gen_stmts(&lib.type_decls);
+        });
 
         codegen.stage = CodegenStage::FuncPrototypes;
-        codegen.gen_stmts(&lib.type_decls);
-        for dep in &lib.dependencies {
-            // TOOD: this will only work with lib chains 1 deep
-            codegen.gen_stmts(&dep.type_decls);
-        }
-
-        codegen.gen_stmts(&lib.function_decls);
-        for dep in &lib.dependencies {
-            // TOOD: this will only work with lib chains 1 deep
-            codegen.gen_stmts(&dep.function_decls);
-        }
+        codegen.chunk(lib, &mut |codegen, lib| {
+            codegen.gen_stmts(&lib.type_decls);
+            codegen.gen_stmts(&lib.function_decls);
+        });
 
         codegen.stage = CodegenStage::FuncBodies;
-        codegen.gen_stmts(&lib.type_decls);
-        for dep in &lib.dependencies {
-            // TOOD: this will only work with lib chains 1 deep
-            codegen.gen_stmts(&dep.type_decls);
-        }
-
-        codegen.gen_stmts(&lib.function_decls);
-        for dep in &lib.dependencies {
-            // TOOD: this will only work with lib chains 1 deep
-            codegen.gen_stmts(&dep.function_decls);
-        }
+        codegen.chunk(lib, &mut |codegen, lib| {
+            codegen.gen_stmts(&lib.type_decls);
+            codegen.gen_stmts(&lib.function_decls);
+        });
 
         if !lib.other.is_empty() {
             codegen.write_main(&lib.other);
         }
+    }
 
-        codegen.writer
+    fn chunk<F>(&mut self, lib: &Lib, function: &mut F) where F: Fn(&mut Codegen, &Lib) -> () {
+        for dep in &lib.dependencies {
+            self.chunk(dep, function);
+        }
+        function(self, lib);
     }
 
     fn write_main(&mut self, stmts: &[Stmt]) {
@@ -149,7 +137,8 @@ impl Codegen {
         let temp_name = format!("_temp_{}", self.temp_count);
         self.temp_count += 1;
 
-        let temp_type = self.writer.type_and_name(temp_type, &temp_name);
+        let temp_type = temp_type.specialize_opt(self.specialization.as_ref());
+        let temp_type = self.writer.type_and_name(&temp_type, &temp_name);
         let temp = format!("{} = {};", temp_type, value);
         self.writer.writeln(&temp);
 

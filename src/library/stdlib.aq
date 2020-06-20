@@ -99,7 +99,11 @@ type Vec {
         return Vec(storage, 0, 0, Memory.size|T|());
     }
 
-    def insert|T|(object: ptr T) {
+    def insert|T|(object: T) {
+        insert_ptr(&object);
+    }
+
+    def insert_ptr|T|(object: ptr T) {
         if count == capacity {
             capacity = capacity * 2;
             storage = Memory.reallocate(cast|ptr T|(storage), capacity);

@@ -42,6 +42,12 @@ impl Lib {
     fn build_lib(source: Source, name: &str, link_stdlib: bool) -> Result<Lib, &'static str> {
         let reporter: Rc<dyn Reporter> = DefaultReporter::new();
 
+        let dependencies = if link_stdlib {
+            vec![Lib::stdlib()]
+        } else {
+            vec![]
+        };
+
         let lexer = Lexer::new(source, Rc::clone(&reporter));
         let tokens = lexer.lex();
 
@@ -64,11 +70,6 @@ impl Lib {
 
         let (type_decls, function_decls, other) = Lib::organize_stms(stmts);
 
-        let dependencies = if link_stdlib {
-            vec![Lib::stdlib()]
-        } else {
-            vec![]
-        };
         let mut lib = Lib {
             name: String::from(name),
             type_decls,
