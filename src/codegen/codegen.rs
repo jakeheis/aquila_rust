@@ -221,7 +221,7 @@ impl StmtVisitor for Codegen {
             CodegenStage::StructBodies => {
                 self.writer.start_decl_struct(&type_symbol.mangled());
                 for field in &decl.fields {
-                    field.accept(self);
+                    self.visit_variable_decl(field);
                 }
                 self.writer.end_decl_struct(&type_symbol.mangled());
             }
@@ -268,14 +268,9 @@ impl StmtVisitor for Codegen {
         }
     }
 
-    fn visit_variable_decl(
-        &mut self,
-        name: &TypedToken,
-        _kind: &Option<ExplicitType>,
-        value: &Option<Expr>,
-    ) -> Self::StmtResult {
-        let var_symbol = name.get_symbol().unwrap();
-        let mut var_type = name.get_type().unwrap();
+    fn visit_variable_decl(&mut self, decl: &VariableDecl) -> Self::StmtResult {
+        let var_symbol = decl.name.get_symbol().unwrap();
+        let mut var_type = decl.name.get_type().unwrap();
 
         if let NodeType::Array(of, _) = var_type {
             var_type = NodeType::Pointer(of.clone());
@@ -283,7 +278,7 @@ impl StmtVisitor for Codegen {
 
         let var_type = var_type.specialize_opt(self.specialization.as_ref());
 
-        let value = value.as_ref().map(|v| v.accept(self));
+        let value = decl.initial_value.as_ref().map(|v| v.accept(self));
         self.writer
             .decl_var(&var_type, &var_symbol.mangled(), value);
     }

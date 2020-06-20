@@ -1,6 +1,5 @@
 use super::metadata::*;
 use super::node_type::*;
-use crate::guard;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
@@ -347,10 +346,9 @@ impl<'a> SymbolTableBuilder<'a> {
         function_symbol
     }
 
-    fn var_decl_type<'b>(&self, var_decl: &'b Stmt) -> (&'b Token, NodeType) {
-        guard!(StmtKind::VariableDecl[name, explicit_type, _value] = &var_decl.kind);
-        let explicit_type = self.resolve_explicit_type(explicit_type.as_ref().unwrap());
-        (&name.token, explicit_type)
+    fn var_decl_type<'b>(&self, var_decl: &'b VariableDecl) -> (&'b Token, NodeType) {
+        let explicit_type = self.resolve_explicit_type(var_decl.explicit_type.as_ref().unwrap());
+        (&var_decl.name.token, explicit_type)
     }
 
     fn resolve_explicit_type(&self, explicit_type: &ExplicitType) -> NodeType {

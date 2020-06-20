@@ -110,7 +110,9 @@ impl StmtVisitor for ASTPrinter {
         self.indent(|visitor| {
             visitor.write_ln("Fields");
             visitor.indent(|visitor| {
-                decl.fields.iter().for_each(|p| p.accept(visitor));
+                decl.fields
+                    .iter()
+                    .for_each(|f| visitor.visit_variable_decl(f));
             });
             visitor.write_ln("Methods");
             visitor.indent(|visitor| {
@@ -155,7 +157,9 @@ impl StmtVisitor for ASTPrinter {
             }
             visitor.write_ln("Params");
             visitor.indent(|visitor| {
-                decl.parameters.iter().for_each(|p| p.accept(visitor));
+                decl.parameters
+                    .iter()
+                    .for_each(|p| visitor.visit_variable_decl(p));
             });
             visitor.write_ln("Body");
             visitor.indent(|visitor| {
@@ -164,31 +168,28 @@ impl StmtVisitor for ASTPrinter {
         });
     }
 
-    fn visit_variable_decl(
-        &mut self,
-        name: &TypedToken,
-        explicit_type: &Option<ExplicitType>,
-        value: &Option<Expr>,
-    ) {
-        let symbol = name
+    fn visit_variable_decl(&mut self, decl: &VariableDecl) {
+        let symbol = decl
+            .name
             .get_symbol()
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
-        let resolved_type = name
+        let resolved_type = decl
+            .name
             .get_type()
             .map(|s| s.to_string())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "VariableDecl(name: {}, symbol: {}, resolved_type: {})",
-            name.span().lexeme(),
+            decl.name.span().lexeme(),
             symbol,
             resolved_type,
         ));
         self.indent(|visitor| {
-            if let Some(e) = explicit_type.as_ref() {
+            if let Some(e) = decl.explicit_type.as_ref() {
                 visitor.write_explicit_type(e);
             }
-            if let Some(v) = value {
+            if let Some(v) = decl.initial_value.as_ref() {
                 v.accept(visitor);
             }
         })

@@ -1,4 +1,5 @@
 use super::ast::*;
+use super::expr::*;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::source::*;
@@ -205,13 +206,13 @@ impl Parser {
 
         self.consume(TokenKind::LeftBrace, "Expect '{' after type name")?;
 
-        let mut fields: Vec<Stmt> = Vec::new();
+        let mut fields: Vec<VariableDecl> = Vec::new();
         let mut methods: Vec<FunctionDecl> = Vec::new();
         let mut meta_methods: Vec<FunctionDecl> = Vec::new();
 
         for stmt in self.block(Context::InsideType) {
             match stmt.kind {
-                StmtKind::VariableDecl(..) => fields.push(stmt),
+                StmtKind::VariableDecl(decl) => fields.push(decl),
                 StmtKind::FunctionDecl(decl) => {
                     if decl.is_meta {
                         meta_methods.push(decl)
@@ -253,10 +254,13 @@ impl Parser {
             Vec::new()
         };
 
-        let mut params: Vec<Stmt> = Vec::new();
+        let mut params: Vec<VariableDecl> = Vec::new();
         self.consume(TokenKind::LeftParen, "Expect '(' after function name")?;
         while !self.is_at_end() && self.peek() != TokenKind::RightParen {
-            params.push(self.variable_decl(false)?);
+            match self.variable_decl(false)?.kind {
+                StmtKind::VariableDecl(decl) => params.push(decl),
+                _ => unreachable!(),
+            }
             if self.peek() != TokenKind::RightParen {
                 self.consume(TokenKind::Comma, "Expect ',' separating parameters")?;
             }

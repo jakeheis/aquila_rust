@@ -270,7 +270,9 @@ impl StmtVisitor for TypeChecker {
         }
         self.pop_scope();
 
-        self.check_list(&decl.fields);
+        for field in &decl.fields {
+            self.visit_variable_decl(field);
+        }
 
         for method in &metadata.methods {
             let method_type = self.lib.resolve_symbol(&method).unwrap();
@@ -315,7 +317,9 @@ impl StmtVisitor for TypeChecker {
             value => value,
         };
 
-        self.check_list(&decl.parameters);
+        for param in &decl.parameters {
+            self.visit_variable_decl(param);
+        }
 
         for (index, param_type) in metadata.parameter_types.iter().enumerate() {
             if let NodeType::Array(_, 0) = param_type {
@@ -332,7 +336,7 @@ impl StmtVisitor for TypeChecker {
 
         if !analysis.guarantees_return && !return_type.matches(&NodeType::Void) && !self.is_builtin
         {
-            let last_param = decl.parameters.last().map(|p| p.span.clone());
+            let last_param = decl.parameters.last().map(|p| p.span().clone());
             let span_params = Span::join_opt(&decl.name, &last_param);
             let span = Span::join_opt(&span_params, &decl.return_type);
             self.report_error(Diagnostic::error(&span, "Function may not return"));
@@ -343,14 +347,9 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
-    fn visit_variable_decl(
-        &mut self,
-        name: &TypedToken,
-        explicit_type: &Option<ExplicitType>,
-        value: &Option<Expr>,
-    ) -> Analysis {
+    fn visit_variable_decl(&mut self, decl: &VariableDecl) -> Analysis {
         let explicit_type =
-            explicit_type
+            decl.explicit_type
                 .as_ref()
                 .and_then(|k| match self.resolve_explicit_type(k) {
                     Ok(explicit_type) => Some(explicit_type),
@@ -360,25 +359,31 @@ impl StmtVisitor for TypeChecker {
                     }
                 });
 
-        let implicit_type = value.as_ref().and_then(|v| self.check_expr(v));
+        let implicit_type = decl.initial_value.as_ref().and_then(|v| self.check_expr(v));
 
         match (explicit_type, implicit_type) {
             (Some(explicit), Some(implicit)) => {
-                self.current_scope().define_var(name, &explicit);
+                self.current_scope().define_var(&decl.name, &explicit);
 
-                if let Err(diag) =
-                    self.check_type_match(&value.as_ref().unwrap(), &implicit, &explicit)
-                {
+                if let Err(diag) = self.check_type_match(
+                    decl.initial_value.as_ref().unwrap(),
+                    &implicit,
+                    &explicit,
+                ) {
                     self.report_error(diag);
                 }
-                let _ = value.as_ref().unwrap().set_type(explicit.clone());
+                let _ = decl
+                    .initial_value
+                    .as_ref()
+                    .unwrap()
+                    .set_type(explicit.clone());
             }
-            (Some(explicit), None) => self.current_scope().define_var(name, &explicit),
+            (Some(explicit), None) => self.current_scope().define_var(&decl.name, &explicit),
             (None, Some(implicit)) if !implicit.contains_ambiguity() => {
-                self.current_scope().define_var(name, &implicit)
+                self.current_scope().define_var(&decl.name, &implicit)
             }
             _ => {
-                self.report_error(Diagnostic::error(name, "Can't infer type"));
+                self.report_error(Diagnostic::error(&decl.name, "Can't infer type"));
             }
         }
 
