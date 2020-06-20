@@ -5,8 +5,16 @@ use crate::library::Lib;
 use crate::source::*;
 use std::cell::RefCell;
 
+pub struct TypeDecl {
+    pub name: TypedToken,
+    pub generics: Vec<TypedToken>,
+    pub fields: Vec<Stmt>,
+    pub methods: Vec<Stmt>,
+    pub meta_methods: Vec<Stmt>
+}
+
 pub enum StmtKind {
-    TypeDecl(TypedToken, Vec<TypedToken>, Vec<Stmt>, Vec<Stmt>, Vec<Stmt>),
+    TypeDecl(TypeDecl),
     FunctionDecl(
         TypedToken,
         Vec<TypedToken>,
@@ -38,12 +46,11 @@ impl Stmt {
 
     pub fn accept<V: StmtVisitor>(&self, visitor: &mut V) -> V::StmtResult {
         match &self.kind {
-            StmtKind::TypeDecl(name, generics, fields, methods, meta_methods) => {
-                visitor.visit_type_decl(&self, &name, generics, &fields, &methods, &meta_methods)
+            StmtKind::TypeDecl(decl) => {
+                visitor.visit_type_decl(&decl)
             }
             StmtKind::FunctionDecl(name, generics, params, return_type, body, is_meta) => visitor
                 .visit_function_decl(
-                    &self,
                     &name,
                     &generics,
                     &params,
@@ -52,24 +59,24 @@ impl Stmt {
                     *is_meta,
                 ),
             StmtKind::VariableDecl(name, kind, value) => {
-                visitor.visit_variable_decl(&self, &name, &kind, &value)
+                visitor.visit_variable_decl(&name, &kind, &value)
             }
             StmtKind::TraitDecl(name, requirements) => {
-                visitor.visit_trait_decl(&self, name, &requirements)
+                visitor.visit_trait_decl(name, &requirements)
             }
             StmtKind::IfStmt(condition, body, else_body) => {
-                visitor.visit_if_stmt(&self, &condition, &body, &else_body)
+                visitor.visit_if_stmt(&condition, &body, &else_body)
             }
             StmtKind::WhileStmt(condition, body) => {
-                visitor.visit_while_stmt(&self, condition, &body)
+                visitor.visit_while_stmt(condition, &body)
             }
             StmtKind::ForStmt(variable, array, body) => {
-                visitor.visit_for_stmt(&self, variable, array, &body)
+                visitor.visit_for_stmt(variable, array, &body)
             }
             StmtKind::ReturnStmt(expr) => visitor.visit_return_stmt(&self, expr),
-            StmtKind::PrintStmt(expr) => visitor.visit_print_stmt(&self, expr),
-            StmtKind::ExpressionStmt(expr) => visitor.visit_expression_stmt(&self, expr),
-            StmtKind::Builtin(stmt) => visitor.visit_builtin_stmt(&self, &stmt),
+            StmtKind::PrintStmt(expr) => visitor.visit_print_stmt(expr),
+            StmtKind::ExpressionStmt(expr) => visitor.visit_expression_stmt(expr),
+            StmtKind::Builtin(stmt) => visitor.visit_builtin_stmt(&stmt),
         }
     }
 
@@ -84,8 +91,15 @@ impl Stmt {
     ) -> Self {
         let span = Span::join(&type_span, right_brace);
         let generics: Vec<_> = generics.into_iter().map(|g| TypedToken::new(g)).collect();
+        let decl = TypeDecl {
+            name: TypedToken::new(name),
+            generics,
+            fields,
+            methods,
+            meta_methods
+        };
         Stmt::new(
-            StmtKind::TypeDecl(TypedToken::new(name), generics, fields, methods, meta_methods),
+            StmtKind::TypeDecl(decl),
             span,
         )
     }
@@ -200,17 +214,11 @@ pub trait StmtVisitor {
 
     fn visit_type_decl(
         &mut self,
-        stmt: &Stmt,
-        name: &TypedToken,
-        generics: &[TypedToken],
-        fields: &[Stmt],
-        methods: &[Stmt],
-        meta_methods: &[Stmt],
+        decl: &TypeDecl,
     ) -> Self::StmtResult;
 
     fn visit_function_decl(
         &mut self,
-        stmt: &Stmt,
         name: &TypedToken,
         generics: &[TypedToken],
         params: &[Stmt],
@@ -221,7 +229,6 @@ pub trait StmtVisitor {
 
     fn visit_variable_decl(
         &mut self,
-        stmt: &Stmt,
         name: &TypedToken,
         explicit_type: &Option<ExplicitType>,
         value: &Option<Expr>,
@@ -229,14 +236,12 @@ pub trait StmtVisitor {
 
     fn visit_trait_decl(
         &mut self,
-        stmt: &Stmt,
         name: &TypedToken,
         requirements: &[Stmt],
     ) -> Self::StmtResult;
 
     fn visit_if_stmt(
         &mut self,
-        stmt: &Stmt,
         condition: &Expr,
         body: &[Stmt],
         else_body: &[Stmt],
@@ -244,14 +249,12 @@ pub trait StmtVisitor {
 
     fn visit_while_stmt(
         &mut self,
-        stmt: &Stmt,
         condition: &Expr,
         body: &[Stmt],
     ) -> Self::StmtResult;
 
     fn visit_for_stmt(
         &mut self,
-        stmt: &Stmt,
         variable: &TypedToken,
         array: &Expr,
         body: &[Stmt],
@@ -259,11 +262,11 @@ pub trait StmtVisitor {
 
     fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult;
 
-    fn visit_print_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult;
+    fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Self::StmtResult;
 
-    fn visit_expression_stmt(&mut self, stmt: &Stmt, expr: &Expr) -> Self::StmtResult;
+    fn visit_expression_stmt(&mut self, expr: &Expr) -> Self::StmtResult;
 
-    fn visit_builtin_stmt(&mut self, stmt: &Stmt, inner: &Box<Stmt>) -> Self::StmtResult;
+    fn visit_builtin_stmt(&mut self, inner: &Box<Stmt>) -> Self::StmtResult;
 }
 
 // Expr

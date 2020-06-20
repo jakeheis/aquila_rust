@@ -10,7 +10,7 @@ use std::rc::Rc;
 pub struct Lib {
     pub name: String,
     pub function_decls: Vec<Stmt>,
-    pub type_decls: Vec<Stmt>,
+    pub type_decls: Vec<TypeDecl>,
     pub other: Vec<Stmt>,
     pub symbols: SymbolTable,
     pub dependencies: Vec<Lib>,
@@ -93,7 +93,9 @@ impl Lib {
 
         if LOG_TYPE_CHECKER {
             let mut printer = ASTPrinter::new();
-            printer.print(&lib.type_decls);
+            for decl in &lib.type_decls {
+                printer.visit_type_decl(decl);
+            }
             printer.print(&lib.function_decls);
             printer.print(&lib.other);
         }
@@ -176,16 +178,24 @@ impl Lib {
         }
     }
 
-    fn organize_stms(stmts: Vec<Stmt>) -> (Vec<Stmt>, Vec<Stmt>, Vec<Stmt>) {
-        let mut type_decls: Vec<Stmt> = Vec::new();
+    fn organize_stms(stmts: Vec<Stmt>) -> (Vec<TypeDecl>, Vec<Stmt>, Vec<Stmt>) {
+        let mut type_decls: Vec<TypeDecl> = Vec::new();
         let mut function_decls: Vec<Stmt> = Vec::new();
         let mut other: Vec<Stmt> = Vec::new();
         for stmt in stmts {
             match &stmt.kind {
-                StmtKind::TypeDecl(..) => type_decls.push(stmt),
+                StmtKind::TypeDecl(..) => {
+                    if let StmtKind::TypeDecl(decl) = stmt.kind {
+                        type_decls.push(decl);
+                    }
+                },
                 StmtKind::FunctionDecl(..) => function_decls.push(stmt),
                 StmtKind::Builtin(builtin) => match &builtin.kind {
-                    StmtKind::TypeDecl(..) => type_decls.push(stmt),
+                    StmtKind::TypeDecl(..) => {
+                        if let StmtKind::TypeDecl(decl) = stmt.kind {
+                            type_decls.push(decl);
+                        }
+                    },
                     StmtKind::FunctionDecl(..) => function_decls.push(stmt),
                     _ => other.push(stmt),
                 },

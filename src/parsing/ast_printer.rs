@@ -98,41 +98,36 @@ impl StmtVisitor for ASTPrinter {
 
     fn visit_type_decl(
         &mut self,
-        _stmt: &Stmt,
-        name: &TypedToken,
-        _generics: &[TypedToken],
-        fields: &[Stmt],
-        methods: &[Stmt],
-        meta_methods: &[Stmt],
+        decl: &TypeDecl
     ) {
-        let symbol = name
+        let symbol = decl
+            .name
             .get_symbol()
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "TypeDecl(name: {}, symbol: {})",
-            name.span().lexeme(),
+            decl.name.span().lexeme(),
             symbol
         ));
         self.indent(|visitor| {
             visitor.write_ln("Fields");
             visitor.indent(|visitor| {
-                fields.iter().for_each(|p| p.accept(visitor));
+                decl.fields.iter().for_each(|p| p.accept(visitor));
             });
             visitor.write_ln("Methods");
             visitor.indent(|visitor| {
-                methods.iter().for_each(|p| p.accept(visitor));
+                decl.methods.iter().for_each(|p| p.accept(visitor));
             });
             visitor.write_ln("MetaMethods");
             visitor.indent(|visitor| {
-                meta_methods.iter().for_each(|p| p.accept(visitor));
+                decl.meta_methods.iter().for_each(|p| p.accept(visitor));
             });
         });
     }
 
     fn visit_function_decl(
         &mut self,
-        _stmt: &Stmt,
         name: &TypedToken,
         generics: &[TypedToken],
         params: &[Stmt],
@@ -176,7 +171,6 @@ impl StmtVisitor for ASTPrinter {
 
     fn visit_variable_decl(
         &mut self,
-        _stmt: &Stmt,
         name: &TypedToken,
         explicit_type: &Option<ExplicitType>,
         value: &Option<Expr>,
@@ -207,7 +201,6 @@ impl StmtVisitor for ASTPrinter {
 
     fn visit_trait_decl(
         &mut self,
-        _stmt: &Stmt,
         name: &TypedToken,
         requirements: &[Stmt],
     ) {
@@ -220,7 +213,7 @@ impl StmtVisitor for ASTPrinter {
         });
     }
 
-    fn visit_if_stmt(&mut self, _stmt: &Stmt, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) {
+    fn visit_if_stmt(&mut self, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) {
         self.write_ln("If");
         self.indent(|visitor| {
             visitor.write_ln("Condition");
@@ -238,7 +231,7 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
-    fn visit_while_stmt(&mut self, _stmt: &Stmt, condition: &Expr, body: &[Stmt]) {
+    fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) {
         self.write_ln("While");
         self.indent(|visitor| {
             visitor.write_ln("Condition");
@@ -252,7 +245,7 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
-    fn visit_for_stmt(&mut self, _stmt: &Stmt, variable: &TypedToken, array: &Expr, body: &[Stmt]) {
+    fn visit_for_stmt(&mut self, variable: &TypedToken, array: &Expr, body: &[Stmt]) {
         self.write_ln(&format!("For({})", variable.token.lexeme()));
         self.indent(|visitor| {
             visitor.write_ln("Array");
@@ -275,7 +268,7 @@ impl StmtVisitor for ASTPrinter {
         }
     }
 
-    fn visit_print_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) {
+    fn visit_print_stmt(&mut self, expr: &Option<Expr>) {
         self.write_ln("PrintStmt");
         if let Some(expr) = expr.as_ref() {
             self.indent(|visitor| {
@@ -284,14 +277,14 @@ impl StmtVisitor for ASTPrinter {
         }
     }
 
-    fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) {
+    fn visit_expression_stmt(&mut self, expr: &Expr) {
         self.write_ln("ExpressionStmt");
         self.indent(|visitor| {
             expr.accept(visitor);
         })
     }
 
-    fn visit_builtin_stmt(&mut self, _stmt: &Stmt, inner: &Box<Stmt>) -> Self::StmtResult {
+    fn visit_builtin_stmt(&mut self, inner: &Box<Stmt>) -> Self::StmtResult {
         self.write_ln("Builtin");
         self.indent(|visitor| {
             inner.accept(visitor);

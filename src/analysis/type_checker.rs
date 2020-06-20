@@ -74,7 +74,9 @@ impl TypeChecker {
             is_builtin: false,
         };
 
-        checker.check_list(&lib.type_decls);
+        for decl in &lib.type_decls {
+            checker.visit_type_decl(decl);
+        }
         checker.check_list(&lib.function_decls);
 
         checker.push_scope_named("main");
@@ -249,30 +251,25 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_type_decl(
         &mut self,
-        _stmt: &Stmt,
-        name: &TypedToken,
-        generics: &[TypedToken],
-        fields: &[Stmt],
-        methods: &[Stmt],
-        meta_methods: &[Stmt],
+        decl: &TypeDecl
     ) -> Analysis {
-        let (_, metadata) = self.push_type_scope(name);
+        let (_, metadata) = self.push_type_scope(&decl.name);
 
         self.push_scope_meta();
         for meta_method in &metadata.meta_methods {
             let method_type = self.lib.resolve_symbol(&meta_method).unwrap();
             self.current_scope().put_in_scope(meta_method, &method_type);
         }
-        self.check_list(meta_methods);
+        self.check_list(&decl.meta_methods);
         self.pop_scope();
 
-        self.check_list(fields);
+        self.check_list(&decl.fields);
 
         for method in &metadata.methods {
             let method_type = self.lib.resolve_symbol(&method).unwrap();
             self.current_scope().put_in_scope(method, &method_type);
         }
-        self.check_list(methods);
+        self.check_list(&decl.methods);
 
         self.pop_scope();
 
@@ -283,7 +280,6 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_function_decl(
         &mut self,
-        _stmt: &Stmt,
         name: &TypedToken,
         generics: &[TypedToken],
         params: &[Stmt],
@@ -348,7 +344,6 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_variable_decl(
         &mut self,
-        _stmt: &Stmt,
         name: &TypedToken,
         explicit_type: &Option<ExplicitType>,
         value: &Option<Expr>,
@@ -393,7 +388,6 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_trait_decl(
         &mut self,
-        _stmt: &Stmt,
         _name: &TypedToken,
         _requirements: &[Stmt],
     ) -> Analysis {
@@ -404,7 +398,6 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_if_stmt(
         &mut self,
-        _stmt: &Stmt,
         condition: &Expr,
         body: &[Stmt],
         else_body: &[Stmt],
@@ -435,7 +428,7 @@ impl StmtVisitor for TypeChecker {
         Analysis { guarantees_return }
     }
 
-    fn visit_while_stmt(&mut self, _stmt: &Stmt, condition: &Expr, body: &[Stmt]) -> Analysis {
+    fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
             if let Err(diag) = self.check_type_match(condition, &cond_type, &NodeType::Bool) {
                 self.report_error(diag);
@@ -452,7 +445,6 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_for_stmt(
         &mut self,
-        _stmt: &Stmt,
         variable: &TypedToken,
         array: &Expr,
         body: &[Stmt],
@@ -512,7 +504,7 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
-    fn visit_print_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) -> Analysis {
+    fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Analysis {
         if let Some(expr) = expr.as_ref() {
             if let Some(node_type) = self.check_expr(expr) {
                 match node_type {
@@ -535,14 +527,14 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
-    fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) -> Analysis {
+    fn visit_expression_stmt(&mut self, expr: &Expr) -> Analysis {
         self.check_expr(expr);
         Analysis {
             guarantees_return: false,
         }
     }
 
-    fn visit_builtin_stmt(&mut self, _stmt: &Stmt, inner: &Box<Stmt>) -> Self::StmtResult {
+    fn visit_builtin_stmt(&mut self, inner: &Box<Stmt>) -> Self::StmtResult {
         self.is_builtin = true;
         let result = inner.accept(self);
         self.is_builtin = false;

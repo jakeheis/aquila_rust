@@ -76,23 +76,23 @@ impl Codegen {
 
         codegen.stage = CodegenStage::ForwardStructDecls;
         codegen.chunk(lib, &mut |codegen, lib| {
-            codegen.gen_stmts(&lib.type_decls);
+            codegen.gen_type_decls(&lib.type_decls);
         });
 
         codegen.stage = CodegenStage::StructBodies;
         codegen.chunk(lib, &mut |codegen, lib| {
-            codegen.gen_stmts(&lib.type_decls);
+            codegen.gen_type_decls(&lib.type_decls);
         });
 
         codegen.stage = CodegenStage::FuncPrototypes;
         codegen.chunk(lib, &mut |codegen, lib| {
-            codegen.gen_stmts(&lib.type_decls);
+            codegen.gen_type_decls(&lib.type_decls);
             codegen.gen_stmts(&lib.function_decls);
         });
 
         codegen.stage = CodegenStage::FuncBodies;
         codegen.chunk(lib, &mut |codegen, lib| {
-            codegen.gen_stmts(&lib.type_decls);
+            codegen.gen_type_decls(&lib.type_decls);
             codegen.gen_stmts(&lib.function_decls);
         });
 
@@ -133,6 +133,12 @@ impl Codegen {
     fn gen_stmts(&mut self, stmts: &[Stmt]) {
         for stmt in stmts {
             stmt.accept(self);
+        }
+    }
+
+    fn gen_type_decls(&mut self, decls: &[TypeDecl]) {
+        for decl in decls {
+            self.visit_type_decl(decl);
         }
     }
 
@@ -194,14 +200,9 @@ impl StmtVisitor for Codegen {
 
     fn visit_type_decl(
         &mut self,
-        _stmt: &Stmt,
-        name: &TypedToken,
-        generics: &[TypedToken],
-        fields: &[Stmt],
-        methods: &[Stmt],
-        meta_methods: &[Stmt],
+        decl: &TypeDecl
     ) -> Self::StmtResult {
-        let type_symbol = name.get_symbol().unwrap();
+        let type_symbol = decl.name.get_symbol().unwrap();
         let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
 
         match self.stage {
@@ -210,17 +211,17 @@ impl StmtVisitor for Codegen {
                 .write_struct_forward_decl(&type_symbol.mangled()),
             CodegenStage::StructBodies => {
                 self.writer.start_decl_struct(&type_symbol.mangled());
-                for field in fields {
+                for field in &decl.fields {
                     field.accept(self);
                 }
                 self.writer.end_decl_struct(&type_symbol.mangled());
             }
             CodegenStage::FuncPrototypes | CodegenStage::FuncBodies => {
                 self.current_type = Some(type_symbol.clone());
-                for method in methods {
+                for method in &decl.methods {
                     method.accept(self);
                 }
-                for method in meta_methods {
+                for method in &decl.meta_methods {
                     method.accept(self);
                 }
 
@@ -249,7 +250,6 @@ impl StmtVisitor for Codegen {
 
     fn visit_function_decl(
         &mut self,
-        _stmt: &Stmt,
         name: &TypedToken,
         generics: &[TypedToken],
         _params: &[Stmt],
@@ -272,7 +272,6 @@ impl StmtVisitor for Codegen {
 
     fn visit_variable_decl(
         &mut self,
-        _stmt: &Stmt,
         name: &TypedToken,
         _kind: &Option<ExplicitType>,
         value: &Option<Expr>,
@@ -293,7 +292,6 @@ impl StmtVisitor for Codegen {
 
     fn visit_trait_decl(
         &mut self,
-        _stmt: &Stmt,
         _name: &TypedToken,
         _requirements: &[Stmt],
     ) {
@@ -302,7 +300,6 @@ impl StmtVisitor for Codegen {
 
     fn visit_if_stmt(
         &mut self,
-        _stmt: &Stmt,
         condition: &Expr,
         body: &[Stmt],
         else_body: &[Stmt],
@@ -317,7 +314,7 @@ impl StmtVisitor for Codegen {
         self.writer.end_conditional_block();
     }
 
-    fn visit_while_stmt(&mut self, _stmt: &Stmt, condition: &Expr, body: &[Stmt]) {
+    fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) {
         let condition = condition.accept(self);
         self.writer.start_condition_block("while", condition);
         self.gen_stmts(body);
@@ -326,7 +323,6 @@ impl StmtVisitor for Codegen {
 
     fn visit_for_stmt(
         &mut self,
-        _stmt: &Stmt,
         variable: &TypedToken,
         array_expr: &Expr,
         body: &[Stmt],
@@ -352,7 +348,7 @@ impl StmtVisitor for Codegen {
         self.writer.write_return(val)
     }
 
-    fn visit_print_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult {
+    fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Self::StmtResult {
         if let Some(expr) = expr.as_ref() {
             let expr_str = expr.accept(self);
             let print_type = expr.get_type().unwrap();
@@ -362,13 +358,13 @@ impl StmtVisitor for Codegen {
         }
     }
 
-    fn visit_expression_stmt(&mut self, _stmt: &Stmt, expr: &Expr) -> Self::StmtResult {
+    fn visit_expression_stmt(&mut self, expr: &Expr) -> Self::StmtResult {
         let expr = expr.accept(self);
         let line = format!("{};", expr);
         self.writer.writeln(&line);
     }
 
-    fn visit_builtin_stmt(&mut self, _stmt: &Stmt, inner: &Box<Stmt>) {
+    fn visit_builtin_stmt(&mut self, inner: &Box<Stmt>) {
         self.is_builtin = true;
         inner.accept(self);
         self.is_builtin = false;

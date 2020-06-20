@@ -1,7 +1,6 @@
 use super::*;
 use crate::diagnostic::*;
 use crate::library::*;
-use crate::parsing::*;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
@@ -48,17 +47,12 @@ impl CycleChecker {
             }
 
             lib.type_decls.sort_by(|lhs, rhs| {
-                match (&lhs.kind, &rhs.kind) {
-                    (StmtKind::TypeDecl(lhs, ..), StmtKind::TypeDecl(rhs, ..)) => {
-                        let lhs_symbol = lhs.get_symbol().unwrap();
-                        let rhs_symbol = rhs.get_symbol().unwrap();
-        
-                        let lhs_index = ordered.iter().position(|s| s == &lhs_symbol).unwrap();
-                        let rhs_index = ordered.iter().position(|s| s == &rhs_symbol).unwrap();
-                        lhs_index.cmp(&rhs_index)
-                    }
-                    _ => unreachable!()
-                }
+                let lhs_symbol = lhs.name.get_symbol().unwrap();
+                let rhs_symbol = rhs.name.get_symbol().unwrap();
+
+                let lhs_index = ordered.iter().position(|s| s == &lhs_symbol).unwrap();
+                let rhs_index = ordered.iter().position(|s| s == &rhs_symbol).unwrap();
+                lhs_index.cmp(&rhs_index)
             })
         }
     }

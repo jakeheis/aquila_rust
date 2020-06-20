@@ -157,7 +157,7 @@ pub struct SymbolTableBuilder<'a> {
 
 impl<'a> SymbolTableBuilder<'a> {
     pub fn build_symbols(
-        type_decls: &[Stmt],
+        type_decls: &[TypeDecl],
         function_decls: &[Stmt],
         deps: &[Lib],
     ) -> SymbolTable {
@@ -174,7 +174,7 @@ impl<'a> SymbolTableBuilder<'a> {
         builder.symbols
     }
 
-    fn build_type_headers(&mut self, type_decls: &[Stmt]) {
+    fn build_type_headers(&mut self, type_decls: &[TypeDecl]) {
         for type_decl in type_decls {
             self.build_type_header(type_decl);
         }
@@ -192,36 +192,32 @@ impl<'a> SymbolTableBuilder<'a> {
         self.symbols.insert_type_metadata(symbol, metadata)
     }
 
-    fn build_type_header(&mut self, decl: &Stmt) {
-        guard!(StmtKind::TypeDecl[name, generics, _fields, _method, _meta_methods] = &decl.kind);
-
-        let new_symbol = Symbol::new(self.context.last(), &name.token);
+    fn build_type_header(&mut self, decl: &TypeDecl) {
+        let new_symbol = Symbol::new(self.context.last(), &decl.name.token);
         let new_type = NodeType::Metatype(new_symbol.clone());
 
-        self.insert(new_symbol.clone(), new_type.clone(), name);
+        self.insert(new_symbol.clone(), new_type.clone(), &decl.name);
 
-        name.set_symbol(new_symbol);
-        name.set_type(new_type);
+        decl.name.set_symbol(new_symbol);
+        decl.name.set_type(new_type);
     }
 
-    fn build_type_internals(&mut self, type_decls: &[Stmt]) {
+    fn build_type_internals(&mut self, type_decls: &[TypeDecl]) {
         for type_decl in type_decls {
             self.build_type_internal(type_decl);
         }
     }
 
-    fn build_type_internal(&mut self, decl: &Stmt) {
-        guard!(StmtKind::TypeDecl[name, generics, fields, methods, meta_methods] = &decl.kind);
+    fn build_type_internal(&mut self, decl: &TypeDecl) {
+        let type_symbol = decl.name.get_symbol().unwrap();
 
-        let type_symbol = name.get_symbol().unwrap();
-
-        trace!(target: "symbol_table", "Building type {} (symbol = {})", name.token.lexeme(), type_symbol);
+        trace!(target: "symbol_table", "Building type {} (symbol = {})", decl.name.token.lexeme(), type_symbol);
 
         self.context.push(type_symbol.clone());
 
         let mut field_types: Vec<NodeType> = Vec::new();
         let mut field_symbols: Vec<Symbol> = Vec::new();
-        for field in fields {
+        for field in &decl.fields {
             let (token, field_type) = self.var_decl_type(field);
             field_types.push(field_type.clone());
 
@@ -232,17 +228,17 @@ impl<'a> SymbolTableBuilder<'a> {
             self.insert(field_symbol, field_type, token);
         }
 
-        let method_symbols = self.build_functions(&methods);
+        let method_symbols = self.build_functions(&decl.methods);
 
         self.context.push(Symbol::meta_symbol(self.context.last()));
-        let mut meta_method_symbols = self.build_functions(&meta_methods);
+        let mut meta_method_symbols = self.build_functions(&decl.meta_methods);
 
         let init_symbol = Symbol::init_symbol(self.context.last());
         if self.symbols.get_type(&init_symbol).is_none() {
-            let instance_type = NodeType::Type(name.get_symbol().unwrap().clone());
+            let instance_type = NodeType::Type(decl.name.get_symbol().unwrap().clone());
             let init_type =
                 NodeType::Function(field_types.clone(), Box::new(instance_type.clone()));
-            self.insert(init_symbol.clone(), init_type.clone(), name);
+            self.insert(init_symbol.clone(), init_type.clone(), &decl.name);
 
             meta_method_symbols.push(init_symbol.clone());
 
@@ -264,7 +260,7 @@ impl<'a> SymbolTableBuilder<'a> {
 
         self.context.pop(); // Type pop
 
-        trace!(target: "symbol_table", "Finished building type {}", name.token.lexeme());
+        trace!(target: "symbol_table", "Finished building type {}", decl.name.token.lexeme());
 
         self.insert_type_metadata(
             type_symbol.clone(),
