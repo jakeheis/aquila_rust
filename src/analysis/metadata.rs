@@ -1,4 +1,4 @@
-use crate::analysis::{Symbol, NodeType};
+use crate::analysis::{NodeType, Symbol};
 
 #[derive(Clone)]
 pub enum FunctionKind {
@@ -119,7 +119,6 @@ impl std::fmt::Display for TypeMetadata {
         write!(f, "  meta methods: {}", meta_methods)
     }
 }
-
 
 #[derive(Clone)]
 pub struct GenericSpecialization {

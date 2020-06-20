@@ -96,10 +96,7 @@ impl ASTPrinter {
 impl StmtVisitor for ASTPrinter {
     type StmtResult = ();
 
-    fn visit_type_decl(
-        &mut self,
-        decl: &TypeDecl
-    ) {
+    fn visit_type_decl(&mut self, decl: &TypeDecl) {
         let symbol = decl
             .name
             .get_symbol()
@@ -117,54 +114,52 @@ impl StmtVisitor for ASTPrinter {
             });
             visitor.write_ln("Methods");
             visitor.indent(|visitor| {
-                decl.methods.iter().for_each(|p| p.accept(visitor));
+                decl.methods
+                    .iter()
+                    .for_each(|p| visitor.visit_function_decl(p));
             });
             visitor.write_ln("MetaMethods");
             visitor.indent(|visitor| {
-                decl.meta_methods.iter().for_each(|p| p.accept(visitor));
+                decl.meta_methods
+                    .iter()
+                    .for_each(|p| visitor.visit_function_decl(p));
             });
         });
     }
 
-    fn visit_function_decl(
-        &mut self,
-        name: &TypedToken,
-        generics: &[TypedToken],
-        params: &[Stmt],
-        return_type: &Option<ExplicitType>,
-        body: &[Stmt],
-        is_meta: bool,
-    ) {
-        let symbol = name
+    fn visit_function_decl(&mut self, decl: &FunctionDecl) {
+        let symbol = decl
+            .name
             .get_symbol()
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
-        let resolved_type = name
+        let resolved_type = decl
+            .name
             .get_type()
             .map(|t| t.to_string())
             .unwrap_or(String::from("<none>"));
-        let generics: Vec<_> = generics.iter().map(|g| g.token.lexeme()).collect();
+        let generics: Vec<_> = decl.generics.iter().map(|g| g.token.lexeme()).collect();
         let generics = format!("<{}>", generics.join(","));
         self.write_ln(&format!(
             "FunctionDecl(name: {}, generics: {}, symbol: {}, resolved_type: {}, meta: {})",
-            name.span().lexeme(),
+            decl.name.span().lexeme(),
             generics,
             symbol,
             resolved_type,
-            is_meta,
+            decl.is_meta,
         ));
         self.indent(|visitor| {
-            if let Some(return_type) = return_type.as_ref() {
+            if let Some(return_type) = decl.return_type.as_ref() {
                 visitor.write_ln("Return");
                 visitor.indent(|visitor| visitor.write_explicit_type(return_type));
             }
             visitor.write_ln("Params");
             visitor.indent(|visitor| {
-                params.iter().for_each(|p| p.accept(visitor));
+                decl.parameters.iter().for_each(|p| p.accept(visitor));
             });
             visitor.write_ln("Body");
             visitor.indent(|visitor| {
-                body.iter().for_each(|p| p.accept(visitor));
+                decl.body.iter().for_each(|p| p.accept(visitor));
             });
         });
     }
@@ -199,15 +194,8 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
-    fn visit_trait_decl(
-        &mut self,
-        name: &TypedToken,
-        requirements: &[Stmt],
-    ) {
-        self.write_ln(&format!(
-            "TraitDecl(name: {})",
-            name.span().lexeme(),
-        ));
+    fn visit_trait_decl(&mut self, name: &TypedToken, requirements: &[Stmt]) {
+        self.write_ln(&format!("TraitDecl(name: {})", name.span().lexeme(),));
         self.indent(|visitor| {
             requirements.iter().for_each(|p| p.accept(visitor));
         });

@@ -1,5 +1,5 @@
-use super::node_type::*;
 use super::metadata::*;
+use super::node_type::*;
 use crate::guard;
 use crate::lexing::*;
 use crate::library::*;
@@ -158,7 +158,8 @@ pub struct SymbolTableBuilder<'a> {
 impl<'a> SymbolTableBuilder<'a> {
     pub fn build_symbols(
         type_decls: &[TypeDecl],
-        function_decls: &[Stmt],
+        function_decls: &[FunctionDecl],
+        builtins: &[FunctionDecl],
         deps: &[Lib],
     ) -> SymbolTable {
         let mut builder = SymbolTableBuilder {
@@ -170,6 +171,7 @@ impl<'a> SymbolTableBuilder<'a> {
         builder.build_type_headers(&type_decls);
         builder.build_type_internals(&type_decls);
         builder.build_functions(&function_decls);
+        builder.build_functions(&builtins);
 
         builder.symbols
     }
@@ -274,30 +276,19 @@ impl<'a> SymbolTableBuilder<'a> {
         )
     }
 
-    fn build_functions(&mut self, stmts: &[Stmt]) -> Vec<Symbol> {
-        stmts.iter().map(|stmt| self.build_function(stmt)).collect()
+    fn build_functions(&mut self, decls: &[FunctionDecl]) -> Vec<Symbol> {
+        decls.iter().map(|decl| self.build_function(decl)).collect()
     }
 
-    fn build_function(&mut self, stmt: &Stmt) -> Symbol {
-        let (name, generics, params, return_type) = match &stmt.kind {
-            StmtKind::FunctionDecl(name, generics, params, return_type, ..) => {
-                (name, generics, params, return_type)
-            }
-            StmtKind::Builtin(internal) => {
-                guard!(StmtKind::FunctionDecl[name, generics, params, return_type, _body, _meta] = &internal.kind);
-                (name, generics, params, return_type)
-            }
-            _ => unreachable!(),
-        };
+    fn build_function(&mut self, decl: &FunctionDecl) -> Symbol {
+        let function_symbol = Symbol::new(self.context.last(), &decl.name.token);
 
-        let function_symbol = Symbol::new(self.context.last(), &name.token);
-
-        trace!(target: "symbol_table", "Building function {} (symbol = {})", name.token.lexeme(), function_symbol);
+        trace!(target: "symbol_table", "Building function {} (symbol = {})", decl.name.token.lexeme(), function_symbol);
 
         self.context.push(function_symbol.clone());
 
         let mut generic_symbols = Vec::new();
-        for (index, generic) in generics.iter().enumerate() {
+        for (index, generic) in decl.generics.iter().enumerate() {
             let generic_symbol = Symbol::new(self.context.last(), &generic.token);
             self.insert(
                 generic_symbol.clone(),
@@ -310,13 +301,14 @@ impl<'a> SymbolTableBuilder<'a> {
 
         let mut param_types: Vec<NodeType> = Vec::new();
         let mut param_symbols: Vec<Symbol> = Vec::new();
-        for param in params {
+        for param in &decl.parameters {
             let (token, node_type) = self.var_decl_type(param);
             param_types.push(node_type);
             param_symbols.push(Symbol::new(Some(&function_symbol), token));
         }
 
-        let return_type = return_type
+        let return_type = decl
+            .return_type
             .as_ref()
             .map(|r| self.resolve_explicit_type(r))
             .unwrap_or(NodeType::Void);
@@ -347,10 +339,10 @@ impl<'a> SymbolTableBuilder<'a> {
         };
         self.insert_func_metadata(function_symbol.clone(), function_metadata);
 
-        trace!(target: "symbol_table", "Finished building function {} -- {}", name.token.lexeme(), new_type);
+        trace!(target: "symbol_table", "Finished building function {} -- {}", decl.name.token.lexeme(), new_type);
 
-        self.insert(function_symbol.clone(), new_type.clone(), name);
-        name.set_type(new_type.clone());
+        self.insert(function_symbol.clone(), new_type.clone(), &decl.name);
+        decl.name.set_type(new_type.clone());
 
         function_symbol
     }

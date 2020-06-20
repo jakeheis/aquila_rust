@@ -1,6 +1,6 @@
+use super::metadata::*;
 use super::node_type::*;
 use super::symbol_table::*;
-use super::metadata::*;
 use crate::diagnostic::*;
 use crate::guard;
 use crate::lexing::*;
@@ -77,7 +77,15 @@ impl TypeChecker {
         for decl in &lib.type_decls {
             checker.visit_type_decl(decl);
         }
-        checker.check_list(&lib.function_decls);
+        for decl in &lib.function_decls {
+            checker.visit_function_decl(decl);
+        }
+
+        checker.is_builtin = true;
+        for builtin in &lib.builtins {
+            checker.visit_function_decl(builtin);
+        }
+        checker.is_builtin = false;
 
         checker.push_scope_named("main");
         checker.check_list(&lib.other);
@@ -249,10 +257,7 @@ impl TypeChecker {
 impl StmtVisitor for TypeChecker {
     type StmtResult = Analysis;
 
-    fn visit_type_decl(
-        &mut self,
-        decl: &TypeDecl
-    ) -> Analysis {
+    fn visit_type_decl(&mut self, decl: &TypeDecl) -> Analysis {
         let (_, metadata) = self.push_type_scope(&decl.name);
 
         self.push_scope_meta();
@@ -260,7 +265,9 @@ impl StmtVisitor for TypeChecker {
             let method_type = self.lib.resolve_symbol(&meta_method).unwrap();
             self.current_scope().put_in_scope(meta_method, &method_type);
         }
-        self.check_list(&decl.meta_methods);
+        for meta_method in &decl.meta_methods {
+            self.visit_function_decl(meta_method);
+        }
         self.pop_scope();
 
         self.check_list(&decl.fields);
@@ -269,7 +276,9 @@ impl StmtVisitor for TypeChecker {
             let method_type = self.lib.resolve_symbol(&method).unwrap();
             self.current_scope().put_in_scope(method, &method_type);
         }
-        self.check_list(&decl.methods);
+        for method in &decl.methods {
+            self.visit_function_decl(method);
+        }
 
         self.pop_scope();
 
@@ -278,24 +287,16 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
-    fn visit_function_decl(
-        &mut self,
-        name: &TypedToken,
-        generics: &[TypedToken],
-        params: &[Stmt],
-        explicit_return_type: &Option<ExplicitType>,
-        body: &[Stmt],
-        _is_meta: bool,
-    ) -> Analysis {
-        let (func_symbol, metadata) = self.push_function_scope(name);
-        name.set_symbol(func_symbol.clone());
+    fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Analysis {
+        let (func_symbol, metadata) = self.push_function_scope(&decl.name);
+        decl.name.set_symbol(func_symbol.clone());
 
-        for (index, token) in generics.iter().enumerate() {
+        for (index, token) in decl.generics.iter().enumerate() {
             let generic_type = NodeType::GenericMeta(func_symbol.clone(), index);
             self.current_scope().define_var(token, &generic_type);
         }
 
-        let explicit_type_span = explicit_return_type.as_ref();
+        let explicit_type_span = decl.return_type.as_ref();
         let return_type = match &metadata.return_type {
             NodeType::Array(..) => {
                 self.report_error(Diagnostic::error(
@@ -314,26 +315,26 @@ impl StmtVisitor for TypeChecker {
             value => value,
         };
 
-        self.check_list(params);
+        self.check_list(&decl.parameters);
 
         for (index, param_type) in metadata.parameter_types.iter().enumerate() {
             if let NodeType::Array(_, 0) = param_type {
                 self.report_error(Diagnostic::error(
-                    &params[index],
+                    &decl.parameters[index],
                     "A zero length array cannot be a parameter",
                 ));
             }
         }
 
-        let analysis = self.check_list(body);
+        let analysis = self.check_list(&decl.body);
 
         self.pop_scope();
 
         if !analysis.guarantees_return && !return_type.matches(&NodeType::Void) && !self.is_builtin
         {
-            let last_param = params.last().map(|p| p.span.clone());
-            let span_params = Span::join_opt(name, &last_param);
-            let span = Span::join_opt(&span_params, explicit_return_type);
+            let last_param = decl.parameters.last().map(|p| p.span.clone());
+            let span_params = Span::join_opt(&decl.name, &last_param);
+            let span = Span::join_opt(&span_params, &decl.return_type);
             self.report_error(Diagnostic::error(&span, "Function may not return"));
         }
 
@@ -386,22 +387,13 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
-    fn visit_trait_decl(
-        &mut self,
-        _name: &TypedToken,
-        _requirements: &[Stmt],
-    ) -> Analysis {
+    fn visit_trait_decl(&mut self, _name: &TypedToken, _requirements: &[Stmt]) -> Analysis {
         Analysis {
-            guarantees_return: false
+            guarantees_return: false,
         }
     }
 
-    fn visit_if_stmt(
-        &mut self,
-        condition: &Expr,
-        body: &[Stmt],
-        else_body: &[Stmt],
-    ) -> Analysis {
+    fn visit_if_stmt(&mut self, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
             if let Err(diag) = self.check_type_match(condition, &cond_type, &NodeType::Bool) {
                 self.report_error(diag);
@@ -443,12 +435,7 @@ impl StmtVisitor for TypeChecker {
         body_analysis
     }
 
-    fn visit_for_stmt(
-        &mut self,
-        variable: &TypedToken,
-        array: &Expr,
-        body: &[Stmt],
-    ) -> Analysis {
+    fn visit_for_stmt(&mut self, variable: &TypedToken, array: &Expr, body: &[Stmt]) -> Analysis {
         let array_type = match self.check_expr(array) {
             Some(NodeType::Array(of, size)) => Some(NodeType::Array(of, size)),
             None => None,

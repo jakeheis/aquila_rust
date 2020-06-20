@@ -9,20 +9,22 @@ pub struct TypeDecl {
     pub name: TypedToken,
     pub generics: Vec<TypedToken>,
     pub fields: Vec<Stmt>,
-    pub methods: Vec<Stmt>,
-    pub meta_methods: Vec<Stmt>
+    pub methods: Vec<FunctionDecl>,
+    pub meta_methods: Vec<FunctionDecl>,
+}
+
+pub struct FunctionDecl {
+    pub name: TypedToken,
+    pub generics: Vec<TypedToken>,
+    pub parameters: Vec<Stmt>,
+    pub return_type: Option<ExplicitType>,
+    pub body: Vec<Stmt>,
+    pub is_meta: bool,
 }
 
 pub enum StmtKind {
     TypeDecl(TypeDecl),
-    FunctionDecl(
-        TypedToken,
-        Vec<TypedToken>,
-        Vec<Stmt>,
-        Option<ExplicitType>,
-        Vec<Stmt>,
-        bool,
-    ),
+    FunctionDecl(FunctionDecl),
     VariableDecl(TypedToken, Option<ExplicitType>, Option<Expr>),
     TraitDecl(TypedToken, Vec<Stmt>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
@@ -46,18 +48,8 @@ impl Stmt {
 
     pub fn accept<V: StmtVisitor>(&self, visitor: &mut V) -> V::StmtResult {
         match &self.kind {
-            StmtKind::TypeDecl(decl) => {
-                visitor.visit_type_decl(&decl)
-            }
-            StmtKind::FunctionDecl(name, generics, params, return_type, body, is_meta) => visitor
-                .visit_function_decl(
-                    &name,
-                    &generics,
-                    &params,
-                    &return_type,
-                    &body,
-                    *is_meta,
-                ),
+            StmtKind::TypeDecl(decl) => visitor.visit_type_decl(decl),
+            StmtKind::FunctionDecl(decl) => visitor.visit_function_decl(decl),
             StmtKind::VariableDecl(name, kind, value) => {
                 visitor.visit_variable_decl(&name, &kind, &value)
             }
@@ -67,9 +59,7 @@ impl Stmt {
             StmtKind::IfStmt(condition, body, else_body) => {
                 visitor.visit_if_stmt(&condition, &body, &else_body)
             }
-            StmtKind::WhileStmt(condition, body) => {
-                visitor.visit_while_stmt(condition, &body)
-            }
+            StmtKind::WhileStmt(condition, body) => visitor.visit_while_stmt(condition, &body),
             StmtKind::ForStmt(variable, array, body) => {
                 visitor.visit_for_stmt(variable, array, &body)
             }
@@ -85,8 +75,8 @@ impl Stmt {
         name: Token,
         generics: Vec<Token>,
         fields: Vec<Stmt>,
-        methods: Vec<Stmt>,
-        meta_methods: Vec<Stmt>,
+        methods: Vec<FunctionDecl>,
+        meta_methods: Vec<FunctionDecl>,
         right_brace: &Token,
     ) -> Self {
         let span = Span::join(&type_span, right_brace);
@@ -96,19 +86,16 @@ impl Stmt {
             generics,
             fields,
             methods,
-            meta_methods
+            meta_methods,
         };
-        Stmt::new(
-            StmtKind::TypeDecl(decl),
-            span,
-        )
+        Stmt::new(StmtKind::TypeDecl(decl), span)
     }
 
     pub fn function_decl(
         start_span: Span,
         name: Token,
         generics: Vec<Token>,
-        params: Vec<Stmt>,
+        parameters: Vec<Stmt>,
         return_type: Option<ExplicitType>,
         body: Vec<Stmt>,
         right_brace_span: &Span,
@@ -116,17 +103,15 @@ impl Stmt {
     ) -> Self {
         let span = Span::join(&start_span, right_brace_span);
         let generics: Vec<_> = generics.into_iter().map(|g| TypedToken::new(g)).collect();
-        Stmt::new(
-            StmtKind::FunctionDecl(
-                TypedToken::new(name),
-                generics,
-                params,
-                return_type,
-                body,
-                is_meta,
-            ),
-            span,
-        )
+        let decl = FunctionDecl {
+            name: TypedToken::new(name),
+            generics,
+            parameters,
+            return_type,
+            body,
+            is_meta,
+        };
+        Stmt::new(StmtKind::FunctionDecl(decl), span)
     }
 
     pub fn variable_decl(
@@ -150,7 +135,10 @@ impl Stmt {
 
     pub fn trait_decl(trait_span: Span, name: Token, requirements: Vec<Stmt>, end: &Span) -> Self {
         let span = Span::join(&trait_span, end);
-        Stmt::new(StmtKind::TraitDecl(TypedToken::new(name), requirements), span)
+        Stmt::new(
+            StmtKind::TraitDecl(TypedToken::new(name), requirements),
+            span,
+        )
     }
 
     pub fn if_stmt(
@@ -212,20 +200,9 @@ impl Stmt {
 pub trait StmtVisitor {
     type StmtResult;
 
-    fn visit_type_decl(
-        &mut self,
-        decl: &TypeDecl,
-    ) -> Self::StmtResult;
+    fn visit_type_decl(&mut self, decl: &TypeDecl) -> Self::StmtResult;
 
-    fn visit_function_decl(
-        &mut self,
-        name: &TypedToken,
-        generics: &[TypedToken],
-        params: &[Stmt],
-        return_type: &Option<ExplicitType>,
-        body: &[Stmt],
-        is_meta: bool,
-    ) -> Self::StmtResult;
+    fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Self::StmtResult;
 
     fn visit_variable_decl(
         &mut self,
@@ -234,11 +211,7 @@ pub trait StmtVisitor {
         value: &Option<Expr>,
     ) -> Self::StmtResult;
 
-    fn visit_trait_decl(
-        &mut self,
-        name: &TypedToken,
-        requirements: &[Stmt],
-    ) -> Self::StmtResult;
+    fn visit_trait_decl(&mut self, name: &TypedToken, requirements: &[Stmt]) -> Self::StmtResult;
 
     fn visit_if_stmt(
         &mut self,
@@ -247,11 +220,7 @@ pub trait StmtVisitor {
         else_body: &[Stmt],
     ) -> Self::StmtResult;
 
-    fn visit_while_stmt(
-        &mut self,
-        condition: &Expr,
-        body: &[Stmt],
-    ) -> Self::StmtResult;
+    fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) -> Self::StmtResult;
 
     fn visit_for_stmt(
         &mut self,

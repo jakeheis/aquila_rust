@@ -87,13 +87,19 @@ impl Codegen {
         codegen.stage = CodegenStage::FuncPrototypes;
         codegen.chunk(lib, &mut |codegen, lib| {
             codegen.gen_type_decls(&lib.type_decls);
-            codegen.gen_stmts(&lib.function_decls);
+            codegen.gen_function_decls(&lib.function_decls);
+            codegen.is_builtin = true;
+            codegen.gen_function_decls(&lib.builtins);
+            codegen.is_builtin = false;
         });
 
         codegen.stage = CodegenStage::FuncBodies;
         codegen.chunk(lib, &mut |codegen, lib| {
             codegen.gen_type_decls(&lib.type_decls);
-            codegen.gen_stmts(&lib.function_decls);
+            codegen.gen_function_decls(&lib.function_decls);
+            codegen.is_builtin = true;
+            codegen.gen_function_decls(&lib.builtins);
+            codegen.is_builtin = false;
         });
 
         if !lib.other.is_empty() {
@@ -139,6 +145,12 @@ impl Codegen {
     fn gen_type_decls(&mut self, decls: &[TypeDecl]) {
         for decl in decls {
             self.visit_type_decl(decl);
+        }
+    }
+
+    fn gen_function_decls(&mut self, decls: &[FunctionDecl]) {
+        for decl in decls {
+            self.visit_function_decl(decl);
         }
     }
 
@@ -198,10 +210,7 @@ impl Codegen {
 impl StmtVisitor for Codegen {
     type StmtResult = ();
 
-    fn visit_type_decl(
-        &mut self,
-        decl: &TypeDecl
-    ) -> Self::StmtResult {
+    fn visit_type_decl(&mut self, decl: &TypeDecl) -> Self::StmtResult {
         let type_symbol = decl.name.get_symbol().unwrap();
         let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
 
@@ -218,12 +227,9 @@ impl StmtVisitor for Codegen {
             }
             CodegenStage::FuncPrototypes | CodegenStage::FuncBodies => {
                 self.current_type = Some(type_symbol.clone());
-                for method in &decl.methods {
-                    method.accept(self);
-                }
-                for method in &decl.meta_methods {
-                    method.accept(self);
-                }
+
+                self.gen_function_decls(&decl.methods);
+                self.gen_function_decls(&decl.meta_methods);
 
                 let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
                 let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
@@ -248,25 +254,17 @@ impl StmtVisitor for Codegen {
         }
     }
 
-    fn visit_function_decl(
-        &mut self,
-        name: &TypedToken,
-        generics: &[TypedToken],
-        _params: &[Stmt],
-        _return_type: &Option<ExplicitType>,
-        body: &[Stmt],
-        _is_meta: bool,
-    ) -> Self::StmtResult {
-        let func_symbol = name.get_symbol().unwrap();
+    fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Self::StmtResult {
+        let func_symbol = decl.name.get_symbol().unwrap();
 
         let func_metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
         if !func_metadata.specializations.is_empty() {
             for spec in &func_metadata.specializations {
-                self.write_function(&func_symbol, body, Some(spec));
+                self.write_function(&func_symbol, &decl.body, Some(spec));
             }
-        } else if generics.is_empty() {
-            self.write_function(&func_symbol, body, None);
+        } else if decl.generics.is_empty() {
+            self.write_function(&func_symbol, &decl.body, None);
         }
     }
 
@@ -290,11 +288,7 @@ impl StmtVisitor for Codegen {
             .decl_var(&var_type, &var_symbol.mangled(), value);
     }
 
-    fn visit_trait_decl(
-        &mut self,
-        _name: &TypedToken,
-        _requirements: &[Stmt],
-    ) {
+    fn visit_trait_decl(&mut self, _name: &TypedToken, _requirements: &[Stmt]) {
         // TODO
     }
 
@@ -321,12 +315,7 @@ impl StmtVisitor for Codegen {
         self.writer.end_conditional_block();
     }
 
-    fn visit_for_stmt(
-        &mut self,
-        variable: &TypedToken,
-        array_expr: &Expr,
-        body: &[Stmt],
-    ) {
+    fn visit_for_stmt(&mut self, variable: &TypedToken, array_expr: &Expr, body: &[Stmt]) {
         let array = array_expr.accept(self);
         guard!(NodeType::Array[_of, count] = array_expr.get_type().unwrap());
 

@@ -9,8 +9,9 @@ use std::rc::Rc;
 
 pub struct Lib {
     pub name: String,
-    pub function_decls: Vec<Stmt>,
     pub type_decls: Vec<TypeDecl>,
+    pub function_decls: Vec<FunctionDecl>,
+    pub builtins: Vec<FunctionDecl>,
     pub other: Vec<Stmt>,
     pub symbols: SymbolTable,
     pub dependencies: Vec<Lib>,
@@ -68,12 +69,13 @@ impl Lib {
             return Err("Parsing failed");
         }
 
-        let (type_decls, function_decls, other) = Lib::organize_stms(stmts);
+        let (type_decls, function_decls, builtins, other) = Lib::organize_stms(stmts);
 
         let mut lib = Lib {
             name: String::from(name),
             type_decls,
             function_decls,
+            builtins,
             symbols: SymbolTable::new(),
             other,
             dependencies,
@@ -82,6 +84,7 @@ impl Lib {
         lib.symbols = SymbolTableBuilder::build_symbols(
             &lib.type_decls,
             &lib.function_decls,
+            &lib.builtins,
             &lib.dependencies,
         );
 
@@ -96,7 +99,9 @@ impl Lib {
             for decl in &lib.type_decls {
                 printer.visit_type_decl(decl);
             }
-            printer.print(&lib.function_decls);
+            for decl in &lib.function_decls {
+                printer.visit_function_decl(decl);
+            }
             printer.print(&lib.other);
         }
 
@@ -178,30 +183,42 @@ impl Lib {
         }
     }
 
-    fn organize_stms(stmts: Vec<Stmt>) -> (Vec<TypeDecl>, Vec<Stmt>, Vec<Stmt>) {
+    fn organize_stms(
+        stmts: Vec<Stmt>,
+    ) -> (
+        Vec<TypeDecl>,
+        Vec<FunctionDecl>,
+        Vec<FunctionDecl>,
+        Vec<Stmt>,
+    ) {
         let mut type_decls: Vec<TypeDecl> = Vec::new();
-        let mut function_decls: Vec<Stmt> = Vec::new();
+        let mut function_decls: Vec<FunctionDecl> = Vec::new();
+        let mut builtins: Vec<FunctionDecl> = Vec::new();
         let mut other: Vec<Stmt> = Vec::new();
+
         for stmt in stmts {
             match &stmt.kind {
                 StmtKind::TypeDecl(..) => {
                     if let StmtKind::TypeDecl(decl) = stmt.kind {
                         type_decls.push(decl);
                     }
-                },
-                StmtKind::FunctionDecl(..) => function_decls.push(stmt),
-                StmtKind::Builtin(builtin) => match &builtin.kind {
-                    StmtKind::TypeDecl(..) => {
-                        if let StmtKind::TypeDecl(decl) = stmt.kind {
-                            type_decls.push(decl);
+                }
+                StmtKind::FunctionDecl(..) => {
+                    if let StmtKind::FunctionDecl(decl) = stmt.kind {
+                        function_decls.push(decl);
+                    }
+                }
+                StmtKind::Builtin(..) => {
+                    if let StmtKind::Builtin(inner) = stmt.kind {
+                        match inner.kind {
+                            StmtKind::FunctionDecl(decl) => builtins.push(decl),
+                            _ => panic!("Can only have builtin functions (right now)"),
                         }
-                    },
-                    StmtKind::FunctionDecl(..) => function_decls.push(stmt),
-                    _ => other.push(stmt),
-                },
+                    }
+                }
                 _ => other.push(stmt),
             }
         }
-        (type_decls, function_decls, other)
+        (type_decls, function_decls, builtins, other)
     }
 }

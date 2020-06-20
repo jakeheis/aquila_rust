@@ -206,17 +206,17 @@ impl Parser {
         self.consume(TokenKind::LeftBrace, "Expect '{' after type name")?;
 
         let mut fields: Vec<Stmt> = Vec::new();
-        let mut methods: Vec<Stmt> = Vec::new();
-        let mut meta_methods: Vec<Stmt> = Vec::new();
+        let mut methods: Vec<FunctionDecl> = Vec::new();
+        let mut meta_methods: Vec<FunctionDecl> = Vec::new();
 
         for stmt in self.block(Context::InsideType) {
             match stmt.kind {
                 StmtKind::VariableDecl(..) => fields.push(stmt),
-                StmtKind::FunctionDecl(.., is_meta) => {
-                    if is_meta {
-                        meta_methods.push(stmt)
+                StmtKind::FunctionDecl(decl) => {
+                    if decl.is_meta {
+                        meta_methods.push(decl)
                     } else {
-                        methods.push(stmt)
+                        methods.push(decl)
                     }
                 }
                 _ => panic!(),
@@ -279,7 +279,10 @@ impl Parser {
             body
         } else {
             if self.matches(TokenKind::LeftBrace) {
-                return Err(Diagnostic::error(self.previous(), "Function body not allowed here"))
+                return Err(Diagnostic::error(
+                    self.previous(),
+                    "Function body not allowed here",
+                ));
             }
 
             self.consume(TokenKind::Semicolon, "Expect ';' after function prototype")?;
@@ -324,7 +327,7 @@ impl Parser {
             .consume(TokenKind::Identifier, "Expect trait name")?
             .clone();
         self.consume(TokenKind::LeftBrace, "Expect '{' after trait name")?;
-        
+
         let mut requirements = Vec::new();
         while !self.is_at_end() && self.peek() != TokenKind::RightBrace {
             let meta = if self.matches(TokenKind::Meta) {
@@ -332,14 +335,22 @@ impl Parser {
             } else if self.matches(TokenKind::Def) {
                 false
             } else {
-                return Err(Diagnostic::error(self.current(), "Traits can only require functions"));
+                return Err(Diagnostic::error(
+                    self.current(),
+                    "Traits can only require functions",
+                ));
             };
             requirements.push(self.function_decl(meta, false)?);
         }
 
         let brace = self.consume(TokenKind::RightBrace, "Expect '}' after trait body")?;
 
-        Ok(Stmt::trait_decl(trait_span, name, requirements, &brace.span))
+        Ok(Stmt::trait_decl(
+            trait_span,
+            name,
+            requirements,
+            &brace.span,
+        ))
     }
 
     fn if_stmt(&mut self) -> Result<Stmt> {
