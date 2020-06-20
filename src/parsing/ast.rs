@@ -16,6 +16,7 @@ pub enum StmtKind {
         bool,
     ),
     VariableDecl(TypedToken, Option<ExplicitType>, Option<Expr>),
+    TraitDecl(TypedToken, Vec<Stmt>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     WhileStmt(Expr, Vec<Stmt>),
     ForStmt(TypedToken, Expr, Vec<Stmt>),
@@ -52,6 +53,9 @@ impl Stmt {
                 ),
             StmtKind::VariableDecl(name, kind, value) => {
                 visitor.visit_variable_decl(&self, &name, &kind, &value)
+            }
+            StmtKind::TraitDecl(name, requirements) => {
+                visitor.visit_trait_decl(&self, name, &requirements)
             }
             StmtKind::IfStmt(condition, body, else_body) => {
                 visitor.visit_if_stmt(&self, &condition, &body, &else_body)
@@ -91,10 +95,10 @@ impl Stmt {
         params: Vec<Stmt>,
         return_type: Option<ExplicitType>,
         body: Vec<Stmt>,
-        right_brace_span: Span,
+        right_brace_span: &Span,
         is_meta: bool,
     ) -> Self {
-        let span = Span::join(&start_span, &right_brace_span);
+        let span = Span::join(&start_span, right_brace_span);
         let generics: Vec<_> = generics.into_iter().map(|g| TypedToken::new(g)).collect();
         Stmt::new(
             StmtKind::FunctionDecl(
@@ -126,6 +130,11 @@ impl Stmt {
             StmtKind::VariableDecl(TypedToken::new(name), explicit_type, value),
             span,
         )
+    }
+
+    pub fn trait_decl(trait_span: Span, name: Token, requirements: Vec<Stmt>, end: &Span) -> Self {
+        let span = Span::join(&trait_span, end);
+        Stmt::new(StmtKind::TraitDecl(TypedToken::new(name), requirements), span)
     }
 
     pub fn if_stmt(
@@ -213,6 +222,13 @@ pub trait StmtVisitor {
         name: &TypedToken,
         explicit_type: &Option<ExplicitType>,
         value: &Option<Expr>,
+    ) -> Self::StmtResult;
+
+    fn visit_trait_decl(
+        &mut self,
+        stmt: &Stmt,
+        name: &TypedToken,
+        requirements: &[Stmt],
     ) -> Self::StmtResult;
 
     fn visit_if_stmt(

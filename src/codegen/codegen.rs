@@ -101,7 +101,10 @@ impl Codegen {
         }
     }
 
-    fn chunk<F>(&mut self, lib: &Lib, function: &mut F) where F: Fn(&mut Codegen, &Lib) -> () {
+    fn chunk<F>(&mut self, lib: &Lib, function: &mut F)
+    where
+        F: Fn(&mut Codegen, &Lib) -> (),
+    {
         for dep in &lib.dependencies {
             self.chunk(dep, function);
         }
@@ -287,6 +290,15 @@ impl StmtVisitor for Codegen {
             .decl_var(&var_type, &var_symbol.mangled(), value);
     }
 
+    fn visit_trait_decl(
+        &mut self,
+        _stmt: &Stmt,
+        _name: &TypedToken,
+        _requirements: &[Stmt],
+    ) {
+        // TODO
+    }
+
     fn visit_if_stmt(
         &mut self,
         _stmt: &Stmt,
@@ -417,9 +429,14 @@ impl ExprVisitor for Codegen {
 
         let specialization = if specializations.is_empty() {
             let arg_types: Vec<_> = args.iter().map(|a| a.get_type().unwrap()).collect();
-            GenericSpecialization::infer(&function_metadata, &arg_types).ok().unwrap()
+            GenericSpecialization::infer(&function_metadata, &arg_types)
+                .ok()
+                .unwrap()
         } else {
-            let explicit_types: Vec<_> = specializations.iter().map(|s| s.guarantee_resolved()).collect::<Vec<_>>();
+            let explicit_types: Vec<_> = specializations
+                .iter()
+                .map(|s| s.guarantee_resolved())
+                .collect::<Vec<_>>();
             GenericSpecialization::new(&function_symbol, explicit_types)
         };
 
@@ -437,7 +454,7 @@ impl ExprVisitor for Codegen {
             let target_str = match &target.kind {
                 ExprKind::FunctionCall(..) => {
                     self.write_temp(&target.get_type().unwrap(), target_str)
-                },
+                }
                 _ => target_str,
             };
 

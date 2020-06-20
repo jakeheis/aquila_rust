@@ -169,6 +169,7 @@ impl Lexer {
             "for" => self.make_token(TokenKind::For),
             "in" => self.make_token(TokenKind::In),
             "cast" => self.make_token(TokenKind::Cast),
+            "trait" => self.make_token(TokenKind::Trait),
             _ => self.make_token(TokenKind::Identifier),
         }
     }

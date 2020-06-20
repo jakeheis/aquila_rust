@@ -204,6 +204,21 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
+    fn visit_trait_decl(
+        &mut self,
+        _stmt: &Stmt,
+        name: &TypedToken,
+        requirements: &[Stmt],
+    ) {
+        self.write_ln(&format!(
+            "TraitDecl(name: {})",
+            name.span().lexeme(),
+        ));
+        self.indent(|visitor| {
+            requirements.iter().for_each(|p| p.accept(visitor));
+        });
+    }
+
     fn visit_if_stmt(&mut self, _stmt: &Stmt, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) {
         self.write_ln("If");
         self.indent(|visitor| {

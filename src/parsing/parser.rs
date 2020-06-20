@@ -70,7 +70,7 @@ impl Parser {
             }
         } else if self.matches(TokenKind::Def) {
             if context == Context::TopLevel || context == Context::InsideType {
-                self.function_decl(false)
+                self.function_decl(false, true)
             } else {
                 Err(Diagnostic::error(
                     self.previous(),
@@ -79,7 +79,7 @@ impl Parser {
             }
         } else if self.matches(TokenKind::Meta) {
             if context == Context::InsideType {
-                self.function_decl(true)
+                self.function_decl(true, true)
             } else {
                 Err(Diagnostic::error(
                     self.previous(),
@@ -95,6 +95,15 @@ impl Parser {
             )
             .replace_span(&decl)?;
             Ok(decl)
+        } else if self.matches(TokenKind::Trait) {
+            if context == Context::TopLevel {
+                self.trait_decl()
+            } else {
+                Err(Diagnostic::error(
+                    self.previous(),
+                    "Trait declaration not allowed",
+                ))
+            }
         } else if self.matches(TokenKind::If) {
             if context == Context::TopLevel || context == Context::InsideFunction {
                 self.if_stmt()
@@ -219,7 +228,7 @@ impl Parser {
         ))
     }
 
-    fn function_decl(&mut self, meta: bool) -> Result<Stmt> {
+    fn function_decl(&mut self, meta: bool, parse_body: bool) -> Result<Stmt> {
         let start_span = self.previous().span.clone();
 
         if meta {
@@ -260,12 +269,22 @@ impl Parser {
             None
         };
 
-        self.consume(
-            TokenKind::LeftBrace,
-            "Expect '{' after function declaration",
-        )?;
-        let body = self.block(Context::InsideFunction);
-        let right_brace = self.consume(TokenKind::RightBrace, "Expect '}' after function body")?;
+        let body = if parse_body {
+            self.consume(
+                TokenKind::LeftBrace,
+                "Expect '{' after function declaration",
+            )?;
+            let body = self.block(Context::InsideFunction);
+            self.consume(TokenKind::RightBrace, "Expect '}' after function body")?;
+            body
+        } else {
+            if self.matches(TokenKind::LeftBrace) {
+                return Err(Diagnostic::error(self.previous(), "Function body not allowed here"))
+            }
+
+            self.consume(TokenKind::Semicolon, "Expect ';' after function prototype")?;
+            Vec::new()
+        };
 
         Ok(Stmt::function_decl(
             start_span,
@@ -274,7 +293,7 @@ impl Parser {
             params,
             return_type,
             body,
-            right_brace.span().clone(),
+            self.previous().span(),
             meta,
         ))
     }
@@ -297,6 +316,30 @@ impl Parser {
         } else {
             Ok(Stmt::variable_decl(name, kind, None))
         }
+    }
+
+    fn trait_decl(&mut self) -> Result<Stmt> {
+        let trait_span = self.previous().span.clone();
+        let name = self
+            .consume(TokenKind::Identifier, "Expect trait name")?
+            .clone();
+        self.consume(TokenKind::LeftBrace, "Expect '{' after trait name")?;
+        
+        let mut requirements = Vec::new();
+        while !self.is_at_end() && self.peek() != TokenKind::RightBrace {
+            let meta = if self.matches(TokenKind::Meta) {
+                true
+            } else if self.matches(TokenKind::Def) {
+                false
+            } else {
+                return Err(Diagnostic::error(self.current(), "Traits can only require functions"));
+            };
+            requirements.push(self.function_decl(meta, false)?);
+        }
+
+        let brace = self.consume(TokenKind::RightBrace, "Expect '}' after trait body")?;
+
+        Ok(Stmt::trait_decl(trait_span, name, requirements, &brace.span))
     }
 
     fn if_stmt(&mut self) -> Result<Stmt> {

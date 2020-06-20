@@ -98,7 +98,7 @@ pub struct SymbolTable {
     pub type_metadata: HashMap<Symbol, TypeMetadata>,
     pub function_metadata: HashMap<Symbol, FunctionMetadata>,
     pub span_map: HashMap<Symbol, Span>,
-    pub call_map: HashMap<Symbol, Vec<(Symbol, Option<GenericSpecialization>)>>
+    pub call_map: HashMap<Symbol, Vec<(Symbol, Option<GenericSpecialization>)>>,
 }
 
 impl SymbolTable {
@@ -265,9 +265,13 @@ impl GenericSpecialization {
     }
 
     pub fn infer(metadata: &FunctionMetadata, arg_types: &[NodeType]) -> Result<Self, usize> {
-        let mut specializations: Vec<_> = std::iter::repeat(NodeType::Ambiguous).take(metadata.generics.len()).collect();
+        let mut specializations: Vec<_> = std::iter::repeat(NodeType::Ambiguous)
+            .take(metadata.generics.len())
+            .collect();
         for (param_type, arg_type) in metadata.parameter_types.iter().zip(arg_types).rev() {
-            if let Some((index, specialized_type)) = NodeType::infer_generic_type(param_type, arg_type) {
+            if let Some((index, specialized_type)) =
+                NodeType::infer_generic_type(param_type, arg_type)
+            {
                 specializations[index] = specialized_type;
             }
         }
@@ -276,26 +280,32 @@ impl GenericSpecialization {
                 return Err(index);
             }
         }
-        
-        Ok(GenericSpecialization::new(&metadata.symbol, specializations))
+
+        Ok(GenericSpecialization::new(
+            &metadata.symbol,
+            specializations,
+        ))
     }
 
-    pub fn resolve_generics_using(&self, specialization: &GenericSpecialization) -> GenericSpecialization {
-        let node_types: Vec<_> = self.node_types.iter().map(|arg_type| {
-            match arg_type {
-                NodeType::Generic(_, index) => {
-                    specialization.node_types[*index].clone()
-                },
+    pub fn resolve_generics_using(
+        &self,
+        specialization: &GenericSpecialization,
+    ) -> GenericSpecialization {
+        let node_types: Vec<_> = self
+            .node_types
+            .iter()
+            .map(|arg_type| match arg_type {
+                NodeType::Generic(_, index) => specialization.node_types[*index].clone(),
                 _ => arg_type.clone(),
-            }
-        }).collect();
-        
+            })
+            .collect();
+
         GenericSpecialization::new(&self.function, node_types)
     }
 }
 
 impl PartialEq for GenericSpecialization {
-    fn eq(&self, rhs: &Self) -> bool { 
+    fn eq(&self, rhs: &Self) -> bool {
         self.id == rhs.id
     }
 }

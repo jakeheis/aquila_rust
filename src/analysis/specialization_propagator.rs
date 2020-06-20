@@ -1,7 +1,7 @@
 use crate::analysis::*;
 use crate::library::*;
-use std::collections::{HashMap, HashSet};
 use log::trace;
+use std::collections::{HashMap, HashSet};
 
 pub struct SpecializationPropagator<'a> {
     lib: &'a mut Lib,
@@ -10,7 +10,6 @@ pub struct SpecializationPropagator<'a> {
 }
 
 impl<'a> SpecializationPropagator<'a> {
-
     pub fn propogate(lib: &mut Lib) {
         for (caller, calls) in &lib.symbols.call_map {
             for (call, spec) in calls {
@@ -23,7 +22,8 @@ impl<'a> SpecializationPropagator<'a> {
             }
         }
 
-        let mut call_map: HashMap<Symbol, Vec<(Symbol, Option<GenericSpecialization>)>> = HashMap::new();
+        let mut call_map: HashMap<Symbol, Vec<(Symbol, Option<GenericSpecialization>)>> =
+            HashMap::new();
         SpecializationPropagator::flattened_call_map(lib, &mut call_map);
 
         let mut prop = SpecializationPropagator {
@@ -34,7 +34,10 @@ impl<'a> SpecializationPropagator<'a> {
         prop.go();
     }
 
-    pub fn flattened_call_map(lib: &Lib, call_map: &mut HashMap<Symbol, Vec<(Symbol, Option<GenericSpecialization>)>>) {
+    pub fn flattened_call_map(
+        lib: &Lib,
+        call_map: &mut HashMap<Symbol, Vec<(Symbol, Option<GenericSpecialization>)>>,
+    ) {
         for (caller, callees) in &lib.symbols.call_map {
             let all = call_map.entry(caller.clone()).or_insert(Vec::new());
             all.append(&mut callees.clone());
@@ -50,7 +53,9 @@ impl<'a> SpecializationPropagator<'a> {
 
     fn propagate(&mut self, cur: &Symbol, spec: Option<&GenericSpecialization>) {
         let metadata = self.lib.function_metadata(cur);
-        let func_id = metadata.map(|m| m.function_name(spec)).unwrap_or(cur.mangled());
+        let func_id = metadata
+            .map(|m| m.function_name(spec))
+            .unwrap_or(cur.mangled());
         if self.visited.contains(&func_id) {
             return;
         }
@@ -59,7 +64,7 @@ impl<'a> SpecializationPropagator<'a> {
 
         self.visited.insert(func_id);
 
-        if let Some(spec) = spec {  
+        if let Some(spec) = spec {
             trace!(target: "spec_propagate", "Adding spec {} to {}", spec, cur);
             let metadata = self.lib.function_metadata_mut(cur).unwrap();
             metadata.specializations.push(spec.clone());
@@ -91,5 +96,4 @@ impl<'a> SpecializationPropagator<'a> {
 
         trace!(target: "spec_propagate", "Finished {}", cur);
     }
-
 }

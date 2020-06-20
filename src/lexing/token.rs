@@ -39,6 +39,7 @@ pub enum TokenKind {
     True,
     False,
     Type,
+    Trait,
     Def,
     Let,
     If,

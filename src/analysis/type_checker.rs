@@ -389,6 +389,17 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
+    fn visit_trait_decl(
+        &mut self,
+        _stmt: &Stmt,
+        _name: &TypedToken,
+        _requirements: &[Stmt],
+    ) -> Analysis {
+        Analysis {
+            guarantees_return: false
+        }
+    }
+
     fn visit_if_stmt(
         &mut self,
         _stmt: &Stmt,
@@ -688,7 +699,8 @@ impl ExprVisitor for TypeChecker {
 
         let metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
-        let arg_types: DiagnosticResult<Vec<NodeType>> = args.iter().map(|a| a.accept(self)).collect();
+        let arg_types: DiagnosticResult<Vec<NodeType>> =
+            args.iter().map(|a| a.accept(self)).collect();
         let arg_types = arg_types?;
 
         if metadata.parameter_types.len() != arg_types.len() {
@@ -706,7 +718,10 @@ impl ExprVisitor for TypeChecker {
             match GenericSpecialization::infer(&metadata, &arg_types) {
                 Ok(spec) => spec,
                 Err(index) => {
-                    let message = format!("Couldn't infer generic type {}", metadata.generics[index].last_component());
+                    let message = format!(
+                        "Couldn't infer generic type {}",
+                        metadata.generics[index].last_component()
+                    );
                     return Err(Diagnostic::error(expr, &message));
                 }
             }
@@ -724,20 +739,25 @@ impl ExprVisitor for TypeChecker {
                 .iter()
                 .map(|s| self.resolve_explicit_type(s))
                 .collect();
-            
+
             GenericSpecialization::new(&func_symbol, specialization?)
         };
 
-        let enclosing_func = self.current_scope().function_metadata.as_ref().map(|f| f.symbol.clone()).unwrap_or(Symbol::main_symbol());
+        let enclosing_func = self
+            .current_scope()
+            .function_metadata
+            .as_ref()
+            .map(|f| f.symbol.clone())
+            .unwrap_or(Symbol::main_symbol());
         let save_spec = if specialization.node_types.is_empty() {
             None
         } else {
             Some(specialization.clone())
         };
         self.call_map
-                .entry(enclosing_func)
-                .or_insert(Vec::new())
-                .push((func_symbol.clone(), save_spec));
+            .entry(enclosing_func)
+            .or_insert(Vec::new())
+            .push((func_symbol.clone(), save_spec));
 
         let (param_types, return_type) = metadata.specialize(&specialization);
 
@@ -747,7 +767,7 @@ impl ExprVisitor for TypeChecker {
             }
             self.check_type_match(&args[index], &arg, &param)?;
         }
-        
+
         expr.set_type(return_type)
     }
 

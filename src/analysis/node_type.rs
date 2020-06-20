@@ -283,9 +283,7 @@ impl NodeType {
         match self {
             NodeType::Type(ty) => ty.mangled(),
             NodeType::Int | NodeType::Void | NodeType::Bool | NodeType::Byte => self.to_string(),
-            NodeType::Pointer(to) => {
-                format!("ptr__{}", to.symbolic_form())
-            }
+            NodeType::Pointer(to) => format!("ptr__{}", to.symbolic_form()),
             NodeType::Generic(sy, index) => format!("{}__{}", sy.mangled(), index),
             _ => panic!("can't get symbolic form of type {}", self),
         }
@@ -293,12 +291,10 @@ impl NodeType {
 
     pub fn infer_generic_type(param: &NodeType, arg: &NodeType) -> Option<(usize, NodeType)> {
         match (param, arg) {
-            (NodeType::Generic(_, index), arg) => {
-                Some((*index, arg.clone()))
-            },
+            (NodeType::Generic(_, index), arg) => Some((*index, arg.clone())),
             (NodeType::Pointer(param_to), NodeType::Pointer(arg_to)) => {
                 NodeType::infer_generic_type(param_to, arg_to)
-            },
+            }
             _ => None,
         }
     }
@@ -338,7 +334,9 @@ impl std::fmt::Display for NodeType {
             NodeType::Type(ty) => format!("Type({})", ty.id),
             NodeType::Metatype(ty) => format!("Metatype({})", ty.id),
             NodeType::Generic(symbol, index) => format!("Generic({}, index: {})", symbol, index),
-            NodeType::GenericMeta(symbol, index) => format!("GenericMeta({}, index: {})", symbol, index),
+            NodeType::GenericMeta(symbol, index) => {
+                format!("GenericMeta({}, index: {})", symbol, index)
+            }
             NodeType::Ambiguous => String::from("_"),
             NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
         };
