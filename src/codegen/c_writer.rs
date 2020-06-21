@@ -121,25 +121,22 @@ impl CWriter {
         specialization: Option<&GenericSpecialization>,
         terminator: &str,
     ) {
-        let (param_types, ret_type) = if let Some(specialization) = specialization {
-            function.specialize(specialization)
-        } else {
-            (
-                function.parameter_types.clone(),
-                function.return_type.clone(),
-            )
-        };
+        let mut function_type = function.full_type();
+        if let Some(specialization) = specialization {
+            function_type = function_type.specialize(specialization);
+        }
 
-        let mut param_str: Vec<String> = param_types
+        let mut param_str: Vec<String> = function_type.parameters
             .iter()
             .zip(&function.parameter_symbols)
             .map(|(param_type, name)| self.type_and_name(param_type, &name.mangled()))
             .collect();
 
         if let FunctionKind::Method(owner) = &function.kind {
+            let self_type = NodeType::pointer_to(NodeType::Type(owner.clone(), None));
             param_str.insert(
                 0,
-                self.type_and_name(&NodeType::pointer_to(NodeType::Type(owner.clone())), "self"),
+                self.type_and_name(&self_type, "self"),
             );
         }
 
@@ -148,7 +145,7 @@ impl CWriter {
         self.writeln("");
         self.writeln(&format!(
             "{}({}){}",
-            self.type_and_name(&ret_type, &function.function_name(specialization)),
+            self.type_and_name(&function_type.return_type, &function.function_name(specialization)),
             param_str,
             terminator
         ));
@@ -186,7 +183,7 @@ impl CWriter {
         }
 
         match node_type {
-            NodeType::Type(symbol) => (symbol.mangled(), name),
+            NodeType::Type(..) => (node_type.symbolic_form(), name),
             NodeType::Pointer(ty) => {
                 let ty: &NodeType = &ty.coerce_array_to_ptr();
                 if let NodeType::Any = ty {

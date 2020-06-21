@@ -513,7 +513,7 @@ impl Parser {
 
     fn call(&mut self, lhs: Expr, _can_assign: bool) -> Result<Expr> {
         let specialization = if self.previous().kind == TokenKind::Bar {
-            let result = self.parse_specialization()?;
+            let result = self.parse_specialization(TokenKind::Bar, '|')?;
             self.consume(TokenKind::LeftParen, "Expect '(' before function arguments")?;
             result
         } else {
@@ -616,7 +616,7 @@ impl Parser {
 
         self.consume(TokenKind::Bar, "Expect |cast type|")?;
 
-        let mut specialization = self.parse_specialization()?;
+        let mut specialization = self.parse_specialization(TokenKind::Bar, '|')?;
         if specialization.len() != 1 {
             return Err(Diagnostic::error(&cast_span, "Expect single cast type"));
         }
@@ -648,16 +648,17 @@ impl Parser {
         Ok(generics)
     }
 
-    fn parse_specialization(&mut self) -> Result<Vec<ExplicitType>> {
+    fn parse_specialization(&mut self, terminator_kind: TokenKind, terminator: char) -> Result<Vec<ExplicitType>> {
         let mut specialized_types = Vec::new();
-        while !self.is_at_end() && self.peek() != TokenKind::Bar {
+        while !self.is_at_end() && self.peek() != terminator_kind {
             let specialized_type = self.parse_explicit_type()?;
             specialized_types.push(specialized_type);
-            if self.peek() != TokenKind::Bar {
+            if self.peek() != terminator_kind {
                 self.consume(TokenKind::Comma, "Expect ',' between generic types")?;
             }
         }
-        self.consume(TokenKind::Bar, "Expect '|' after generic types")?;
+        let message = format!("Expect '{}' after generic types", terminator);
+        self.consume(terminator_kind, &message)?;
         Ok(specialized_types)
     }
 
@@ -708,7 +709,12 @@ impl Parser {
             let name = self
                 .consume(TokenKind::Identifier, "Expected variable type")?
                 .clone();
-            ExplicitTypeKind::Simple(ResolvedToken::new(name))
+            let specialization = if self.matches(TokenKind::Less) {
+                self.parse_specialization(TokenKind::Greater, '>')?
+            } else {
+                Vec::new()
+            };
+            ExplicitTypeKind::Simple(ResolvedToken::new(name), specialization)
         };
 
         let end = &self.previous().span;

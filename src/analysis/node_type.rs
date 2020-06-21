@@ -6,18 +6,55 @@ use crate::parsing::*;
 use log::trace;
 
 #[derive(Clone)]
+pub struct FunctionType {
+    pub parameters: Vec<NodeType>,
+    pub return_type: NodeType
+}
+
+impl FunctionType {
+    pub fn new(parameters: Vec<NodeType>, return_type: NodeType) -> Self {
+        FunctionType {
+            parameters,
+            return_type
+        }
+    }
+
+    pub fn specialize(&self, spec: &GenericSpecialization) -> Self {
+        FunctionType {
+            parameters: self.parameters.iter().map(|p| p.specialize(spec)).collect(),
+            return_type: self.return_type.specialize(spec),
+        }
+    }
+}
+
+impl std::fmt::Display for FunctionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut string = String::from("def(");
+        if let Some(first) = self.parameters.first() {
+            string += &first.to_string()
+        }
+        self.parameters
+            .iter()
+            .skip(1)
+            .for_each(|p| string += &format!(", {}", p));
+        string += &format!("): {}", self.return_type);
+        write!(f, "{}", string)
+    }
+}
+
+#[derive(Clone)]
 pub enum NodeType {
     Void,
     Int,
     Bool,
     Byte,
-    Type(Symbol),
+    Type(Symbol, Option<GenericSpecialization>),
+    Metatype(Symbol, Option<GenericSpecialization>),
     Pointer(Box<NodeType>),
     Array(Box<NodeType>, usize),
-    Function(Vec<NodeType>, Box<NodeType>),
+    Function(Box<FunctionType>),
     Generic(Symbol, usize),
     GenericMeta(Symbol, usize),
-    Metatype(Symbol),
     FlexibleFunction(fn(&[NodeType]) -> bool),
     Ambiguous,
     Any,
@@ -39,6 +76,14 @@ impl NodeType {
         NodeType::Pointer(Box::new(pointee))
     }
 
+    pub fn function(parameters: Vec<NodeType>, return_type: NodeType) -> Self {
+        let function = FunctionType {
+            parameters,
+            return_type
+        };
+        NodeType::Function(Box::new(function))
+    }
+
     pub fn deduce_from_lib(
         explicit_type: &ExplicitType,
         lib: &Lib,
@@ -54,11 +99,16 @@ impl NodeType {
         context: &[Symbol],
     ) -> Option<Self> {
         let node_type = match &explicit_type.kind {
-            ExplicitTypeKind::Simple(token) => {
+            ExplicitTypeKind::Simple(token, specialization) => {
+                let mut resolved_spec = Vec::new();
+                for explict_spec in specialization {
+                    resolved_spec.push(NodeType::deduce_from(explict_spec, table, deps, context)?);
+                }
+
                 if let Some(primitive) = NodeType::primitive(&token.token) {
                     primitive
                 } else {
-                    NodeType::symbol_for_type_token(&token.token, table, deps, context)?
+                    NodeType::search_for_type_token(&token.token, table, deps, context, resolved_spec)?
                 }
             }
             ExplicitTypeKind::Pointer(to) => {
@@ -77,20 +127,26 @@ impl NodeType {
         Some(node_type)
     }
 
-    fn symbol_for_type_token(
+    fn search_for_type_token(
         token: &Token,
         table: &SymbolTable,
         deps: &[Lib],
         context: &[Symbol],
-    ) -> Option<NodeType> {
+        specialization: Vec<NodeType>,
+    ) -> Option<Self> {
         trace!(target: "symbol_table", "Trying to find symbol for {} -- ({})", token.lexeme(), token.span.entire_line().0);
 
         for parent in context.iter().rev() {
             let non_top_level_symbol = Symbol::new(Some(parent), token);
             let resolved = table.get_type(&non_top_level_symbol);
             match resolved {
-                Some(NodeType::Metatype(metatype)) => {
-                    let instance_type = NodeType::Type(metatype.clone());
+                Some(NodeType::Metatype(metatype, _)) => {
+                    let spec = if specialization.is_empty() {
+                        None
+                    } else {
+                        Some(GenericSpecialization::new(metatype, specialization))
+                    };
+                    let instance_type = NodeType::Type(metatype.clone(), spec);
                     trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), instance_type);
                     return Some(instance_type);
                 }
@@ -105,14 +161,24 @@ impl NodeType {
 
         let top_level_symbol = Symbol::new(None, token);
 
-        if let Some(NodeType::Metatype(metatype)) = table.get_type(&top_level_symbol) {
-            let instance_type = NodeType::Type(metatype.clone());
+        if let Some(NodeType::Metatype(metatype, _)) = table.get_type(&top_level_symbol) {
+            let spec = if specialization.is_empty() {
+                None
+            } else {
+                Some(GenericSpecialization::new(metatype, specialization))
+            };
+            let instance_type = NodeType::Type(metatype.clone(), spec);
             trace!(target: "symbol_table", "Resolving {} as Type({})", token.lexeme(), instance_type);
             Some(instance_type)
         } else {
             for dep in deps {
-                if let Some(NodeType::Metatype(metatype)) = dep.resolve_symbol(&top_level_symbol) {
-                    let instance_type = NodeType::Type(metatype.clone());
+                if let Some(NodeType::Metatype(metatype, _)) = dep.resolve_symbol(&top_level_symbol) {
+                    let spec = if specialization.is_empty() {
+                        None
+                    } else {
+                        Some(GenericSpecialization::new(&metatype, specialization))
+                    };
+                    let instance_type = NodeType::Type(metatype.clone(), spec);
                     trace!(target: "symbol_table", "Resolving {} as other lib Type({})", token.lexeme(), instance_type);
                     return Some(instance_type);
                 }
@@ -126,13 +192,13 @@ impl NodeType {
             NodeType::Ambiguous => true,
             NodeType::Pointer(ptr) => ptr.contains_ambiguity(),
             NodeType::Array(of, _) => of.contains_ambiguity(),
-            NodeType::Function(params, ret) => {
-                for param in params {
+            NodeType::Function(func_type) => {
+                for param in &func_type.parameters {
                     if param.contains_ambiguity() {
                         return true;
                     }
                 }
-                ret.contains_ambiguity()
+                func_type.return_type.contains_ambiguity()
             }
             _ => false,
         }
@@ -183,22 +249,22 @@ impl NodeType {
             | (NodeType::Int, NodeType::Int)
             | (NodeType::Bool, NodeType::Bool)
             | (NodeType::Byte, NodeType::Byte) => true,
-            (NodeType::Type(lhs), NodeType::Type(rhs))
-            | (NodeType::Metatype(lhs), NodeType::Metatype(rhs))
-                if lhs == rhs =>
+            (NodeType::Type(lhs, lhs_spec), NodeType::Type(rhs, rhs_spec))
+            | (NodeType::Metatype(lhs, lhs_spec), NodeType::Metatype(rhs, rhs_spec))
+                if lhs == rhs && lhs_spec == rhs_spec =>
             {
                 true
             }
             (NodeType::Pointer(lhs), NodeType::Pointer(rhs)) => lhs.matches(&rhs),
-            (NodeType::Function(lhs_params, lhs_ret), NodeType::Function(rhs_params, rhs_ret))
-                if lhs_params.len() == rhs_params.len() =>
+            (NodeType::Function(lhs), NodeType::Function(rhs))
+                if lhs.parameters.len() == rhs.parameters.len() =>
             {
-                if !lhs_ret.matches(&rhs_ret) {
+                if !lhs.return_type.matches(&rhs.return_type) {
                     return false;
                 }
 
-                for (lhs_param, rhs_param) in lhs_params.iter().zip(rhs_params) {
-                    if !lhs_param.matches(&rhs_param) {
+                for (lhs_param, rhs_param) in lhs.parameters.iter().zip(&rhs.parameters) {
+                    if !lhs_param.matches(rhs_param) {
                         return false;
                     }
                 }
@@ -232,7 +298,10 @@ impl NodeType {
             NodeType::Pointer(to) => NodeType::pointer_to(to.specialize(specialization)),
             NodeType::Array(of, size) => {
                 let specialized = of.specialize(specialization);
-                return NodeType::Array(Box::new(specialized), *size);
+                NodeType::Array(Box::new(specialized), *size)
+            }
+            NodeType::Function(func_type) =>{
+                NodeType::Function(Box::new(func_type.specialize(specialization)))
             }
             _ => self.clone(),
         }
@@ -282,11 +351,20 @@ impl NodeType {
 
     pub fn symbolic_form(&self) -> String {
         match self {
-            NodeType::Type(ty) => ty.mangled(),
+            NodeType::Type(ty, spec) => {
+                if let Some(spec) = spec.as_ref() {
+                    ty.mangled() + "__" + &spec.id
+                } else {
+                    ty.mangled()
+                }
+            },
             NodeType::Int | NodeType::Void | NodeType::Bool | NodeType::Byte => self.to_string(),
             NodeType::Pointer(to) => format!("ptr__{}", to.symbolic_form()),
             NodeType::Generic(sy, index) => format!("{}__{}", sy.mangled(), index),
-            _ => panic!("can't get symbolic form of type {}", self),
+            _ => {
+                // panic!("can't get symbolic form of type {}", self),
+                String::new()
+            }
         }
     }
 
@@ -299,14 +377,6 @@ impl NodeType {
             _ => None,
         }
     }
-
-    // pub fn can_automatically_cast_to(&self, other: &NodeType) -> {
-    //     if self.exact_match(other) {
-    //         true
-    //     } else {
-
-    //     }
-    // }
 }
 
 impl std::fmt::Display for NodeType {
@@ -317,23 +387,11 @@ impl std::fmt::Display for NodeType {
             NodeType::Bool => String::from("bool"),
             NodeType::Byte => String::from("byte"),
             NodeType::Any => String::from("any"),
-            NodeType::Function(params, ret) => {
-                let mut string = String::from("def");
-                string += "(";
-                if let Some(first) = params.first() {
-                    string += &first.to_string()
-                }
-                params
-                    .iter()
-                    .skip(1)
-                    .for_each(|p| string += &format!(", {}", p));
-                string += &format!("): {}", ret);
-                string
-            }
+            NodeType::Function(func_type) => func_type.to_string(),
             NodeType::Pointer(ty) => format!("ptr<{}>", ty),
             NodeType::Array(ty, size) => format!("Array<{}, count={}>", ty, size),
-            NodeType::Type(ty) => format!("Type({})", ty.id),
-            NodeType::Metatype(ty) => format!("Metatype({})", ty.id),
+            NodeType::Type(ty, specialization) => format!("Type({}, spec: {})", ty.id, str_or_none(specialization.as_ref())),
+            NodeType::Metatype(ty, spec) => format!("Metatype({}, spec: {})", ty.id, str_or_none(spec.as_ref())),
             NodeType::Generic(symbol, index) => format!("Generic({}, index: {})", symbol, index),
             NodeType::GenericMeta(symbol, index) => {
                 format!("GenericMeta({}, index: {})", symbol, index)
@@ -342,5 +400,12 @@ impl std::fmt::Display for NodeType {
             NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
         };
         write!(f, "{}", kind)
+    }
+}
+
+fn str_or_none<T: std::fmt::Display>(opt: Option<&T>) -> String {
+    match opt {
+        Some(value) => value.to_string(),
+        None => String::from("<none>")
     }
 }

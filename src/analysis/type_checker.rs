@@ -252,13 +252,20 @@ impl TypeChecker {
             Err(Diagnostic::error(explicit_type, "Undefined type"))
         }
     }
+
+    fn declare_generics(&mut self, owner: &Symbol, generics: &[TypedToken]) {
+        for (index, token) in generics.iter().enumerate() {
+            let generic_type = NodeType::GenericMeta(owner.clone(), index);
+            self.current_scope().define_var(token, &generic_type);
+        }
+    }
 }
 
 impl StmtVisitor for TypeChecker {
     type StmtResult = Analysis;
 
     fn visit_type_decl(&mut self, decl: &TypeDecl) -> Analysis {
-        let (_, metadata) = self.push_type_scope(&decl.name);
+        let (type_symbol, metadata) = self.push_type_scope(&decl.name);
 
         self.push_scope_meta();
         for meta_method in &metadata.meta_methods {
@@ -269,6 +276,8 @@ impl StmtVisitor for TypeChecker {
             self.visit_function_decl(meta_method);
         }
         self.pop_scope();
+
+        self.declare_generics(&type_symbol, &decl.generics);
 
         for field in &decl.fields {
             self.visit_variable_decl(field);
@@ -293,10 +302,7 @@ impl StmtVisitor for TypeChecker {
         let (func_symbol, metadata) = self.push_function_scope(&decl.name);
         decl.name.set_symbol(func_symbol.clone());
 
-        for (index, token) in decl.generics.iter().enumerate() {
-            let generic_type = NodeType::GenericMeta(func_symbol.clone(), index);
-            self.current_scope().define_var(token, &generic_type);
-        }
+        self.declare_generics(&func_symbol, &decl.generics);
 
         let explicit_type_span = decl.return_type.as_ref();
         let return_type = match &metadata.return_type {
@@ -628,62 +634,74 @@ impl ExprVisitor for TypeChecker {
         specializations: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult {
-        let func_symbol = if let Some(target) = target {
-            let target_type = target.accept(self)?;
+        let function_name = function.token.lexeme();
 
-            let object_symbol = match target_type {
-                NodeType::Type(type_symbol) => Ok(type_symbol),
-                NodeType::Metatype(type_symbol) => Ok(Symbol::meta_symbol(Some(&type_symbol))),
-                _ => Err(Diagnostic::error(
+        let (func_symbol, object_specialization) = if let Some(target) = target {
+            let target_type = target.accept(self)?;
+            match &target_type {
+                NodeType::Type(type_symbol, specialization) => {
+                    let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
+                    if let Some(method_symbol) = type_metadata.method_named(function_name) {
+                        (method_symbol, specialization.clone())
+                    } else {
+                        return Err(Diagnostic::error(
+                            &Span::join(target, function),
+                            &format!(
+                                "Type '{}' does not have method '{}'",
+                                target_type,
+                                function_name
+                            ),
+                        ));
+                    }
+                },
+                NodeType::Metatype(type_symbol, specialization) => {
+                    let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
+                    if let Some(meta_method_symbol) = type_metadata.meta_method_named(function_name) {
+                        (meta_method_symbol, specialization.clone())
+                    } else {
+                        return Err(Diagnostic::error(
+                            &Span::join(target, function),
+                            &format!(
+                                "Type '{}' does not have meta method '{}'",
+                                target_type,
+                                function_name
+                            ),
+                        ));
+                    }
+                },
+                _ => return Err(Diagnostic::error(
                     expr,
                     &format!("Cannot call method on a {}", target_type),
                 )),
-            }?;
-
-            let method_symbol = Symbol::new(Some(&object_symbol), &function.token);
-
-            match self.lib.resolve_symbol(&method_symbol) {
-                Some(NodeType::Function(..)) => Ok(method_symbol),
-                Some(_) => Err(Diagnostic::error(
-                    &Span::join(target, function),
-                    &format!(
-                        "'{}' is a property, not a method of {}",
-                        function.span().lexeme(),
-                        object_symbol.id,
-                    ),
-                )),
-                None => Err(Diagnostic::error(
-                    &Span::join(target, function),
-                    &format!(
-                        "Type '{}' does not have method '{}'",
-                        object_symbol.id,
-                        function.span().lexeme()
-                    ),
-                )),
             }
         } else {
-            let resolved = self.resolve_var(function.span().lexeme());
+            let resolved = self.resolve_var(function_name);
             if resolved.is_none() {
                 return Err(Diagnostic::error(function, "Undefined function"));
             }
             let (found_symbol, node_type) = resolved.unwrap();
 
-            match node_type {
-                NodeType::Function(..) => Ok(found_symbol),
-                NodeType::Metatype(symbol) => {
+            match &node_type {
+                NodeType::Function(..) => (found_symbol, None),
+                NodeType::Metatype(symbol, specialization) => {
                     let meta_symbol = Symbol::meta_symbol(Some(&symbol));
-                    Ok(Symbol::init_symbol(Some(&meta_symbol)))
+                    (Symbol::init_symbol(Some(&meta_symbol)), specialization.clone())
                 }
-                _ => Err(Diagnostic::error(
+                _ => return Err(Diagnostic::error(
                     function,
                     &format!("Cannot call type {}", node_type),
-                )),
+                ))
             }
-        }?;
+        };
 
         function.set_symbol(func_symbol.clone());
 
         let metadata = self.lib.function_metadata(&func_symbol).unwrap();
+
+        let mut function_type = metadata.full_type();
+        if let Some(spec) = object_specialization.as_ref() {
+            function_type = function_type.specialize(spec);
+        }
 
         let arg_types: DiagnosticResult<Vec<NodeType>> =
             args.iter().map(|a| a.accept(self)).collect();
@@ -729,32 +747,34 @@ impl ExprVisitor for TypeChecker {
             GenericSpecialization::new(&func_symbol, specialization?)
         };
 
-        let enclosing_func = self
+        {
+            let enclosing_func = self
             .current_scope()
             .function_metadata
             .as_ref()
             .map(|f| f.symbol.clone())
             .unwrap_or(Symbol::main_symbol());
-        let save_spec = if specialization.node_types.is_empty() {
-            None
-        } else {
-            Some(specialization.clone())
-        };
-        self.call_map
-            .entry(enclosing_func)
-            .or_insert(Vec::new())
-            .push((func_symbol.clone(), save_spec));
+            let save_spec = if specialization.node_types.is_empty() {
+                None
+            } else {
+                Some(specialization.clone())
+            };
+            self.call_map
+                .entry(enclosing_func)
+                .or_insert(Vec::new())
+                .push((func_symbol.clone(), save_spec));
+        }
 
-        let (param_types, return_type) = metadata.specialize(&specialization);
+        function_type = function_type.specialize(&specialization);
 
-        for ((index, param), arg) in param_types.into_iter().enumerate().zip(arg_types) {
+        for ((index, param), arg) in function_type.parameters.into_iter().enumerate().zip(arg_types) {
             if let Err(diag) = self.ensure_no_amibguity(&args[index], &arg) {
                 self.report_error(diag);
             }
             self.check_type_match(&args[index], &arg, &param)?;
         }
 
-        expr.set_type(return_type)
+        expr.set_type(function_type.return_type)
     }
 
     fn visit_field_expr(
@@ -764,29 +784,73 @@ impl ExprVisitor for TypeChecker {
         field: &ResolvedToken,
     ) -> Self::ExprResult {
         let target_type = target.accept(self)?;
-
-        let type_symbol = match target_type {
-            NodeType::Type(type_symbol) => Ok(type_symbol),
-            NodeType::Metatype(type_symbol) => Ok(Symbol::meta_symbol(Some(&type_symbol))),
-            _ => Err(Diagnostic::error(
+        let field_name = field.token.lexeme();
+/*
+        let (field_symbol, expr_type, specialization) = match target_type {
+            NodeType::Type(type_symbol, specialization) => {
+                let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
+                if let Some((field_symbol, field_type)) = type_metadata.field_named(field_name) {
+                    (field_symbol, field_type.clone(), specialization)
+                } else if let Some(method) = type_metadata.method_named(field_name) {
+                    let func_metadata = self.lib.function_metadata(&method).unwrap();
+                    (method, func_metadata.full_type(), specialization)
+                } else {
+                    return Err(Diagnostic::error(
+                        &Span::join(target, field),
+                        &format!(
+                            "Type '{}' does not has field '{}'",
+                            type_symbol.id,
+                            field.span().lexeme()
+                        ),
+                    ));
+                }
+            },
+            NodeType::Metatype(type_symbol, specialization) => {
+                let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
+                if let Some(meta_method) = type_metadata.meta_method_named(field_name) {
+                    let func_metadata = self.lib.function_metadata(&meta_method).unwrap();
+                    (meta_method, func_metadata.full_type(), specialization)
+                } else {
+                    return Err(Diagnostic::error(
+                        &Span::join(target, field),
+                        &format!(
+                            "Type '{}' does not has meta function '{}'",
+                            type_symbol.id,
+                            field.span().lexeme()
+                        ),
+                    ));
+                }
+            }
+            _ => return Err(Diagnostic::error(
                 target,
                 &format!("Cannot access property of a {}", target_type),
             )),
-        }?;
+        };
+        */
 
-        let field_symbol = Symbol::new(Some(&type_symbol), &field.token);
-
-        if let Some(field_type) = self.lib.resolve_symbol(&field_symbol) {
-            field.set_symbol(field_symbol);
-            expr.set_type(field_type.clone())
-        } else {
-            Err(Diagnostic::error(
-                &Span::join(target, field),
+        match target_type {
+            NodeType::Type(type_symbol, specialization) => {
+                let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
+                if let Some((field_symbol, field_type)) = type_metadata.field_named(field_name) {
+                    field.set_symbol(field_symbol);
+                    expr.set_type(field_type.specialize_opt(specialization.as_ref()))
+                } else {
+                    Err(Diagnostic::error(
+                        &Span::join(target, field),
+                        &format!(
+                            "Type '{}' does not has field '{}'",
+                            type_symbol.id,
+                            field.span().lexeme()
+                        ),
+                    ))
+                }
+            },
+            _ => Err(Diagnostic::error(
+                target,
                 &format!(
-                    "Type '{}' does not has field '{}'",
-                    type_symbol.id,
-                    field.span().lexeme()
-                ),
+                    "Cannot access property of '{}'",
+                    target_type
+                )
             ))
         }
     }

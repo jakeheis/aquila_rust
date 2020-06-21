@@ -64,7 +64,7 @@ impl ASTPrinter {
 
     fn write_explicit_type(&mut self, explicit_type: &ExplicitType) {
         match &explicit_type.kind {
-            ExplicitTypeKind::Simple(token) => {
+            ExplicitTypeKind::Simple(token, specializations) => {
                 let symbol = token
                     .get_symbol()
                     .map(|s| s.id.clone())
@@ -74,6 +74,11 @@ impl ASTPrinter {
                     token.span().lexeme(),
                     symbol
                 ));
+                self.indent(|visitor| {
+                    for spec in specializations {
+                        visitor.write_explicit_type(spec);
+                    }
+                });
             }
             ExplicitTypeKind::Pointer(to) => {
                 self.write_ln("ExplicitType(ptr)");

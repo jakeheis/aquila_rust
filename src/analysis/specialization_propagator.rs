@@ -3,6 +3,11 @@ use crate::library::*;
 use log::trace;
 use std::collections::{HashMap, HashSet};
 
+// pub struct SpecializationTracker {
+//     type_map: HashMap<Symbol, Vec<GenericSpecialization>>,
+//     call_map: HashMap<Symbol, Vec<(Symbol, Option<GenericSpecialization>)>>,
+// }
+
 pub struct SpecializationPropagator<'a> {
     lib: &'a mut Lib,
     call_map: HashMap<Symbol, Vec<(Symbol, Option<GenericSpecialization>)>>,

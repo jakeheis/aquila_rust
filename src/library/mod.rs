@@ -6,6 +6,7 @@ use crate::parsing::*;
 use crate::source::*;
 use crate::source::{self, Source};
 use std::rc::Rc;
+use log::trace;
 
 pub struct Lib {
     pub name: String,
@@ -17,9 +18,7 @@ pub struct Lib {
     pub dependencies: Vec<Lib>,
 }
 
-const LOG_LEXER: bool = false;
 const LOG_PARSER: bool = false;
-const LOG_SYMBOL_MAKER: bool = false;
 const LOG_TYPE_CHECKER: bool = false;
 const LOG_STDLIB: bool = false;
 
@@ -52,11 +51,6 @@ impl Lib {
         let lexer = Lexer::new(source, Rc::clone(&reporter));
         let tokens = lexer.lex();
 
-        if LOG_LEXER {
-            let slice: &[Token] = &tokens;
-            println!("lexed {}", slice.token_string());
-        }
-
         let parser = Parser::new(tokens, Rc::clone(&reporter));
         let stmts = parser.parse();
 
@@ -88,9 +82,7 @@ impl Lib {
             &lib.dependencies,
         );
 
-        if LOG_SYMBOL_MAKER {
-            println!("{}", lib.symbols);
-        }
+        trace!(target: "symbol_table", "{}", lib.symbols);
 
         let mut lib = TypeChecker::check(lib, Rc::clone(&reporter));
 

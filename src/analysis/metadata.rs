@@ -1,4 +1,72 @@
-use crate::analysis::{NodeType, Symbol};
+use crate::analysis::{NodeType, Symbol, FunctionType};
+
+#[derive(Clone)]
+pub struct TypeMetadata {
+    pub symbol: Symbol,
+    pub generics: Vec<Symbol>,
+    pub field_symbols: Vec<Symbol>,
+    pub field_types: Vec<NodeType>,
+    pub methods: Vec<Symbol>,
+    pub meta_methods: Vec<Symbol>,
+}
+
+impl TypeMetadata {
+    pub fn field_named(&self, name: &str) -> Option<(Symbol, &NodeType)> {
+        let possible_symbol = Symbol::new_str(Some(&self.symbol), name);
+        if let Some(index) = self.field_symbols.iter().position(|s| s == &possible_symbol) {
+            Some((possible_symbol, &self.field_types[index]))
+        } else {
+            None
+        }
+    }
+
+    pub fn method_named(&self, name: &str) -> Option<Symbol> {
+        let possible_symbol = Symbol::new_str(Some(&self.symbol), name);
+        if self.methods.contains(&possible_symbol) {
+            Some(possible_symbol)
+        } else {
+            None
+        }
+    }
+
+    pub fn meta_method_named(&self, name: &str) -> Option<Symbol> {
+        let possible_symbol = Symbol::new_str(Some(&Symbol::meta_symbol(Some(&self.symbol))), name);
+        if self.meta_methods.contains(&possible_symbol) {
+            Some(possible_symbol)
+        } else {
+            None
+        }
+    }
+}
+
+impl std::fmt::Display for TypeMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "Type {}", self.symbol.mangled())?;
+        let fields = self
+            .field_symbols
+            .iter()
+            .zip(&self.field_types)
+            .map(|(symbol, field_type)| format!("{}: {}", symbol.mangled(), field_type))
+            .collect::<Vec<_>>()
+            .join(",");
+        writeln!(f, "  fields: {}", fields)?;
+        let methods = self
+            .methods
+            .iter()
+            .map(|m| m.mangled())
+            .collect::<Vec<_>>()
+            .join(",");
+        writeln!(f, "  methods: {}", methods)?;
+        let meta_methods = self
+            .meta_methods
+            .iter()
+            .map(|m| m.mangled())
+            .collect::<Vec<_>>()
+            .join(",");
+        write!(f, "  meta methods: {}", meta_methods)
+    }
+}
+
 
 #[derive(Clone)]
 pub enum FunctionKind {
@@ -19,20 +87,14 @@ pub struct FunctionMetadata {
 }
 
 impl FunctionMetadata {
-    pub fn specialize(&self, specialization: &GenericSpecialization) -> (Vec<NodeType>, NodeType) {
-        let params: Vec<NodeType> = self
-            .parameter_types
-            .iter()
-            .map(|node_type| node_type.specialize(specialization))
-            .collect();
-        let ret = self.return_type.specialize(specialization);
-        (params, ret)
-    }
-
     pub fn function_name(&self, specialization: Option<&GenericSpecialization>) -> String {
         specialization
             .map(|s| s.id.clone())
             .unwrap_or(self.symbol.mangled())
+    }
+
+    pub fn full_type(&self) -> FunctionType {
+        FunctionType::new(self.parameter_types.clone(), self.return_type.clone())
     }
 }
 
@@ -83,52 +145,14 @@ impl std::fmt::Display for FunctionMetadata {
 }
 
 #[derive(Clone)]
-pub struct TypeMetadata {
-    pub symbol: Symbol,
-    // pub generics: Vec<Symbol>,
-    pub field_symbols: Vec<Symbol>,
-    pub field_types: Vec<NodeType>,
-    pub methods: Vec<Symbol>,
-    pub meta_methods: Vec<Symbol>,
-}
-
-impl std::fmt::Display for TypeMetadata {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        writeln!(f, "Type {}", self.symbol.mangled())?;
-        let fields = self
-            .field_symbols
-            .iter()
-            .zip(&self.field_types)
-            .map(|(symbol, field_type)| format!("{}: {}", symbol.mangled(), field_type))
-            .collect::<Vec<_>>()
-            .join(",");
-        writeln!(f, "  fields: {}", fields)?;
-        let methods = self
-            .methods
-            .iter()
-            .map(|m| m.mangled())
-            .collect::<Vec<_>>()
-            .join(",");
-        writeln!(f, "  methods: {}", methods)?;
-        let meta_methods = self
-            .meta_methods
-            .iter()
-            .map(|m| m.mangled())
-            .collect::<Vec<_>>()
-            .join(",");
-        write!(f, "  meta methods: {}", meta_methods)
-    }
-}
-
-#[derive(Clone)]
 pub struct GenericSpecialization {
-    pub function: Symbol,
+    pub owner: Symbol,
     pub id: String,
     pub node_types: Vec<NodeType>,
 }
 
 impl GenericSpecialization {
-    pub fn new(function: &Symbol, node_types: Vec<NodeType>) -> Self {
+    pub fn new(owner: &Symbol, node_types: Vec<NodeType>) -> Self {
         let special_part = node_types
             .iter()
             .map(|s| s.symbolic_form())
@@ -136,8 +160,8 @@ impl GenericSpecialization {
             .join("__");
 
         GenericSpecialization {
-            function: function.clone(),
-            id: function.mangled() + &special_part,
+            owner: owner.clone(),
+            id: owner.mangled() + &special_part,
             node_types,
         }
     }
@@ -178,7 +202,7 @@ impl GenericSpecialization {
             })
             .collect();
 
-        GenericSpecialization::new(&self.function, node_types)
+        GenericSpecialization::new(&self.owner, node_types)
     }
 }
 

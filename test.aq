@@ -54,10 +54,16 @@ type Adder|T| {
     print add(third[1]);
   }
 
+  def add_mysterious|U|(object: U): T {
+
+  }
+
   meta def example(): Adder {
     return Adder(1, 2);
   }
 }
+
+let customized_adder = Adder|ptr byte|(3, 4);
 
 let vec_int = Vec.new|int|();
 vec_int.insert(4);

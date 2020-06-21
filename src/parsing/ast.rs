@@ -316,7 +316,7 @@ impl ContainsSpan for ResolvedToken {
 }
 
 pub enum ExplicitTypeKind {
-    Simple(ResolvedToken),
+    Simple(ResolvedToken, Vec<ExplicitType>),
     Array(Box<ExplicitType>, Token),
     Pointer(Box<ExplicitType>),
 }
