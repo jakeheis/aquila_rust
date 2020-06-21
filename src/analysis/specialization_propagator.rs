@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 pub struct SpecializationPropagator<'a> {
     lib: &'a mut Lib,
-    call_map: HashMap<Symbol, Vec<(Symbol, Option<GenericSpecialization>)>>,
+    call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
     visited: HashSet<String>,
 }
 
@@ -18,16 +18,16 @@ impl<'a> SpecializationPropagator<'a> {
     pub fn propogate(lib: &mut Lib) {
         for (caller, calls) in &lib.symbols.call_map {
             for (call, spec) in calls {
-                let suffix = if let Some(spec) = spec.as_ref() {
-                    format!(" {}", spec)
-                } else {
+                let suffix = if spec.node_types.is_empty() {
                     String::new()
+                } else {
+                    format!(" {}", spec)
                 };
                 trace!(target: "spec_propagate", "Call entry: {} -> {}{}", caller, call, suffix);
             }
         }
 
-        let mut call_map: HashMap<Symbol, Vec<(Symbol, Option<GenericSpecialization>)>> =
+        let mut call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>> =
             HashMap::new();
         SpecializationPropagator::flattened_call_map(lib, &mut call_map);
 
@@ -41,7 +41,7 @@ impl<'a> SpecializationPropagator<'a> {
 
     pub fn flattened_call_map(
         lib: &Lib,
-        call_map: &mut HashMap<Symbol, Vec<(Symbol, Option<GenericSpecialization>)>>,
+        call_map: &mut HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
     ) {
         for (caller, callees) in &lib.symbols.call_map {
             let all = call_map.entry(caller.clone()).or_insert(Vec::new());
@@ -53,13 +53,13 @@ impl<'a> SpecializationPropagator<'a> {
     }
 
     pub fn go(&mut self) {
-        self.propagate(&Symbol::main_symbol(), None);
+        self.propagate(&Symbol::main_symbol(), &GenericSpecialization::empty(&Symbol::main_symbol()));
     }
 
-    fn propagate(&mut self, cur: &Symbol, spec: Option<&GenericSpecialization>) {
+    fn propagate(&mut self, cur: &Symbol, current_spec: &GenericSpecialization) {
         let metadata = self.lib.function_metadata(cur);
         let func_id = metadata
-            .map(|m| m.function_name(spec))
+            .map(|m| m.function_name(current_spec))
             .unwrap_or(cur.mangled());
         if self.visited.contains(&func_id) {
             return;
@@ -69,33 +69,46 @@ impl<'a> SpecializationPropagator<'a> {
 
         self.visited.insert(func_id);
 
-        if let Some(spec) = spec {
-            trace!(target: "spec_propagate", "Adding spec {} to {}", spec, cur);
+        if !current_spec.node_types.is_empty() {
+            trace!(target: "spec_propagate", "Adding spec {} to {}", current_spec, cur);
             let metadata = self.lib.function_metadata_mut(cur).unwrap();
-            metadata.specializations.push(spec.clone());
+            metadata.specializations.push(current_spec.clone());
         }
 
         if let Some(calls) = self.call_map.get(cur) {
             let calls = calls.clone();
-            for (call, call_spec) in calls {
-                let call_spec = if let Some(cur_spec) = spec {
-                    call_spec.map(|call_spec| {
-                        trace!(target: "spec_propagate", "Generic func {} calling generic func {}", cur, call);
-                        let spec_types: Vec<_> = call_spec.node_types.iter().map(|arg_type| {
-                            match arg_type {
-                                NodeType::Generic(_, index) => {
-                                    trace!(target: "spec_propagate", "Specializing {} to {}", arg_type, cur_spec.node_types[*index]);
-                                    cur_spec.node_types[*index].clone()
-                                },
-                                _ => arg_type.clone(),
-                            }
-                        }).collect();
-                        GenericSpecialization::new(&call, spec_types)
-                    })
-                } else {
-                    call_spec
-                };
-                self.propagate(&call, call_spec.as_ref());
+            for (callee_function_symbol, call_spec) in calls {
+
+                // let call_spec = if !current_spec.node_types.is_empty() {
+                    // call_spec.map(|call_spec| {
+                        // trace!(target: "spec_propagate", "Generic func {} calling generic func {}", cur, call);
+
+                        // trace!(target: "spec_propagate", "Generic func {} calling generic func {}", cur, call);
+                        // let spec_types: Vec<_> = call_spec.node_types.iter().map(|arg_type| {
+                        //     match arg_type {
+                        //         NodeType::Instance(type_symbol, type_specialization) => {
+                        //             if callee_function_symbol.owns(type_symbol) {
+                        //                 let generic_index = lib.type_metadata(symbol).and_then(|t| t.generic_index).unwrap();
+                        //                 trace!(target: "spec_propagate", "Specializing {} to {}", arg_type, cur_spec.node_types[*index]);
+                        //                 cur_spec.node_types[*index].clone()
+                        //             }
+                        //             let type_metadata = self.lib.type_metadata(type_symbol).unwrap();
+
+                        //         }
+                        //         NodeType::Generic(_, index) => {
+                        //             trace!(target: "spec_propagate", "Specializing {} to {}", arg_type, cur_spec.node_types[*index]);
+                        //             cur_spec.node_types[*index].clone()
+                        //         },
+                        //         _ => arg_type.clone(),
+                        //     }
+                        // }).collect();
+                //         GenericSpecialization::new(&call, spec_types)
+                //     })
+                // } else {
+                //     call_spec
+                // };
+                let call_spec = call_spec.resolve_generics_using(self.lib, current_spec);
+                self.propagate(&callee_function_symbol, &call_spec);
             }
         }
 

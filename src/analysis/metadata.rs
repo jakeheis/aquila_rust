@@ -1,4 +1,5 @@
 use crate::analysis::{NodeType, Symbol, FunctionType};
+use crate::library::Lib;
 
 #[derive(Clone)]
 pub struct TypeMetadata {
@@ -8,9 +9,34 @@ pub struct TypeMetadata {
     pub field_types: Vec<NodeType>,
     pub methods: Vec<Symbol>,
     pub meta_methods: Vec<Symbol>,
+    pub generic_index: Option<usize>,
 }
 
 impl TypeMetadata {
+    pub fn new(symbol: Symbol) -> Self {
+        TypeMetadata {
+            symbol: symbol,
+            generics: Vec::new(),
+            field_symbols: Vec::new(),
+            field_types: Vec::new(),
+            methods: Vec::new(),
+            meta_methods: Vec::new(),
+            generic_index: None
+        }
+    }
+
+    pub fn generic(owner: &Symbol, name: &str, index: usize) -> Self {
+        TypeMetadata {
+            symbol: Symbol::new_str(Some(owner), name),
+            generics: Vec::new(),
+            field_symbols: Vec::new(),
+            field_types: Vec::new(),
+            methods: Vec::new(),
+            meta_methods: Vec::new(),
+            generic_index: Some(index)
+        }
+    }
+
     pub fn field_named(&self, name: &str) -> Option<(Symbol, &NodeType)> {
         let possible_symbol = Symbol::new_str(Some(&self.symbol), name);
         if let Some(index) = self.field_symbols.iter().position(|s| s == &possible_symbol) {
@@ -36,6 +62,10 @@ impl TypeMetadata {
         } else {
             None
         }
+    }
+
+    pub fn is_generic_parameter(&self) -> bool {
+        self.generic_index.is_some()
     }
 }
 
@@ -96,10 +126,8 @@ pub struct FunctionMetadata {
 }
 
 impl FunctionMetadata {
-    pub fn function_name(&self, specialization: Option<&GenericSpecialization>) -> String {
-        specialization
-            .map(|s| s.id.clone())
-            .unwrap_or(self.symbol.mangled())
+    pub fn function_name(&self, specialization: &GenericSpecialization) -> String {
+        specialization.id.clone()
     }
 
     pub fn full_type(&self) -> FunctionType {
@@ -175,13 +203,21 @@ impl GenericSpecialization {
         }
     }
 
-    pub fn infer(metadata: &FunctionMetadata, arg_types: &[NodeType]) -> Result<Self, usize> {
+    pub fn empty(owner: &Symbol) -> Self {
+        GenericSpecialization {
+            owner: owner.clone(),
+            id: owner.mangled(),
+            node_types: Vec::new()
+        }
+    }
+
+    pub fn infer(lib: &Lib, metadata: &FunctionMetadata, arg_types: &[NodeType]) -> Result<Self, usize> {
         let mut specializations: Vec<_> = std::iter::repeat(NodeType::Ambiguous)
             .take(metadata.generics.len())
             .collect();
         for (param_type, arg_type) in metadata.parameter_types.iter().zip(arg_types).rev() {
             if let Some((index, specialized_type)) =
-                NodeType::infer_generic_type(param_type, arg_type)
+                NodeType::infer_generic_type(lib, param_type, arg_type)
             {
                 specializations[index] = specialized_type;
             }
@@ -200,13 +236,17 @@ impl GenericSpecialization {
 
     pub fn resolve_generics_using(
         &self,
+        lib: &Lib,
         specialization: &GenericSpecialization,
     ) -> GenericSpecialization {
         let node_types: Vec<_> = self
             .node_types
             .iter()
             .map(|arg_type| match arg_type {
-                NodeType::Generic(_, index) => specialization.node_types[*index].clone(),
+                NodeType::Instance(symbol, _) if specialization.owner.owns(symbol) => {
+                    let generic_index = lib.type_metadata(symbol).and_then(|t| t.generic_index).unwrap();
+                    specialization.node_types[generic_index].clone()
+                },
                 _ => arg_type.clone(),
             })
             .collect();
@@ -217,6 +257,7 @@ impl GenericSpecialization {
 
 impl PartialEq for GenericSpecialization {
     fn eq(&self, rhs: &Self) -> bool {
+        println!("Compraing {} to {}", self.id, rhs.id);
         self.id == rhs.id
     }
 }
@@ -229,6 +270,6 @@ impl std::fmt::Display for GenericSpecialization {
             .map(|n| n.to_string())
             .collect::<Vec<_>>()
             .join(",");
-        write!(f, "GenericSpecialization({})", descrs)
+        write!(f, "GenericSpecialization(owner: {}, specs: {})", self.owner, descrs)
     }
 }

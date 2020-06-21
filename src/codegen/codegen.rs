@@ -128,7 +128,7 @@ impl Codegen {
             specializations: Vec::new(),
         };
 
-        self.writer.start_decl_func(&main_func, None);
+        self.writer.start_decl_func(self.lib.as_ref(), &main_func, &GenericSpecialization::empty(&Symbol::main_symbol()));
         for stmt in stmts {
             stmt.accept(self);
         }
@@ -158,7 +158,7 @@ impl Codegen {
         let temp_name = format!("_temp_{}", self.temp_count);
         self.temp_count += 1;
 
-        let temp_type = temp_type.specialize_opt(self.specialization.as_ref());
+        let temp_type = temp_type.specialize_opt(self.lib.as_ref(), self.specialization.as_ref());
         let temp_type = self.writer.type_and_name(&temp_type, &temp_name);
         let temp = format!("{} = {};", temp_type, value);
         self.writer.writeln(&temp);
@@ -170,7 +170,7 @@ impl Codegen {
         &mut self,
         func_symbol: &Symbol,
         body: &[Stmt],
-        specialization: Option<&GenericSpecialization>,
+        specialization: &GenericSpecialization,
     ) {
         if !core::should_write_builtin(&func_symbol) {
             return;
@@ -178,23 +178,15 @@ impl Codegen {
 
         let func_metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
-        let message = if let Some(specialization) = specialization {
-            format!(
-                "Writing function {} with specialization {}",
-                func_symbol, specialization
-            )
-        } else {
-            format!("Writing function {}", func_symbol)
-        };
-        trace!(target: "codegen", "{}", message);
+        trace!(target: "codegen", "Writing function {} with specialization {}", func_symbol, specialization);
 
-        self.specialization = specialization.map(|s| s.clone());
+        self.specialization = Some(specialization.clone());
 
         if self.stage == CodegenStage::FuncPrototypes {
             self.writer
-                .write_function_prototype(&func_metadata, specialization);
+                .write_function_prototype(self.lib.as_ref(), &func_metadata, specialization);
         } else {
-            self.writer.start_decl_func(&func_metadata, specialization);
+            self.writer.start_decl_func(self.lib.as_ref(), &func_metadata, specialization);
             if self.is_builtin {
                 core::write(&func_symbol, &mut self.writer);
             } else {
@@ -235,10 +227,12 @@ impl StmtVisitor for Codegen {
                 let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
                 let init_metadata = self.lib.function_metadata(&init_symbol).unwrap();
 
+                let init_spec = GenericSpecialization::empty(&init_symbol);
+
                 if let CodegenStage::FuncPrototypes = self.stage {
-                    self.writer.write_function_prototype(&init_metadata, None);
+                    self.writer.write_function_prototype(self.lib.as_ref(), &init_metadata, &init_spec);
                 } else {
-                    self.writer.start_decl_func(&init_metadata, None);
+                    self.writer.start_decl_func(self.lib.as_ref(), &init_metadata, &init_spec);
                     self.writer
                         .decl_var(&init_metadata.return_type, "new_item", None);
                     for field in type_metadata.field_symbols {
@@ -259,12 +253,8 @@ impl StmtVisitor for Codegen {
 
         let func_metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
-        if !func_metadata.specializations.is_empty() {
-            for spec in &func_metadata.specializations {
-                self.write_function(&func_symbol, &decl.body, Some(spec));
-            }
-        } else if decl.generics.is_empty() {
-            self.write_function(&func_symbol, &decl.body, None);
+        for spec in &func_metadata.specializations {
+            self.write_function(&func_symbol, &decl.body, spec);
         }
     }
 
@@ -276,7 +266,7 @@ impl StmtVisitor for Codegen {
             var_type = NodeType::Pointer(of.clone());
         }
 
-        let var_type = var_type.specialize_opt(self.specialization.as_ref());
+        let var_type = var_type.specialize_opt(self.lib.as_ref(), self.specialization.as_ref());
 
         let value = decl.initial_value.as_ref().map(|v| v.accept(self));
         self.writer
@@ -409,7 +399,7 @@ impl ExprVisitor for Codegen {
 
         let specialization = if function.specialization.is_empty() {
             let arg_types: Vec<_> = args.iter().map(|a| a.get_type().unwrap()).collect();
-            GenericSpecialization::infer(&function_metadata, &arg_types)
+            GenericSpecialization::infer(self.lib.as_ref(), &function_metadata, &arg_types)
                 .ok()
                 .unwrap()
         } else {
@@ -421,7 +411,7 @@ impl ExprVisitor for Codegen {
         };
 
         let specialization = if let Some(caller_specs) = self.specialization.as_ref() {
-            specialization.resolve_generics_using(caller_specs)
+            specialization.resolve_generics_using(self.lib.as_ref(), caller_specs)
         } else {
             specialization
         };
@@ -482,10 +472,10 @@ impl ExprVisitor for Codegen {
         let symbol = name.get_symbol().unwrap();
         let expr_type = expr.get_type().unwrap();
 
-        if let NodeType::GenericMeta(_, num) = expr_type {
-            let specialized_type = &self.specialization.as_ref().unwrap().node_types[num];
-            return self.writer.convert_type(specialized_type, String::new()).0;
-        }
+        // if let NodeType::Metatype(type_symbol, spec) = expr_type {
+        //     let specialized_type = &self.specialization.as_ref().unwrap().node_types[num];
+        //     return self.writer.convert_type(specialized_type, String::new()).0;
+        // }
 
         if self
             .current_type
@@ -534,7 +524,7 @@ impl ExprVisitor for Codegen {
         value: &Expr,
     ) -> Self::ExprResult {
         let cast_type = explicit_type.guarantee_resolved();
-        let cast_type = cast_type.specialize_opt(self.specialization.as_ref());
+        let cast_type = cast_type.specialize_opt(self.lib.as_ref(), self.specialization.as_ref());
         let (cast_type, _) = self.writer.convert_type(&cast_type, String::new());
         let value = value.accept(self);
 

@@ -3,6 +3,7 @@ use crate::analysis::{FunctionKind, FunctionMetadata, GenericSpecialization};
 use crate::source::ContainsSpan;
 use std::fs::File;
 use std::io::Write;
+use crate::library::Lib;
 
 pub struct CWriter {
     file: File,
@@ -43,18 +44,20 @@ impl CWriter {
 
     pub fn write_function_prototype(
         &mut self,
+        lib: &Lib,
         function: &FunctionMetadata,
-        specialization: Option<&GenericSpecialization>,
+        specialization: &GenericSpecialization,
     ) {
-        self.write_function_header(function, specialization, ";");
+        self.write_function_header(lib, function, specialization, ";");
     }
 
     pub fn start_decl_func(
         &mut self,
+        lib: &Lib,
         function: &FunctionMetadata,
-        specialization: Option<&GenericSpecialization>,
+        specialization: &GenericSpecialization,
     ) {
-        self.write_function_header(function, specialization, " {");
+        self.write_function_header(lib, function, specialization, " {");
         self.indent += 1;
     }
 
@@ -117,14 +120,12 @@ impl CWriter {
 
     fn write_function_header(
         &mut self,
+        lib: &Lib,
         function: &FunctionMetadata,
-        specialization: Option<&GenericSpecialization>,
+        specialization: &GenericSpecialization,
         terminator: &str,
     ) {
-        let mut function_type = function.full_type();
-        if let Some(specialization) = specialization {
-            function_type = function_type.specialize(specialization);
-        }
+        let function_type = function.full_type().specialize(lib, specialization);
 
         let mut param_str: Vec<String> = function_type.parameters
             .iter()
@@ -133,7 +134,8 @@ impl CWriter {
             .collect();
 
         if let FunctionKind::Method(owner) = &function.kind {
-            let self_type = NodeType::pointer_to(NodeType::Type(owner.clone(), None));
+            let self_instance = NodeType::Instance(owner.clone(), GenericSpecialization::empty(&owner));
+            let self_type = NodeType::pointer_to(self_instance);
             param_str.insert(
                 0,
                 self.type_and_name(&self_type, "self"),
@@ -183,7 +185,7 @@ impl CWriter {
         }
 
         match node_type {
-            NodeType::Type(..) => (node_type.symbolic_form(), name),
+            NodeType::Instance(..) => (node_type.symbolic_form(), name),
             NodeType::Pointer(ty) => {
                 let ty: &NodeType = &ty.coerce_array_to_ptr();
                 if let NodeType::Any = ty {

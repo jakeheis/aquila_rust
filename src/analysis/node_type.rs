@@ -19,10 +19,10 @@ impl FunctionType {
         }
     }
 
-    pub fn specialize(&self, spec: &GenericSpecialization) -> Self {
+    pub fn specialize(&self, lib: &Lib, spec: &GenericSpecialization) -> Self {
         FunctionType {
-            parameters: self.parameters.iter().map(|p| p.specialize(spec)).collect(),
-            return_type: self.return_type.specialize(spec),
+            parameters: self.parameters.iter().map(|p| p.specialize(lib, spec)).collect(),
+            return_type: self.return_type.specialize(lib, spec),
         }
     }
 }
@@ -48,13 +48,11 @@ pub enum NodeType {
     Int,
     Bool,
     Byte,
-    Type(Symbol, Option<GenericSpecialization>),
-    Metatype(Symbol, Option<GenericSpecialization>),
+    Instance(Symbol, GenericSpecialization),
+    Metatype(Symbol, GenericSpecialization),
     Pointer(Box<NodeType>),
     Array(Box<NodeType>, usize),
     Function(Box<FunctionType>),
-    Generic(Symbol, usize),
-    GenericMeta(Symbol, usize),
     FlexibleFunction(fn(&[NodeType]) -> bool),
     Ambiguous,
     Any,
@@ -100,16 +98,7 @@ impl NodeType {
     ) -> Option<Self> {
         let node_type = match &explicit_type.kind {
             ExplicitTypeKind::Simple(token) => {
-                let mut resolved_spec = Vec::new();
-                for explict_spec in &token.specialization {
-                    resolved_spec.push(NodeType::deduce_from(explict_spec, table, deps, context)?);
-                }
-
-                if let Some(primitive) = NodeType::primitive(&token.token) {
-                    primitive
-                } else {
-                    NodeType::search_for_type_token(&token.token, table, deps, context, resolved_spec)?
-                }
+                NodeType::deduce_from_simple_explicit(token, table, deps, context)?
             }
             ExplicitTypeKind::Pointer(to) => {
                 let to: &ExplicitType = &to;
@@ -127,6 +116,19 @@ impl NodeType {
         Some(node_type)
     }
 
+    pub fn deduce_from_simple_explicit(token: &ResolvedToken, table: &SymbolTable, deps: &[Lib], context: &[Symbol]) -> Option<Self> {
+        let mut resolved_spec = Vec::new();
+        for explict_spec in &token.specialization {
+            resolved_spec.push(NodeType::deduce_from(explict_spec, table, deps, context)?);
+        }
+
+        if let Some(primitive) = NodeType::primitive(&token.token) {
+            Some(primitive)
+        } else {
+            NodeType::search_for_type_token(&token.token, table, deps, context, resolved_spec)
+        }
+    }
+
     fn search_for_type_token(
         token: &Token,
         table: &SymbolTable,
@@ -138,49 +140,29 @@ impl NodeType {
 
         for parent in context.iter().rev() {
             let non_top_level_symbol = Symbol::new(Some(parent), token);
-            let resolved = table.get_type(&non_top_level_symbol);
-            match resolved {
-                Some(NodeType::Metatype(metatype, _)) => {
-                    let spec = if specialization.is_empty() {
-                        None
-                    } else {
-                        Some(GenericSpecialization::new(metatype, specialization))
-                    };
-                    let instance_type = NodeType::Type(metatype.clone(), spec);
-                    trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), instance_type);
-                    return Some(instance_type);
-                }
-                Some(NodeType::GenericMeta(symbol, index)) => {
-                    let instance_type = NodeType::Generic(symbol.clone(), *index);
-                    trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), instance_type);
-                    return Some(instance_type.clone());
-                }
-                _ => (),
+            if table.get_type_metadata(&non_top_level_symbol).is_some() {
+                let instance_type = NodeType::Instance(
+                    non_top_level_symbol.clone(), 
+                    GenericSpecialization::new(&non_top_level_symbol, specialization)
+                );
+                trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), instance_type);
+                return Some(instance_type);
             }
         }
 
         let top_level_symbol = Symbol::new(None, token);
-
-        if let Some(NodeType::Metatype(metatype, _)) = table.get_type(&top_level_symbol) {
-            let spec = if specialization.is_empty() {
-                None
-            } else {
-                Some(GenericSpecialization::new(metatype, specialization))
-            };
-            let instance_type = NodeType::Type(metatype.clone(), spec);
-            trace!(target: "symbol_table", "Resolving {} as Type({})", token.lexeme(), instance_type);
-            Some(instance_type)
+        let possible_instance_type = NodeType::Instance(
+            top_level_symbol.clone(), 
+            GenericSpecialization::new(&top_level_symbol, specialization)
+        );
+        if table.get_type_metadata(&top_level_symbol).is_some() {
+            trace!(target: "symbol_table", "Resolving {} as Type({})", token.lexeme(), possible_instance_type);
+            Some(possible_instance_type)
         } else {
             for dep in deps {
-                if let Some(NodeType::Metatype(metatype, _)) = dep.resolve_symbol(&top_level_symbol) {
-                    let spec = if specialization.is_empty() {
-                        None
-                    } else {
-                        Some(GenericSpecialization::new(&metatype, specialization))
-                    };
-                    let instance_type = NodeType::Type(metatype.clone(), spec);
-                    trace!(target: "symbol_table", "Resolving {} as other lib Type({})", token.lexeme(), instance_type);
-                    return Some(instance_type);
+                if dep.type_metadata(&top_level_symbol).is_some() {
+                    trace!(target: "symbol_table", "Resolving {} as other lib Type({})", token.lexeme(), possible_instance_type);
+                    return Some(possible_instance_type);
                 }
             }
             None
@@ -249,7 +231,7 @@ impl NodeType {
             | (NodeType::Int, NodeType::Int)
             | (NodeType::Bool, NodeType::Bool)
             | (NodeType::Byte, NodeType::Byte) => true,
-            (NodeType::Type(lhs, lhs_spec), NodeType::Type(rhs, rhs_spec))
+            (NodeType::Instance(lhs, lhs_spec), NodeType::Instance(rhs, rhs_spec))
             | (NodeType::Metatype(lhs, lhs_spec), NodeType::Metatype(rhs, rhs_spec))
                 if lhs == rhs && lhs_spec == rhs_spec =>
             {
@@ -278,30 +260,32 @@ impl NodeType {
 
                 lhs_size == rhs_size
             }
-            (NodeType::Generic(f1, n1), NodeType::Generic(f2, n2)) if f1 == f2 && n1 == n2 => true,
             (NodeType::Ambiguous, _) => true,
             (_, NodeType::Any) => true,
             _ => false,
         }
     }
 
-    pub fn specialize_opt(&self, specialization: Option<&GenericSpecialization>) -> NodeType {
+    pub fn specialize_opt(&self, lib: &Lib, specialization: Option<&GenericSpecialization>) -> NodeType {
         match specialization {
-            Some(spec) => self.specialize(spec),
+            Some(spec) => self.specialize(lib, spec),
             None => self.clone(),
         }
     }
 
-    pub fn specialize(&self, specialization: &GenericSpecialization) -> NodeType {
+    pub fn specialize(&self, lib: &Lib, specialization: &GenericSpecialization) -> NodeType {
         match self {
-            NodeType::Generic(_, index) => specialization.node_types[*index].clone(),
-            NodeType::Pointer(to) => NodeType::pointer_to(to.specialize(specialization)),
+            NodeType::Instance(symbol, _) if specialization.owner.owns(symbol) => {
+                let generic_index = lib.type_metadata(symbol).and_then(|t| t.generic_index).unwrap();
+                specialization.node_types[generic_index].clone()
+            },
+            NodeType::Pointer(to) => NodeType::pointer_to(to.specialize(lib, specialization)),
             NodeType::Array(of, size) => {
-                let specialized = of.specialize(specialization);
+                let specialized = of.specialize(lib, specialization);
                 NodeType::Array(Box::new(specialized), *size)
             }
             NodeType::Function(func_type) =>{
-                NodeType::Function(Box::new(func_type.specialize(specialization)))
+                NodeType::Function(Box::new(func_type.specialize(lib, specialization)))
             }
             _ => self.clone(),
         }
@@ -350,17 +334,13 @@ impl NodeType {
     }
 
     pub fn symbolic_form(&self) -> String {
+        // TODO: this function sucks and doesn't make sense
         match self {
-            NodeType::Type(ty, spec) => {
-                if let Some(spec) = spec.as_ref() {
-                    ty.mangled() + "__" + &spec.id
-                } else {
-                    ty.mangled()
-                }
+            NodeType::Instance(ty, spec) => {
+                ty.mangled() + "__" + &spec.id
             },
             NodeType::Int | NodeType::Void | NodeType::Bool | NodeType::Byte => self.to_string(),
             NodeType::Pointer(to) => format!("ptr__{}", to.symbolic_form()),
-            NodeType::Generic(sy, index) => format!("{}__{}", sy.mangled(), index),
             _ => {
                 // panic!("can't get symbolic form of type {}", self),
                 String::new()
@@ -368,11 +348,17 @@ impl NodeType {
         }
     }
 
-    pub fn infer_generic_type(param: &NodeType, arg: &NodeType) -> Option<(usize, NodeType)> {
+    pub fn infer_generic_type(lib: &Lib, param: &NodeType, arg: &NodeType) -> Option<(usize, NodeType)> {
         match (param, arg) {
-            (NodeType::Generic(_, index), arg) => Some((*index, arg.clone())),
+            (NodeType::Instance(symbol, _), arg) => {
+                if let Some(generic_index) = lib.type_metadata(symbol).and_then(|t| t.generic_index) {
+                    Some((generic_index, arg.clone()))
+                } else {
+                    None
+                }
+            },
             (NodeType::Pointer(param_to), NodeType::Pointer(arg_to)) => {
-                NodeType::infer_generic_type(param_to, arg_to)
+                NodeType::infer_generic_type(lib, param_to, arg_to)
             }
             _ => None,
         }
@@ -390,12 +376,18 @@ impl std::fmt::Display for NodeType {
             NodeType::Function(func_type) => func_type.to_string(),
             NodeType::Pointer(ty) => format!("ptr<{}>", ty),
             NodeType::Array(ty, size) => format!("Array<{}, count={}>", ty, size),
-            NodeType::Type(ty, specialization) => format!("Type({}, spec: {})", ty.id, str_or_none(specialization.as_ref())),
-            NodeType::Metatype(ty, spec) => format!("Metatype({}, spec: {})", ty.id, str_or_none(spec.as_ref())),
-            NodeType::Generic(symbol, index) => format!("Generic({}, index: {})", symbol, index),
-            NodeType::GenericMeta(symbol, index) => {
-                format!("GenericMeta({}, index: {})", symbol, index)
-            }
+            NodeType::Instance(ty, specialization) => {
+                let mut string = ty.id.clone();
+                if !specialization.node_types.is_empty() {
+                    string += "[";
+                    for spec in &specialization.node_types {
+                        string += &format!("{},", spec);
+                    }
+                    string += "]";
+                }
+                string
+            },
+            NodeType::Metatype(ty, spec) => format!("Metatype({}, spec: {})", ty.id, spec),
             NodeType::Ambiguous => String::from("_"),
             NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
         };
@@ -403,9 +395,9 @@ impl std::fmt::Display for NodeType {
     }
 }
 
-fn str_or_none<T: std::fmt::Display>(opt: Option<&T>) -> String {
-    match opt {
-        Some(value) => value.to_string(),
-        None => String::from("<none>")
-    }
-}
+// fn str_or_none<T: std::fmt::Display>(opt: Option<&T>) -> String {
+//     match opt {
+//         Some(value) => value.to_string(),
+//         None => String::from("<none>")
+//     }
+// }
