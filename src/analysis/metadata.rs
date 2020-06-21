@@ -42,6 +42,15 @@ impl TypeMetadata {
 impl std::fmt::Display for TypeMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         writeln!(f, "Type {}", self.symbol.mangled())?;
+        if !self.generics.is_empty() {
+            let gens = self
+                .generics
+                .iter()
+                .map(|symbol| format!("{}", symbol.last_component()))
+                .collect::<Vec<_>>()
+                .join(",");
+            writeln!(f, "  generics: {}", gens)?;
+        }
         let fields = self
             .field_symbols
             .iter()
@@ -108,7 +117,7 @@ impl std::fmt::Display for FunctionMetadata {
         let generic_porition = if generics.is_empty() {
             String::new()
         } else {
-            format!("|{}|", generics.join(","))
+            format!("[{}]", generics.join(","))
         };
         let parameters: Vec<String> = self
             .parameter_symbols

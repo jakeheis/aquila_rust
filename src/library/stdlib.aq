@@ -10,36 +10,36 @@ builtin def _read_line(): ptr byte {}
 
 type Memory {
 
-    meta def size|T|(): int {
+    meta def size[T](): int {
         return sizeof(T);
     }
 
-    meta def size_instance|T|(instance: T): int {
+    meta def size_instance[T](instance: T): int {
         return sizeof(instance);
     }
     
-    meta def allocate|T|(): ptr T {
-        return cast|ptr T|(malloc(size|T|()));
+    meta def allocate[T](): ptr T {
+        return cast[ptr T](malloc(size[T]()));
     }
 
-    meta def allocate_block|T|(count: int): ptr T {
-        return cast|ptr T|(malloc(size|T|() * count));
+    meta def allocate_block[T](count: int): ptr T {
+        return cast[ptr T](malloc(size[T]() * count));
     }
 
-    meta def reallocate|T|(current: ptr T, count: int): ptr T {
-        return cast|ptr T|(realloc(current, count * sizeof(T)));
+    meta def reallocate[T](current: ptr T, count: int): ptr T {
+        return cast[ptr T](realloc(current, count * sizeof(T)));
     }
 
-    meta def copy|T|(from: ptr T, to: ptr T) {
-        copy_block|T|(from, to, 1);
+    meta def copy[T](from: ptr T, to: ptr T) {
+        copy_block[T](from, to, 1);
     }
 
-    meta def copy_block|T|(from: ptr T, to: ptr T, count: int) {
+    meta def copy_block[T](from: ptr T, to: ptr T, count: int) {
         memcpy(to, from, count * sizeof(T));
     }
 
-    meta def offset|T|(pointer: ptr T, count: int): ptr T {
-        return cast|ptr T|(ptr_offset(pointer, count * sizeof(T)));
+    meta def offset[T](pointer: ptr T, count: int): ptr T {
+        return cast[ptr T](ptr_offset(pointer, count * sizeof(T)));
     }
 
 }
@@ -74,7 +74,7 @@ type String {
     def append_literal(lit: ptr byte): String {
         let new_size = size + strlen(lit);
 
-        let new_storage = Memory.allocate_block|byte|(new_size);
+        let new_storage = Memory.allocate_block[byte](new_size);
         Memory.copy_block(storage, new_storage, size - 1);
 
         let second_part = Memory.offset(new_storage, size - 1);
@@ -100,33 +100,33 @@ type Vec {
     let capacity: int;
     let element_size: int;
 
-    meta def new|T|(): Vec {
-        let storage = Memory.allocate_block|T|(10);
-        return Vec(storage, 0, 0, Memory.size|T|());
+    meta def new[T](): Vec {
+        let storage = Memory.allocate_block[T](10);
+        return Vec(storage, 0, 0, Memory.size[T]());
     }
 
-    def insert|T|(object: T) {
+    def insert[T](object: T) {
         insert_ptr(&object);
     }
 
-    def insert_ptr|T|(object: ptr T) {
+    def insert_ptr[T](object: ptr T) {
         if count == capacity {
             capacity = capacity * 2;
-            storage = Memory.reallocate(cast|ptr T|(storage), capacity);
+            storage = Memory.reallocate(cast[ptr T](storage), capacity);
         }
 
-        let insertion_location = Memory.offset(cast|ptr T|(storage), count);
+        let insertion_location = Memory.offset(cast[ptr T](storage), count);
         Memory.copy(object, insertion_location);
 
         count = count + 1;
     }
 
-    def get|T|(index: int): ptr T {
-        return Memory.offset(cast|ptr T|(storage), index);
+    def get[T](index: int): ptr T {
+        return Memory.offset(cast[ptr T](storage), index);
     }
 
 }
 
 trait Indexable {
-    def at_index|T|(): ptr T;
+    def at_index[T](): ptr T;
 }

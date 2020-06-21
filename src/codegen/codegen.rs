@@ -402,19 +402,18 @@ impl ExprVisitor for Codegen {
         _expr: &Expr,
         target: Option<&Expr>,
         function: &ResolvedToken,
-        specializations: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult {
         let function_symbol = function.get_symbol().unwrap();
         let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
 
-        let specialization = if specializations.is_empty() {
+        let specialization = if function.specialization.is_empty() {
             let arg_types: Vec<_> = args.iter().map(|a| a.get_type().unwrap()).collect();
             GenericSpecialization::infer(&function_metadata, &arg_types)
                 .ok()
                 .unwrap()
         } else {
-            let explicit_types: Vec<_> = specializations
+            let explicit_types: Vec<_> = function.specialization
                 .iter()
                 .map(|s| s.guarantee_resolved())
                 .collect::<Vec<_>>();

@@ -290,13 +290,16 @@ impl ContainsSpan for TypedToken {
 pub struct ResolvedToken {
     pub token: Token,
     symbol: RefCell<Option<Symbol>>,
+    pub specialization: Vec<ExplicitType>
+
 }
 
 impl ResolvedToken {
-    pub fn new(token: Token) -> Self {
+    pub fn new(token: Token, specialization: Vec<ExplicitType>) -> Self {
         ResolvedToken {
             token,
             symbol: RefCell::new(None),
+            specialization
         }
     }
 
@@ -316,7 +319,7 @@ impl ContainsSpan for ResolvedToken {
 }
 
 pub enum ExplicitTypeKind {
-    Simple(ResolvedToken, Vec<ExplicitType>),
+    Simple(ResolvedToken),
     Array(Box<ExplicitType>, Token),
     Pointer(Box<ExplicitType>),
 }

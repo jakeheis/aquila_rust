@@ -64,7 +64,7 @@ impl ASTPrinter {
 
     fn write_explicit_type(&mut self, explicit_type: &ExplicitType) {
         match &explicit_type.kind {
-            ExplicitTypeKind::Simple(token, specializations) => {
+            ExplicitTypeKind::Simple(token) => {
                 let symbol = token
                     .get_symbol()
                     .map(|s| s.id.clone())
@@ -75,7 +75,7 @@ impl ASTPrinter {
                     symbol
                 ));
                 self.indent(|visitor| {
-                    for spec in specializations {
+                    for spec in &token.specialization {
                         visitor.write_explicit_type(spec);
                     }
                 });
@@ -317,7 +317,6 @@ impl ExprVisitor for ASTPrinter {
         _expr: &Expr,
         target: Option<&Expr>,
         function: &ResolvedToken,
-        generics: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult {
         let symbol = function
@@ -336,10 +335,10 @@ impl ExprVisitor for ASTPrinter {
                     target.accept(visitor);
                 });
             }
-            if generics.len() > 0 {
+            if function.specialization.len() > 0 {
                 visitor.write_ln("Specializations");
                 visitor.indent(|visitor| {
-                    generics.iter().for_each(|a| visitor.write_explicit_type(a));
+                    function.specialization.iter().for_each(|a| visitor.write_explicit_type(a));
                 });
             }
             visitor.write_ln("Arguments");

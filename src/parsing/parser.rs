@@ -4,6 +4,7 @@ use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::source::*;
 use std::rc::Rc;
+use log::trace;
 
 type Result<T> = DiagnosticResult<T>;
 
@@ -39,6 +40,7 @@ impl Parser {
             let is_builtin = self.matches(TokenKind::Builtin);
             match self.statement(context) {
                 Ok(stmt) => {
+                    trace!(target: "parser", "Parsed stmt {}", stmt.span().lexeme());
                     let stmt = if is_builtin {
                         Stmt::builtin(stmt)
                     } else {
@@ -169,6 +171,7 @@ impl Parser {
     }
 
     fn synchronize(&mut self) {
+        trace!(target: "parser", "Synchronizing after {}", self.previous());
         while !self.is_at_end() && self.previous().kind != TokenKind::Semicolon {
             let done = match self.peek() {
                 TokenKind::Type
@@ -198,7 +201,7 @@ impl Parser {
             .consume(TokenKind::Identifier, "Expect type name")?
             .clone();
 
-        let generics = if self.matches(TokenKind::Bar) {
+        let generics = if self.matches(TokenKind::LeftBracket) {
             self.parse_generic_list()?
         } else {
             Vec::new()
@@ -248,7 +251,7 @@ impl Parser {
             .consume(TokenKind::Identifier, "Expect function name")?
             .clone();
 
-        let generics = if self.matches(TokenKind::Bar) {
+        let generics = if self.matches(TokenKind::LeftBracket) {
             self.parse_generic_list()?
         } else {
             Vec::new()
@@ -464,6 +467,8 @@ impl Parser {
             return Err(Diagnostic::error(self.previous(), "Expected expression"));
         }
 
+        trace!(target: "parser", "Starting expr with {:?} {}", self.current().kind, self.current().lexeme());
+
         let prefix = self
             .advance()
             .kind
@@ -474,11 +479,14 @@ impl Parser {
 
         let mut lhs = prefix(self, can_assign)?;
 
+        trace!(target: "parser", "Parsed prefix {}", lhs.span().lexeme());
+
         while !self.is_at_end() {
             if let Some((infix_func, infix_prec)) = self.peek().infix_entry() {
                 if infix_prec >= prec {
                     self.advance();
                     lhs = infix_func(self, lhs, can_assign)?;
+                    trace!(target: "parser", "Parsed infix {}", lhs.span().lexeme());
                     continue;
                 }
             }
@@ -512,14 +520,6 @@ impl Parser {
     }
 
     fn call(&mut self, lhs: Expr, _can_assign: bool) -> Result<Expr> {
-        let specialization = if self.previous().kind == TokenKind::Bar {
-            let result = self.parse_specialization(TokenKind::Bar, '|')?;
-            self.consume(TokenKind::LeftParen, "Expect '(' before function arguments")?;
-            result
-        } else {
-            Vec::new()
-        };
-
         let mut args: Vec<Expr> = Vec::new();
         while !self.is_at_end() && self.peek() != TokenKind::RightParen {
             let arg = self.expression()?;
@@ -535,14 +535,12 @@ impl Parser {
             ExprKind::Field(object, field) => Ok(Expr::function_call(
                 Some(object),
                 field,
-                specialization,
                 args,
                 right_paren,
             )),
             ExprKind::Variable(name) => Ok(Expr::function_call(
                 None,
                 name,
-                specialization,
                 args,
                 right_paren,
             )),
@@ -554,14 +552,16 @@ impl Parser {
     }
 
     fn field(&mut self, lhs: Expr, can_assign: bool) -> Result<Expr> {
-        let field_name = self.consume(TokenKind::Identifier, "Expect field name after '.'")?;
+        let field_name = self.consume(TokenKind::Identifier, "Expect field name after '.'")?.clone();
+
+        let specialization = self.parse_possible_specialization()?;
 
         let target_is_call = match &lhs.kind {
             ExprKind::FunctionCall(..) => true,
             _ => false,
         };
 
-        let field = Expr::field(lhs, field_name);
+        let field = Expr::field(lhs, field_name, specialization);
 
         if can_assign && !target_is_call && self.matches(TokenKind::Equal) {
             self.assignment(field)
@@ -582,12 +582,29 @@ impl Parser {
     }
 
     fn variable(&mut self, can_assign: bool) -> Result<Expr> {
-        let (name, _) = self.parse_var(false, false)?;
-        let variable = Expr::variable(name);
+        let name = self.previous().clone();
+
+        let specialization = self.parse_possible_specialization()?;
+
+        let variable = Expr::variable(name, specialization);
         if can_assign && self.matches(TokenKind::Equal) {
             self.assignment(variable)
         } else {
             Ok(variable)
+        }
+    }
+
+    fn parse_possible_specialization(&mut self) -> Result<Vec<ExplicitType>> {
+        if self.peek() == TokenKind::LeftBracket {
+            match self.peek_next() {
+                Some(TokenKind::Number) => Ok(Vec::new()), // Do nothing, it's a subscript
+                _ => {
+                    self.consume(TokenKind::LeftBracket, "")?;
+                    self.parse_specialization()
+                }
+            }
+        } else {
+            Ok(Vec::new())
         }
     }
 
@@ -614,9 +631,9 @@ impl Parser {
     fn cast(&mut self, _can_assign: bool) -> Result<Expr> {
         let cast_span = self.previous().span.clone();
 
-        self.consume(TokenKind::Bar, "Expect |cast type|")?;
+        self.consume(TokenKind::LeftBracket, "Expect [cast type]")?;
 
-        let mut specialization = self.parse_specialization(TokenKind::Bar, '|')?;
+        let mut specialization = self.parse_specialization()?;
         if specialization.len() != 1 {
             return Err(Diagnostic::error(&cast_span, "Expect single cast type"));
         }
@@ -635,30 +652,30 @@ impl Parser {
 
     fn parse_generic_list(&mut self) -> Result<Vec<Token>> {
         let mut generics = Vec::new();
-        while !self.is_at_end() && self.peek() != TokenKind::Bar {
+        while !self.is_at_end() && self.peek() != TokenKind::RightBracket {
             let generic_type = self
                 .consume(TokenKind::Identifier, "Expect generic type identifier")?
                 .clone();
             generics.push(generic_type);
-            if self.peek() != TokenKind::Bar {
+            if self.peek() != TokenKind::RightBracket {
                 self.consume(TokenKind::Comma, "Expect ',' separating generic types")?;
             }
         }
-        self.consume(TokenKind::Bar, "Expect '|' after generic types")?;
+        self.consume(TokenKind::RightBracket, "Expect '|' after generic types")?;
         Ok(generics)
     }
 
-    fn parse_specialization(&mut self, terminator_kind: TokenKind, terminator: char) -> Result<Vec<ExplicitType>> {
+    fn parse_specialization(&mut self) -> Result<Vec<ExplicitType>> {
         let mut specialized_types = Vec::new();
-        while !self.is_at_end() && self.peek() != terminator_kind {
+        while !self.is_at_end() && self.peek() != TokenKind::RightBracket {
             let specialized_type = self.parse_explicit_type()?;
             specialized_types.push(specialized_type);
-            if self.peek() != terminator_kind {
+            if self.peek() != TokenKind::RightBracket {
                 self.consume(TokenKind::Comma, "Expect ',' between generic types")?;
             }
         }
-        let message = format!("Expect '{}' after generic types", terminator);
-        self.consume(terminator_kind, &message)?;
+        let message = format!("Expect ']' after generic types");
+        self.consume(TokenKind::RightBracket, &message)?;
         Ok(specialized_types)
     }
 
@@ -709,12 +726,12 @@ impl Parser {
             let name = self
                 .consume(TokenKind::Identifier, "Expected variable type")?
                 .clone();
-            let specialization = if self.matches(TokenKind::Less) {
-                self.parse_specialization(TokenKind::Greater, '>')?
+            let specialization = if self.matches(TokenKind::LeftBracket) {
+                self.parse_specialization()?
             } else {
                 Vec::new()
             };
-            ExplicitTypeKind::Simple(ResolvedToken::new(name), specialization)
+            ExplicitTypeKind::Simple(ResolvedToken::new(name, specialization))
         };
 
         let end = &self.previous().span;
@@ -726,6 +743,14 @@ impl Parser {
         self.current().kind
     }
 
+    fn peek_next(&self) -> Option<&TokenKind> {
+        if self.index + 1 < self.tokens.len() {
+            Some(&self.tokens[self.index + 1].kind)
+        } else {
+            None
+        }
+    }
+    
     fn consume(&mut self, kind: TokenKind, message: &str) -> Result<&Token> {
         if self.is_at_end() {
             return Err(Diagnostic::error(self.previous(), message));

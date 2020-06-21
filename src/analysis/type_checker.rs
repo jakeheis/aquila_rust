@@ -246,6 +246,22 @@ impl TypeChecker {
                     "Cannot have type any; must be ptr any",
                 ))
             } else {
+                match &deduced {
+                    NodeType::Type(type_symbol, specialization) | NodeType::Metatype(type_symbol, specialization) => {
+                        let matching_type = self.lib.type_metadata(type_symbol).unwrap();
+                        let spec_length = specialization.as_ref().map(|s| s.node_types.len()).unwrap_or(0);
+                        if spec_length != matching_type.generics.len() {
+                            let message = format!(
+                                "Expected {} specializations, got {} (explicit type check)",
+                                matching_type.generics.len(),
+                                spec_length
+                            );
+                            return Err(Diagnostic::error(explicit_type, &message))
+                        }
+                    }
+                    _ => ()
+                }
+
                 Ok(deduced)
             }
         } else {
@@ -631,18 +647,17 @@ impl ExprVisitor for TypeChecker {
         expr: &Expr,
         target: Option<&Expr>,
         function: &ResolvedToken,
-        specializations: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult {
         let function_name = function.token.lexeme();
 
-        let (func_symbol, object_specialization) = if let Some(target) = target {
+        let (func_symbol, object_specialization, function_specialization): (_, _, &[ExplicitType]) = if let Some(target) = target {
             let target_type = target.accept(self)?;
             match &target_type {
                 NodeType::Type(type_symbol, specialization) => {
                     let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
                     if let Some(method_symbol) = type_metadata.method_named(function_name) {
-                        (method_symbol, specialization.clone())
+                        (method_symbol, specialization.clone(), &function.specialization)
                     } else {
                         return Err(Diagnostic::error(
                             &Span::join(target, function),
@@ -657,7 +672,7 @@ impl ExprVisitor for TypeChecker {
                 NodeType::Metatype(type_symbol, specialization) => {
                     let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
                     if let Some(meta_method_symbol) = type_metadata.meta_method_named(function_name) {
-                        (meta_method_symbol, specialization.clone())
+                        (meta_method_symbol, specialization.clone(), &function.specialization)
                     } else {
                         return Err(Diagnostic::error(
                             &Span::join(target, function),
@@ -682,10 +697,27 @@ impl ExprVisitor for TypeChecker {
             let (found_symbol, node_type) = resolved.unwrap();
 
             match &node_type {
-                NodeType::Function(..) => (found_symbol, None),
-                NodeType::Metatype(symbol, specialization) => {
+                NodeType::Function(..) => (found_symbol, None, &function.specialization),
+                NodeType::Metatype(symbol, _) => {
+                    let type_def = self.lib.type_metadata(symbol).unwrap();
+                    if function.specialization.len() != type_def.generics.len() {
+                        let message = format!(
+                            "Expected {} specializations, got {} (call metatype check)",
+                            type_def.generics.len(),
+                            function.specialization.len()
+                        );
+                        return Err(Diagnostic::error(expr, &message))
+                    }
+                    let specs = function.specialization.iter().map(|s| {
+                        self.resolve_explicit_type(s)
+                    }).collect::<DiagnosticResult<Vec<_>>>()?;
+                    let specialization = if specs.is_empty() {
+                        None
+                    } else {
+                        Some(GenericSpecialization::new(symbol, specs))
+                    };
                     let meta_symbol = Symbol::meta_symbol(Some(&symbol));
-                    (Symbol::init_symbol(Some(&meta_symbol)), specialization.clone())
+                    (Symbol::init_symbol(Some(&meta_symbol)), specialization, &[])
                 }
                 _ => return Err(Diagnostic::error(
                     function,
@@ -697,6 +729,8 @@ impl ExprVisitor for TypeChecker {
         function.set_symbol(func_symbol.clone());
 
         let metadata = self.lib.function_metadata(&func_symbol).unwrap();
+
+        trace!(target: "type_checker", "Callee metadata: {}", metadata);
 
         let mut function_type = metadata.full_type();
         if let Some(spec) = object_specialization.as_ref() {
@@ -718,7 +752,7 @@ impl ExprVisitor for TypeChecker {
             ));
         }
 
-        let specialization = if specializations.is_empty() {
+        let specialization = if function_specialization.is_empty() {
             match GenericSpecialization::infer(&metadata, &arg_types) {
                 Ok(spec) => spec,
                 Err(index) => {
@@ -730,16 +764,16 @@ impl ExprVisitor for TypeChecker {
                 }
             }
         } else {
-            if specializations.len() != metadata.generics.len() {
+            if function_specialization.len() != metadata.generics.len() {
                 let message = format!(
-                    "Expected {} specializations, got {}",
+                    "Expected {} specializations, got {} (func check)",
                     metadata.generics.len(),
-                    specializations.len()
+                    function_specialization.len()
                 );
                 return Err(Diagnostic::error(function, &message));
             }
 
-            let specialization: std::result::Result<Vec<NodeType>, _> = specializations
+            let specialization: std::result::Result<Vec<NodeType>, _> = function_specialization
                 .iter()
                 .map(|s| self.resolve_explicit_type(s))
                 .collect();
@@ -868,6 +902,34 @@ impl ExprVisitor for TypeChecker {
 
     fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
         if let Some((found_symbol, node_type)) = self.resolve_var(name.span().lexeme()) {
+            let node_type = match node_type {
+                NodeType::Metatype(type_name, _) => {
+                    let type_def = self.lib.type_metadata(&type_name).unwrap();
+                    if name.specialization.len() != type_def.generics.len() {
+                        let message = format!(
+                            "Expected {} specializations, got {} (var check)",
+                            type_def.generics.len(),
+                            name.specialization.len()
+                        );
+                        return Err(Diagnostic::error(expr, &message))
+                    }
+                    let specs  = name.specialization.iter().map(|s| {
+                        self.resolve_explicit_type(s)
+                    }).collect::<DiagnosticResult<Vec<_>>>()?;
+                    let specialization = if specs.is_empty() {
+                        None
+                    } else {
+                        Some(GenericSpecialization::new(&type_name, specs))
+                    };
+                    NodeType::Metatype(type_name, specialization)
+                },
+                other => {
+                    if !name.specialization.is_empty() {
+                        return Err(Diagnostic::error(expr, "Cannot specialize variable"));
+                    }
+                    other
+                }
+            };
             name.set_symbol(found_symbol);
             expr.set_type(node_type.clone())
         } else {

@@ -26,11 +26,11 @@
    // lhs + rhs + third
 // }
 
-def first|T|(object: T) {
-  second|T|(object);
+def first[T](object: T) {
+  second[T](object);
 }
 
-def second|T|(object: T) {
+def second[T](object: T) {
     4 + 5;
 }
 
@@ -39,7 +39,7 @@ first(3);
 
 let numbers =  [1,2,3];
 
-type Adder|T| {
+type Adder[T] {
   let lhs: int;
   let rhs: int;
 
@@ -54,32 +54,32 @@ type Adder|T| {
     print add(third[1]);
   }
 
-  def add_mysterious|U|(object: U): T {
-
+  def add_mysterious[U](object: U, other: T): T {
+    return other;
   }
 
-  meta def example(): Adder {
-    return Adder(1, 2);
+  meta def example(): Adder[T] {
+    return Adder[T](1, 2);
   }
 }
 
-let customized_adder = Adder|ptr byte|(3, 4);
+let customized_adder = Adder[ptr byte](3, 4);
 
-let vec_int = Vec.new|int|();
+let vec_int = Vec.new[int]();
 vec_int.insert(4);
 vec_int.insert(6);
-print *(vec_int.get|int|(1));
+print *(vec_int.get[int](1));
 
-let vec = Vec.new|Adder|();
+let vec = Vec.new[Adder[byte]]();
  
-vec.insert(Adder(10, 2));
-vec.insert(Adder(3, 4));
+vec.insert(Adder[int](10, 2));
+vec.insert(Adder[int](3, 4));
 
-print (*vec.get|Adder|(1)).add(2);
+print (*vec.get[Adder[int]](1)).add(2);
 
-print Adder(1, 2).add(2);
+print Adder[int](1, 2).add(2);
 
-let adders: [Adder; 3] = [Adder(1, 2), Adder(3,4), Adder(5,6)];
+let adders: [Adder; 3] = [Adder[int](1, 2), Adder[byte](3,4), Adder[bool](5,6)];
 
 for add in adders {
   print (*add).add(5);

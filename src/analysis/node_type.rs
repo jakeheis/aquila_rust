@@ -99,9 +99,9 @@ impl NodeType {
         context: &[Symbol],
     ) -> Option<Self> {
         let node_type = match &explicit_type.kind {
-            ExplicitTypeKind::Simple(token, specialization) => {
+            ExplicitTypeKind::Simple(token) => {
                 let mut resolved_spec = Vec::new();
-                for explict_spec in specialization {
+                for explict_spec in &token.specialization {
                     resolved_spec.push(NodeType::deduce_from(explict_spec, table, deps, context)?);
                 }
 

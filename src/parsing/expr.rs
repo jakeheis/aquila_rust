@@ -12,7 +12,6 @@ pub enum ExprKind {
     FunctionCall(
         Option<Box<Expr>>,
         ResolvedToken,
-        Vec<ExplicitType>,
         Vec<Expr>,
     ),
     Field(Box<Expr>, ResolvedToken),
@@ -54,9 +53,9 @@ impl Expr {
             }
             ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&self, &lhs, &op, &rhs),
             ExprKind::Unary(op, expr) => visitor.visit_unary_expr(&self, &op, &expr),
-            ExprKind::FunctionCall(target, function, generics, args) => {
+            ExprKind::FunctionCall(target, function, args) => {
                 let target: Option<&Expr> = target.as_ref().map(|t| t.as_ref());
-                visitor.visit_function_call_expr(&self, target, &function, &generics, &args)
+                visitor.visit_function_call_expr(&self, target, &function, &args)
             }
             ExprKind::Field(target, field) => visitor.visit_field_expr(&self, &target, &field),
             ExprKind::Literal(token) => visitor.visit_literal_expr(&self, &token),
@@ -91,21 +90,20 @@ impl Expr {
     pub fn function_call(
         target: Option<Box<Expr>>,
         function: ResolvedToken,
-        generics: Vec<ExplicitType>,
         args: Vec<Expr>,
         right_paren: &Token,
     ) -> Self {
         let span = Span::join(&function, right_paren);
         Expr::new(
-            ExprKind::FunctionCall(target, function, generics, args),
+            ExprKind::FunctionCall(target, function, args),
             span,
         )
     }
 
-    pub fn field(target: Expr, name: &Token) -> Self {
-        let span = Span::join(&target, name);
+    pub fn field(target: Expr, name: Token, specialization: Vec<ExplicitType>) -> Self {
+        let span = Span::join(&target, &name);
         Expr::new(
-            ExprKind::Field(Box::new(target), ResolvedToken::new(name.clone())),
+            ExprKind::Field(Box::new(target), ResolvedToken::new(name, specialization)),
             span,
         )
     }
@@ -114,9 +112,9 @@ impl Expr {
         Expr::new(ExprKind::Literal(token.clone()), token.span.clone())
     }
 
-    pub fn variable(name: Token) -> Self {
+    pub fn variable(name: Token, specialization: Vec<ExplicitType>) -> Self {
         let span = name.span().clone();
-        Expr::new(ExprKind::Variable(ResolvedToken::new(name)), span)
+        Expr::new(ExprKind::Variable(ResolvedToken::new(name, specialization)), span)
     }
 
     pub fn array(left_bracket: Span, elements: Vec<Expr>, right_bracket: &Token) -> Self {
@@ -169,7 +167,6 @@ pub trait ExprVisitor {
         expr: &Expr,
         target: Option<&Expr>,
         function: &ResolvedToken,
-        specializations: &[ExplicitType],
         args: &[Expr],
     ) -> Self::ExprResult;
     fn visit_field_expr(
