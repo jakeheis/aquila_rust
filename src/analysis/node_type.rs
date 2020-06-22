@@ -5,7 +5,7 @@ use crate::library::*;
 use crate::parsing::*;
 use log::trace;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FunctionType {
     pub parameters: Vec<NodeType>,
     pub return_type: NodeType
@@ -42,7 +42,7 @@ impl std::fmt::Display for FunctionType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum NodeType {
     Void,
     Int,
@@ -53,7 +53,7 @@ pub enum NodeType {
     Pointer(Box<NodeType>),
     Array(Box<NodeType>, usize),
     Function(Box<FunctionType>),
-    FlexibleFunction(fn(&[NodeType]) -> bool),
+    // FlexibleFunction(fn(&[NodeType]) -> bool),
     Ambiguous,
     Any,
 }
@@ -279,6 +279,10 @@ impl NodeType {
                 let generic_index = lib.type_metadata(symbol).and_then(|t| t.generic_index).unwrap();
                 specialization.node_types[generic_index].clone()
             },
+            NodeType::Instance(symbol, spec) => {
+                let new_spec: Vec<_> = spec.node_types.iter().map(|n| n.specialize(lib, specialization)).collect();
+                NodeType::Instance(symbol.clone(), GenericSpecialization::new(symbol, new_spec))
+            }
             NodeType::Pointer(to) => NodeType::pointer_to(to.specialize(lib, specialization)),
             NodeType::Array(of, size) => {
                 let specialized = of.specialize(lib, specialization);
@@ -389,7 +393,7 @@ impl std::fmt::Display for NodeType {
             },
             NodeType::Metatype(ty, spec) => format!("Metatype({}, spec: {})", ty.id, spec),
             NodeType::Ambiguous => String::from("_"),
-            NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
+            // NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
         };
         write!(f, "{}", kind)
     }

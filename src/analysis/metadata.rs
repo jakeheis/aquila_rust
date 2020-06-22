@@ -181,7 +181,7 @@ impl std::fmt::Display for FunctionMetadata {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct GenericSpecialization {
     pub owner: Symbol,
     pub id: String,
@@ -257,7 +257,6 @@ impl GenericSpecialization {
 
 impl PartialEq for GenericSpecialization {
     fn eq(&self, rhs: &Self) -> bool {
-        println!("Compraing {} to {}", self.id, rhs.id);
         self.id == rhs.id
     }
 }

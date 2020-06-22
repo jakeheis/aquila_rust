@@ -63,7 +63,7 @@ type Adder[T] {
   }
 }
 
-let customized_adder = Adder[ptr byte](3, 4);
+let customized_adder = Adder[Adder[int]](3, 4);
 
 let vec_int = Vec.new[int]();
 vec_int.insert(4);
@@ -79,7 +79,7 @@ print (*vec.get[Adder[int]](1)).add(2);
 
 print Adder[int](1, 2).add(2);
 
-let adders: [Adder; 3] = [Adder[int](1, 2), Adder[byte](3,4), Adder[bool](5,6)];
+let adders: [Adder[int]; 3] = [Adder[int](1, 2), Adder[int](3,4), Adder[int](5,6)];
 
 for add in adders {
   print (*add).add(5);

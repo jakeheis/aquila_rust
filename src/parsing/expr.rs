@@ -93,7 +93,7 @@ impl Expr {
         args: Vec<Expr>,
         right_paren: &Token,
     ) -> Self {
-        let span = Span::join(&function, right_paren);
+        let span = Span::join(&function.compute_span(), right_paren);
         Expr::new(
             ExprKind::FunctionCall(target, function, args),
             span,

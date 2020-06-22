@@ -71,7 +71,7 @@ impl ASTPrinter {
                     .unwrap_or(String::from("<none>"));
                 self.write_ln(&format!(
                     "ExplicitType(name: {}, symbol: {})",
-                    token.span().lexeme(),
+                    token.compute_span().lexeme(),
                     symbol
                 ));
                 self.indent(|visitor| {
@@ -355,7 +355,7 @@ impl ExprVisitor for ASTPrinter {
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "Field(name: {}, symbol: {})",
-            field.span().lexeme(),
+            field.compute_span().lexeme(),
             symbol
         ));
         self.indent(|visitor| {
@@ -374,7 +374,7 @@ impl ExprVisitor for ASTPrinter {
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "Variable(name: {}, symbol: {})",
-            name.span().lexeme(),
+            name.compute_span().lexeme(),
             symbol
         ))
     }

@@ -310,11 +310,13 @@ impl ResolvedToken {
     pub fn get_symbol(&self) -> Option<Symbol> {
         self.symbol.borrow().as_ref().map(|s| s.clone())
     }
-}
 
-impl ContainsSpan for ResolvedToken {
-    fn span(&self) -> &Span {
-        &self.token.span
+    pub fn compute_span(&self) -> Span {
+        if let Some(last) = self.specialization.last() {
+            Span::join(&self.token.span, last)
+        } else {
+            self.token.span.clone()
+        }
     }
 }
 

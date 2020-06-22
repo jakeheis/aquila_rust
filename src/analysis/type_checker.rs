@@ -96,13 +96,7 @@ impl TypeChecker {
         std::mem::drop(checker);
 
         let mut lib = Rc::try_unwrap(lib).ok().unwrap();
-        // for (symbol, specs) in spec_map {
-        //     let metadata = lib.function_metadata_mut(&symbol).unwrap();
-        //     metadata.specializations = specs;
-        // }
-
         lib.symbols.call_map = call_map;
-
         lib
     }
 
@@ -260,11 +254,15 @@ impl TypeChecker {
     fn confirm_fully_specialized<S: ContainsSpan>(&self, span: &S, node_type: &NodeType) -> DiagnosticResult<()> {
         match &node_type {
             NodeType::Instance(type_symbol, specialization) | NodeType::Metatype(type_symbol, specialization) => {
+                for spec in &specialization.node_types {
+                    self.confirm_fully_specialized(span, spec)?;
+                }
+
                 let matching_type = self.lib.type_metadata(type_symbol).unwrap();
                 let spec_length = specialization.node_types.len();
                 if spec_length != matching_type.generics.len() {
                     let message = format!(
-                        "Expected {} specializations, got {} (explicit type check)",
+                        "Expected {} specializations, got {}",
                         matching_type.generics.len(),
                         spec_length
                     );
@@ -273,6 +271,8 @@ impl TypeChecker {
                     Ok(())
                 }
             }
+            NodeType::Pointer(to) => self.confirm_fully_specialized(span, to),
+            NodeType::Array(of, _) => self.confirm_fully_specialized(span, of),
             _ => Ok(())
         }
     }
@@ -657,7 +657,7 @@ impl ExprVisitor for TypeChecker {
                         (method_symbol, Some(specialization.clone()), &function.specialization)
                     } else {
                         return Err(Diagnostic::error(
-                            &Span::join(target, function),
+                            &Span::join(target, &function.compute_span()),
                             &format!(
                                 "Type '{}' does not have method '{}'",
                                 target_type,
@@ -672,7 +672,7 @@ impl ExprVisitor for TypeChecker {
                         (meta_method_symbol, Some(specialization.clone()), &function.specialization)
                     } else {
                         return Err(Diagnostic::error(
-                            &Span::join(target, function),
+                            &Span::join(target, &function.compute_span()),
                             &format!(
                                 "Type '{}' does not have meta method '{}'",
                                 target_type,
@@ -691,7 +691,7 @@ impl ExprVisitor for TypeChecker {
                 match node_type {
                     NodeType::Function(..) => (found_symbol, None, &function.specialization),
                     _ => return Err(Diagnostic::error(
-                        function,
+                        &function.compute_span(),
                         &format!("Cannot call type {}", node_type),
                     ))
                 }
@@ -704,12 +704,12 @@ impl ExprVisitor for TypeChecker {
                 );
                 match &explicit_type {
                     Some(NodeType::Instance(type_symbol, specs)) => {
-                        self.confirm_fully_specialized(function, explicit_type.as_ref().unwrap())?;
+                        self.confirm_fully_specialized(&function.compute_span(), explicit_type.as_ref().unwrap())?;
                         let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
                         (Symbol::init_symbol(Some(&meta_symbol)), Some(specs.clone()), &[])
                     },
                     _ => {
-                        return Err(Diagnostic::error(function, "Undefined function"));
+                        return Err(Diagnostic::error(&function.compute_span(), "Undefined function"));
                     }
                 }
             }
@@ -759,7 +759,7 @@ impl ExprVisitor for TypeChecker {
                     metadata.generics.len(),
                     function_specialization.len()
                 );
-                return Err(Diagnostic::error(function, &message));
+                return Err(Diagnostic::error(&function.compute_span(), &message));
             }
 
             let specialization: std::result::Result<Vec<NodeType>, _> = function_specialization
@@ -812,11 +812,11 @@ impl ExprVisitor for TypeChecker {
                     expr.set_type(field_type.specialize(self.lib.as_ref(), &specialization))
                 } else {
                     Err(Diagnostic::error(
-                        &Span::join(target, field),
+                        &Span::join(target, &field.compute_span()),
                         &format!(
                             "Type '{}' does not has field '{}'",
                             type_symbol.id,
-                            field.span().lexeme()
+                            field.compute_span().lexeme()
                         ),
                     ))
                 }
@@ -843,7 +843,7 @@ impl ExprVisitor for TypeChecker {
     }
 
     fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
-        if let Some((found_symbol, node_type)) = self.resolve_var(name.span().lexeme()) {
+        if let Some((found_symbol, node_type)) = self.resolve_var(name.compute_span().lexeme()) {
             if !name.specialization.is_empty() {
                 return Err(Diagnostic::error(expr, "Cannot specialize variable"));
             }
@@ -858,13 +858,13 @@ impl ExprVisitor for TypeChecker {
             );
             match &explicit_type {
                 Some(NodeType::Instance(symbol, spec)) => {
-                    self.confirm_fully_specialized(name, explicit_type.as_ref().unwrap())?;
+                    self.confirm_fully_specialized(&name.compute_span(), explicit_type.as_ref().unwrap())?;
                     trace!(target: "type_checker", "Treating variable as metatype of {}", symbol);
                     name.set_symbol(symbol.clone());
                     expr.set_type(NodeType::Metatype(symbol.clone(), spec.clone()))
                 },
                 _ => {
-                    Err(Diagnostic::error(name, "Undefined variable"))
+                    Err(Diagnostic::error(&name.compute_span(), "Undefined variable"))
                 }
             }
         }
