@@ -7,7 +7,7 @@ use crate::source::*;
 use log::trace;
 use std::collections::HashMap;
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct Symbol {
     pub id: String,
 }
@@ -86,6 +86,7 @@ pub struct SymbolTable {
     pub function_metadata: HashMap<Symbol, FunctionMetadata>,
     pub span_map: HashMap<Symbol, Span>,
     pub call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
+    pub type_specialization_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
 }
 
 impl SymbolTable {
@@ -95,6 +96,7 @@ impl SymbolTable {
             function_metadata: HashMap::new(),
             span_map: HashMap::new(),
             call_map: HashMap::new(),
+            type_specialization_map: HashMap::new(),
         }
     }
 
@@ -201,9 +203,10 @@ impl<'a> SymbolTableBuilder<'a> {
 
         self.context.push(type_symbol.clone());
 
+        let generics = self.insert_generics(&type_symbol, &decl.generics);
+        self.symbols.get_type_metadata_mut(&type_symbol).unwrap().generics = generics;
+        
         let mut type_metadata = self.symbols.get_type_metadata(&type_symbol).unwrap().clone();
-
-        type_metadata.generics = self.insert_generics(&type_symbol, &decl.generics);
 
         for field in &decl.fields {
             let (token, field_type) = self.var_decl_type(field);
@@ -225,9 +228,12 @@ impl<'a> SymbolTableBuilder<'a> {
             let generic_types: Vec<_> = type_metadata
                     .generics
                     .iter()
-                    .map(|symbol| NodeType::Instance(symbol.clone(), GenericSpecialization::empty(&symbol)))
+                    .map(|symbol| NodeType::Instance(symbol.clone(), GenericSpecialization::empty()))
                     .collect();
-            let instance_type = NodeType::Instance(type_symbol.clone(), GenericSpecialization::new(&type_symbol, generic_types));
+            let instance_type = NodeType::Instance(
+                type_symbol.clone(), 
+                GenericSpecialization::new(&type_metadata.generics, generic_types),
+            );
 
             type_metadata.meta_methods.push(init_symbol.clone());
 
@@ -316,9 +322,9 @@ impl<'a> SymbolTableBuilder<'a> {
 
     fn insert_generics(&mut self, owner: &Symbol, generics: &[TypedToken]) -> Vec<Symbol> {
         let mut generic_symbols = Vec::new();
-        for (index, generic) in generics.iter().enumerate() {
+        for generic in generics {
             let generic_symbol = Symbol::new(self.context.last(), &generic.token);
-            let generic_type = TypeMetadata::generic(owner, generic.token.lexeme(), index);
+            let generic_type = TypeMetadata::generic(owner, generic.token.lexeme());
             self.symbols.type_metadata.insert(generic_symbol.clone(), generic_type);
 
             trace!(target: "symbol_table", "Inserting generic {} (symbol = {})", generic.token.lexeme(), generic_symbol);

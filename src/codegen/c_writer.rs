@@ -134,7 +134,7 @@ impl CWriter {
             .collect();
 
         if let FunctionKind::Method(owner) = &function.kind {
-            let self_instance = NodeType::Instance(owner.clone(), GenericSpecialization::empty(&owner));
+            let self_instance = NodeType::Instance(owner.clone(), GenericSpecialization::empty());
             let self_type = NodeType::pointer_to(self_instance);
             param_str.insert(
                 0,

@@ -56,6 +56,7 @@ pub struct TypeChecker {
     reporter: Rc<dyn Reporter>,
     lib: Rc<Lib>,
     call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
+    type_specialization_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
     scopes: Vec<Scope>,
     is_builtin: bool,
 }
@@ -72,6 +73,7 @@ impl TypeChecker {
             reporter,
             lib: Rc::clone(&lib),
             call_map: HashMap::new(),
+            type_specialization_map: HashMap::new(),
             scopes: vec![top_level],
             is_builtin: false,
         };
@@ -94,11 +96,13 @@ impl TypeChecker {
         checker.pop_scope();
 
         let call_map = std::mem::replace(&mut checker.call_map, HashMap::new());
+        let type_map = std::mem::replace(&mut checker.type_specialization_map, HashMap::new());
 
         std::mem::drop(checker);
 
         let mut lib = Rc::try_unwrap(lib).ok().unwrap();
         lib.symbols.call_map = call_map;
+        lib.symbols.type_specialization_map = type_map;
         lib
     }
 
@@ -206,7 +210,13 @@ impl TypeChecker {
                 return Some((possible_symbol, node_type.clone()));
             }
         }
-        None
+
+        let lib_symbol = Symbol::new_str(None, name);
+        if let Some(metadata) = self.lib.function_metadata(&lib_symbol) {
+            Some((lib_symbol, metadata.node_type()))
+        } else {
+            None
+        }
     }
 
     fn check_type_match(
@@ -250,12 +260,12 @@ impl TypeChecker {
     fn confirm_fully_specialized<S: ContainsSpan>(&self, span: &S, node_type: &NodeType) -> DiagnosticResult<()> {
         match &node_type {
             NodeType::Instance(type_symbol, specialization) | NodeType::Metatype(type_symbol, specialization) => {
-                for spec in &specialization.node_types {
+                for spec in specialization.map.values() {
                     self.confirm_fully_specialized(span, spec)?;
                 }
 
                 let matching_type = self.lib.type_metadata(type_symbol).unwrap();
-                let spec_length = specialization.node_types.len();
+                let spec_length = specialization.map.len();
                 if spec_length != matching_type.generics.len() {
                     let message = format!(
                         "Expected {} specializations, got {}",
@@ -700,6 +710,16 @@ impl ExprVisitor for TypeChecker {
                 );
                 match &explicit_type {
                     Some(NodeType::Instance(type_symbol, specs)) => {
+                        let enclosing_func = self
+                            .current_scope()
+                            .function_metadata
+                            .as_ref()
+                            .map(|f| f.symbol.clone())
+                            .unwrap_or(Symbol::main_symbol());
+                        self.type_specialization_map
+                            .entry(enclosing_func)
+                            .or_insert(Vec::new())
+                            .push((type_symbol.clone(), specs.clone()));
                         self.confirm_fully_specialized(&function.compute_span(), explicit_type.as_ref().unwrap())?;
                         let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
                         (Symbol::init_symbol(Some(&meta_symbol)), Some(specs.clone()), &[])
@@ -740,10 +760,10 @@ impl ExprVisitor for TypeChecker {
         let specialization = if function_specialization.is_empty() {
             match GenericSpecialization::infer(self.lib.as_ref(), &metadata, &arg_types) {
                 Ok(spec) => spec,
-                Err(index) => {
+                Err(symbol) => {
                     let message = format!(
                         "Couldn't infer generic type {}",
-                        metadata.generics[index].last_component()
+                        symbol.last_component()
                     );
                     return Err(Diagnostic::error(expr, &message));
                 }
@@ -763,7 +783,7 @@ impl ExprVisitor for TypeChecker {
                 .map(|s| self.resolve_explicit_type(s))
                 .collect();
 
-            GenericSpecialization::new(&func_symbol, specialization?)
+            GenericSpecialization::new(&metadata.generics, specialization?)
         };
 
         {

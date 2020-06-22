@@ -1,7 +1,8 @@
 use crate::analysis::{NodeType, Symbol, FunctionType};
 use crate::library::Lib;
+use std::collections::HashMap;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TypeMetadata {
     pub symbol: Symbol,
     pub generics: Vec<Symbol>,
@@ -9,7 +10,7 @@ pub struct TypeMetadata {
     pub field_types: Vec<NodeType>,
     pub methods: Vec<Symbol>,
     pub meta_methods: Vec<Symbol>,
-    pub generic_index: Option<usize>,
+    pub specializations: Vec<GenericSpecialization>,
 }
 
 impl TypeMetadata {
@@ -21,11 +22,11 @@ impl TypeMetadata {
             field_types: Vec::new(),
             methods: Vec::new(),
             meta_methods: Vec::new(),
-            generic_index: None
+            specializations: Vec::new(),
         }
     }
 
-    pub fn generic(owner: &Symbol, name: &str, index: usize) -> Self {
+    pub fn generic(owner: &Symbol, name: &str) -> Self {
         TypeMetadata {
             symbol: Symbol::new_str(Some(owner), name),
             generics: Vec::new(),
@@ -33,7 +34,7 @@ impl TypeMetadata {
             field_types: Vec::new(),
             methods: Vec::new(),
             meta_methods: Vec::new(),
-            generic_index: Some(index)
+            specializations: Vec::new(),
         }
     }
 
@@ -62,10 +63,6 @@ impl TypeMetadata {
         } else {
             None
         }
-    }
-
-    pub fn is_generic_parameter(&self) -> bool {
-        self.generic_index.is_some()
     }
 }
 
@@ -107,14 +104,14 @@ impl std::fmt::Display for TypeMetadata {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum FunctionKind {
     TopLevel,
     Method(Symbol),
     MetaMethod(Symbol),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FunctionMetadata {
     pub symbol: Symbol,
     pub kind: FunctionKind,
@@ -127,7 +124,8 @@ pub struct FunctionMetadata {
 
 impl FunctionMetadata {
     pub fn function_name(&self, specialization: &GenericSpecialization) -> String {
-        specialization.id.clone()
+        let specialized: Vec<_> = self.generics.iter().map(|g| specialization.type_for(g).unwrap().symbolic_form()).collect();
+        self.symbol.mangled() + &specialized.join("__")
     }
 
     pub fn full_type(&self) -> FunctionType {
@@ -187,55 +185,48 @@ impl std::fmt::Display for FunctionMetadata {
 
 #[derive(Clone, Debug)]
 pub struct GenericSpecialization {
-    pub owner: Symbol,
-    pub id: String,
-    pub node_types: Vec<NodeType>,
+    pub map: HashMap<Symbol, NodeType>
 }
 
 impl GenericSpecialization {
-    pub fn new(owner: &Symbol, node_types: Vec<NodeType>) -> Self {
-        let special_part = node_types
-            .iter()
-            .map(|s| s.symbolic_form())
-            .collect::<Vec<_>>()
-            .join("__");
-
+    pub fn new(generic_list: &[Symbol], node_types: Vec<NodeType>) -> Self {
+        let mut map: HashMap<Symbol, NodeType> = HashMap::new();
+        for (symbol, node_type) in generic_list.iter().zip(node_types) {
+            map.insert(symbol.clone(), node_type.clone());
+        }
         GenericSpecialization {
-            owner: owner.clone(),
-            id: owner.mangled() + &special_part,
-            node_types,
+            map
         }
     }
 
-    pub fn empty(owner: &Symbol) -> Self {
+    pub fn empty() -> Self {
         GenericSpecialization {
-            owner: owner.clone(),
-            id: owner.mangled(),
-            node_types: Vec::new()
+            map: HashMap::new(),
         }
     }
 
-    pub fn infer(lib: &Lib, metadata: &FunctionMetadata, arg_types: &[NodeType]) -> Result<Self, usize> {
-        let mut specializations: Vec<_> = std::iter::repeat(NodeType::Ambiguous)
-            .take(metadata.generics.len())
-            .collect();
+    pub fn infer(lib: &Lib, metadata: &FunctionMetadata, arg_types: &[NodeType]) -> Result<Self, Symbol> {
+        let mut spec_map: HashMap<Symbol, NodeType> = HashMap::new();
+        for gen in &metadata.generics {
+            spec_map.insert(gen.clone(), NodeType::Ambiguous);
+        }
+
         for (param_type, arg_type) in metadata.parameter_types.iter().zip(arg_types).rev() {
-            if let Some((index, specialized_type)) =
+            if let Some((symbol, specialized_type)) =
                 NodeType::infer_generic_type(lib, param_type, arg_type)
             {
-                specializations[index] = specialized_type;
+                spec_map.insert(symbol, specialized_type);
             }
         }
-        for (index, spec) in specializations.iter().enumerate() {
+        for (symbol, spec) in spec_map.iter() {
             if spec.contains_ambiguity() {
-                return Err(index);
+                return Err(symbol.clone());
             }
         }
 
-        Ok(GenericSpecialization::new(
-            &metadata.symbol,
-            specializations,
-        ))
+        Ok(GenericSpecialization {
+            map: spec_map
+        })
     }
 
     pub fn resolve_generics_using(
@@ -243,36 +234,48 @@ impl GenericSpecialization {
         lib: &Lib,
         specialization: &GenericSpecialization,
     ) -> GenericSpecialization {
-        let node_types: Vec<_> = self
-            .node_types
-            .iter()
-            .map(|arg_type| match arg_type {
-                NodeType::Instance(symbol, _) if specialization.owner.owns(symbol) => {
-                    let generic_index = lib.type_metadata(symbol).and_then(|t| t.generic_index).unwrap();
-                    specialization.node_types[generic_index].clone()
-                },
-                _ => arg_type.clone(),
-            })
-            .collect();
+        GenericSpecialization {
+            map: self.map.iter().map(|(key, value)| (key.clone(), value.specialize(lib, specialization))).collect()
+        }
+    }
 
-        GenericSpecialization::new(&self.owner, node_types)
+    pub fn type_for(&self, symbol: &Symbol) -> Option<&NodeType> {
+        self.map.get(symbol)
+    }
+
+    pub fn display_list(&self) -> String {
+        self.map.iter().map(|(symbol, node_type)| {
+            format!("{}={}", symbol.last_component(), node_type)
+        }).collect::<Vec<String>>().join(",")
+    }
+
+    pub fn symbolic_list(&self) -> String {
+        let mut keys: Vec<_> = self.map.keys().collect();
+        keys.sort();
+        keys.iter().map(|k| {
+            self.map.get(k).unwrap().symbolic_form()
+        }).collect::<Vec<String>>().join("__")
     }
 }
 
 impl PartialEq for GenericSpecialization {
     fn eq(&self, rhs: &Self) -> bool {
-        self.id == rhs.id
+        self.symbolic_list() == rhs.symbolic_list()
+        // if self.map.len() != rhs.map.len() {
+        //     return false;
+        // }
+        // for (symbol, node_type) in &self.map {
+        //     match rhs.type_for(symbol) {
+        //         Some(other_type) if node_type.matches(other_type) => (),
+        //         _ => return false,
+        //     }
+        // }
+        // true
     }
 }
 
 impl std::fmt::Display for GenericSpecialization {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let descrs = self
-            .node_types
-            .iter()
-            .map(|n| n.to_string())
-            .collect::<Vec<_>>()
-            .join(",");
-        write!(f, "GenericSpecialization(owner: {}, specs: {})", self.owner, descrs)
+        write!(f, "GenericSpecialization({})", self.display_list())
     }
 }

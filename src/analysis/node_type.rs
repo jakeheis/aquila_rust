@@ -140,10 +140,10 @@ impl NodeType {
 
         for parent in context.iter().rev() {
             let non_top_level_symbol = Symbol::new(Some(parent), token);
-            if table.get_type_metadata(&non_top_level_symbol).is_some() {
+            if let Some(type_metadata) = table.get_type_metadata(&non_top_level_symbol) {
                 let instance_type = NodeType::Instance(
                     non_top_level_symbol.clone(), 
-                    GenericSpecialization::new(&non_top_level_symbol, specialization)
+                    GenericSpecialization::new(&type_metadata.generics, specialization)
                 );
                 trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), instance_type);
                 return Some(instance_type);
@@ -151,18 +151,24 @@ impl NodeType {
         }
 
         let top_level_symbol = Symbol::new(None, token);
-        let possible_instance_type = NodeType::Instance(
-            top_level_symbol.clone(), 
-            GenericSpecialization::new(&top_level_symbol, specialization)
-        );
-        if table.get_type_metadata(&top_level_symbol).is_some() {
-            trace!(target: "symbol_table", "Resolving {} as Type({})", token.lexeme(), possible_instance_type);
-            Some(possible_instance_type)
+        if let Some(type_metadata) = table.get_type_metadata(&top_level_symbol) {
+            let spec = GenericSpecialization::new(&type_metadata.generics, specialization);
+            let instance_type = NodeType::Instance(
+                top_level_symbol.clone(), 
+                spec
+            );
+            
+            trace!(target: "symbol_table", "Resolving {} as Type({})", token.lexeme(), instance_type);
+            Some(instance_type)
         } else {
             for dep in deps {
-                if dep.type_metadata(&top_level_symbol).is_some() {
-                    trace!(target: "symbol_table", "Resolving {} as other lib Type({})", token.lexeme(), possible_instance_type);
-                    return Some(possible_instance_type);
+                if let Some(type_metadata) = dep.type_metadata(&top_level_symbol) {
+                    let instance_type = NodeType::Instance(
+                        top_level_symbol.clone(), 
+                        GenericSpecialization::new(&type_metadata.generics, specialization)
+                    );
+                    trace!(target: "symbol_table", "Resolving {} as other lib Type({})", token.lexeme(), instance_type);
+                    return Some(instance_type);
                 }
             }
             None
@@ -275,14 +281,15 @@ impl NodeType {
 
     pub fn specialize(&self, lib: &Lib, specialization: &GenericSpecialization) -> NodeType {
         match self {
-            NodeType::Instance(symbol, _) if specialization.owner.owns(symbol) => {
-                let generic_index = lib.type_metadata(symbol).and_then(|t| t.generic_index).unwrap();
-                specialization.node_types[generic_index].clone()
-            },
             NodeType::Instance(symbol, spec) => {
-                let new_spec: Vec<_> = spec.node_types.iter().map(|n| n.specialize(lib, specialization)).collect();
-                NodeType::Instance(symbol.clone(), GenericSpecialization::new(symbol, new_spec))
-            }
+                if let Some(specialized_type) = specialization.type_for(symbol) {
+                    // spec will be empty; generic parameters aren't specialized themselves, so it can be ignored
+                    specialized_type.clone()
+                } else {
+                    let new_spec = spec.resolve_generics_using(lib, specialization);
+                    NodeType::Instance(symbol.clone(), new_spec)
+                }
+            },
             NodeType::Pointer(to) => NodeType::pointer_to(to.specialize(lib, specialization)),
             NodeType::Array(of, size) => {
                 let specialized = of.specialize(lib, specialization);
@@ -341,22 +348,22 @@ impl NodeType {
         // TODO: this function sucks and doesn't make sense
         match self {
             NodeType::Instance(ty, spec) => {
-                ty.mangled() + "__" + &spec.id
+                ty.mangled() + "__" + &spec.symbolic_list()
             },
             NodeType::Int | NodeType::Void | NodeType::Bool | NodeType::Byte => self.to_string(),
             NodeType::Pointer(to) => format!("ptr__{}", to.symbolic_form()),
             _ => {
-                // panic!("can't get symbolic form of type {}", self),
-                String::new()
+                panic!("can't get symbolic form of type {}", self)
+                // String::new()
             }
         }
     }
 
-    pub fn infer_generic_type(lib: &Lib, param: &NodeType, arg: &NodeType) -> Option<(usize, NodeType)> {
+    pub fn infer_generic_type(lib: &Lib, param: &NodeType, arg: &NodeType) -> Option<(Symbol, NodeType)> {
         match (param, arg) {
             (NodeType::Instance(symbol, _), arg) => {
-                if let Some(generic_index) = lib.type_metadata(symbol).and_then(|t| t.generic_index) {
-                    Some((generic_index, arg.clone()))
+                if let Some(generic_def) = lib.type_metadata(symbol) {
+                    Some((generic_def.symbol.clone(), arg.clone()))
                 } else {
                     None
                 }
@@ -382,12 +389,8 @@ impl std::fmt::Display for NodeType {
             NodeType::Array(ty, size) => format!("Array<{}, count={}>", ty, size),
             NodeType::Instance(ty, specialization) => {
                 let mut string = ty.id.clone();
-                if !specialization.node_types.is_empty() {
-                    string += "[";
-                    for spec in &specialization.node_types {
-                        string += &format!("{},", spec);
-                    }
-                    string += "]";
+                if !specialization.map.is_empty() {
+                    string += &format!("[{}]", specialization.display_list());
                 }
                 string
             },

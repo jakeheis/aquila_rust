@@ -54,7 +54,7 @@ impl Codegen {
     }
 
     fn write(mut lib: Lib, writer: CWriter) {
-        SpecializationPropagator::propogate(&mut lib);
+        FunctionSpecializationPropagator::propogate(&mut lib);
 
         let mut writer = writer;
 
@@ -128,7 +128,7 @@ impl Codegen {
             specializations: Vec::new(),
         };
 
-        self.writer.start_decl_func(self.lib.as_ref(), &main_func, &GenericSpecialization::empty(&Symbol::main_symbol()));
+        self.writer.start_decl_func(self.lib.as_ref(), &main_func, &GenericSpecialization::empty());
         for stmt in stmts {
             stmt.accept(self);
         }
@@ -227,7 +227,7 @@ impl StmtVisitor for Codegen {
                 let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
                 let init_metadata = self.lib.function_metadata(&init_symbol).unwrap();
 
-                let init_spec = GenericSpecialization::empty(&init_symbol);
+                let init_spec = GenericSpecialization::empty();
 
                 if let CodegenStage::FuncPrototypes = self.stage {
                     self.writer.write_function_prototype(self.lib.as_ref(), &init_metadata, &init_spec);
@@ -407,7 +407,7 @@ impl ExprVisitor for Codegen {
                 .iter()
                 .map(|s| s.guarantee_resolved())
                 .collect::<Vec<_>>();
-            GenericSpecialization::new(&function_symbol, explicit_types)
+            GenericSpecialization::new(&function_metadata.generics, explicit_types)
         };
 
         let specialization = if let Some(caller_specs) = self.specialization.as_ref() {
@@ -416,7 +416,7 @@ impl ExprVisitor for Codegen {
             specialization
         };
 
-        let function_name = specialization.id;
+        let function_name = function_metadata.function_name(&specialization);
         let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
 
         let rendered = if let Some(target) = target {
