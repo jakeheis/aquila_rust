@@ -1,18 +1,20 @@
 pub use crate::analysis::NodeType;
-use crate::analysis::{FunctionKind, FunctionMetadata, GenericSpecialization};
+use crate::analysis::{FunctionKind, FunctionMetadata, GenericSpecialization, TypeMetadata};
 use crate::source::ContainsSpan;
 use std::fs::File;
 use std::io::Write;
 use crate::library::Lib;
+use std::rc::Rc;
 
 pub struct CWriter {
+    lib: Rc<Lib>,
     file: File,
     indent: u32,
 }
 
 impl CWriter {
-    pub fn new(file: File) -> Self {
-        let mut writer = CWriter { file, indent: 0 };
+    pub fn new(lib: Rc<Lib>, file: File) -> Self {
+        let mut writer = CWriter { lib, file, indent: 0 };
 
         writer.write_includes();
 
@@ -26,18 +28,22 @@ impl CWriter {
         self.writeln("#include <string.h>");
     }
 
-    pub fn write_struct_forward_decl(&mut self, name: &str) {
+    pub fn write_struct_forward_decl(&mut self, type_metadata: &TypeMetadata, specialization: &GenericSpecialization) {
         self.writeln("");
-        self.writeln(&format!("struct {};", name));
+        self.writeln(&format!("struct {};", type_metadata.type_name(specialization)));
     }
 
-    pub fn start_decl_struct(&mut self, name: &str) {
+    pub fn write_struct(&mut self, type_metadata: &TypeMetadata, specialization: &GenericSpecialization) {
+        let name = type_metadata.type_name(specialization);
+
         self.writeln("");
         self.writeln(&format!("typedef struct {} {{", name));
         self.indent += 1;
-    }
-
-    pub fn end_decl_struct(&mut self, name: &str) {
+        
+        for (node_type, symbol) in type_metadata.field_types.iter().zip(&type_metadata.field_symbols) {
+            self.decl_var(&node_type.specialize(self.lib.as_ref(), specialization), &symbol.mangled(), None);
+        }
+        
         self.indent -= 1;
         self.writeln(&format!("}} {};", name));
     }
@@ -134,7 +140,7 @@ impl CWriter {
             .collect();
 
         if let FunctionKind::Method(owner) = &function.kind {
-            let self_instance = NodeType::Instance(owner.clone(), GenericSpecialization::empty());
+            let self_instance = NodeType::Instance(owner.clone(), specialization.subset(owner));
             let self_type = NodeType::pointer_to(self_instance);
             param_str.insert(
                 0,

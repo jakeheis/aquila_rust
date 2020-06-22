@@ -82,14 +82,6 @@ impl NodeType {
         NodeType::Function(Box::new(function))
     }
 
-    pub fn deduce_from_lib(
-        explicit_type: &ExplicitType,
-        lib: &Lib,
-        context: &[Symbol],
-    ) -> Option<Self> {
-        NodeType::deduce_from(explicit_type, &lib.symbols, &lib.dependencies, context)
-    }
-
     pub fn deduce_from(
         explicit_type: &ExplicitType,
         table: &SymbolTable,
@@ -101,13 +93,11 @@ impl NodeType {
                 NodeType::deduce_from_simple_explicit(token, table, deps, context)?
             }
             ExplicitTypeKind::Pointer(to) => {
-                let to: &ExplicitType = &to;
-                let inner = NodeType::deduce_from(to, table, deps, context)?;
+                let inner = NodeType::deduce_from(to.as_ref(), table, deps, context)?;
                 NodeType::Pointer(Box::new(inner))
             }
             ExplicitTypeKind::Array(of, count_token) => {
-                let of: &ExplicitType = &of;
-                let inner = NodeType::deduce_from(of, table, deps, context)?;
+                let inner = NodeType::deduce_from(of.as_ref(), table, deps, context)?;
                 let count = count_token.lexeme().parse::<usize>().ok().unwrap();
                 NodeType::Array(Box::new(inner), count)
             }
@@ -119,7 +109,7 @@ impl NodeType {
     pub fn deduce_from_simple_explicit(token: &ResolvedToken, table: &SymbolTable, deps: &[Lib], context: &[Symbol]) -> Option<Self> {
         let mut resolved_spec = Vec::new();
         for explict_spec in &token.specialization {
-            resolved_spec.push(NodeType::deduce_from(explict_spec, table, deps, context)?);
+            resolved_spec.push(explict_spec.resolve(table, deps, context)?);
         }
 
         if let Some(primitive) = NodeType::primitive(&token.token) {
@@ -345,17 +335,17 @@ impl NodeType {
     }
 
     pub fn symbolic_form(&self) -> String {
-        // TODO: this function sucks and doesn't make sense
         match self {
             NodeType::Instance(ty, spec) => {
-                ty.mangled() + "__" + &spec.symbolic_list()
+                if spec.map.is_empty() {
+                    ty.mangled()
+                } else {
+                    ty.mangled() + "__" + &spec.symbolic_list()
+                }
             },
             NodeType::Int | NodeType::Void | NodeType::Bool | NodeType::Byte => self.to_string(),
             NodeType::Pointer(to) => format!("ptr__{}", to.symbolic_form()),
-            _ => {
-                panic!("can't get symbolic form of type {}", self)
-                // String::new()
-            }
+            _ => panic!("can't get symbolic form of type {}", self),
         }
     }
 

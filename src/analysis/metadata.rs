@@ -40,7 +40,7 @@ impl TypeMetadata {
 
     pub fn type_name(&self, specialization: &GenericSpecialization) -> String {
         let specialization = self.generics.iter().map(|g| {
-            specialization.type_for(g).unwrap().symbolic_form()
+            specialization.type_for(g).expect(&format!("Expected type for generic {}\n{}", g, specialization)).symbolic_form()
         }).collect::<Vec<_>>();
         if specialization.is_empty() {
             self.symbol.mangled()

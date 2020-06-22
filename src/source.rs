@@ -20,6 +20,7 @@ pub fn text(text: &str) -> Source {
     })
 }
 
+#[derive(Debug)]
 pub struct SourceImpl {
     pub name: String,
     pub content: String,
@@ -44,7 +45,7 @@ impl SourceImpl {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Span {
     pub source: Source,
     pub index: usize,

@@ -339,8 +339,7 @@ impl<'a> SymbolTableBuilder<'a> {
     }
 
     fn resolve_explicit_type(&self, explicit_type: &ExplicitType) -> NodeType {
-        if let Some(node_type) =
-            NodeType::deduce_from(explicit_type, &self.symbols, self.deps, &self.context)
+        if let Some(node_type) = explicit_type.resolve(&self.symbols, self.deps, &self.context)
         {
             trace!(target: "symbol_table", "Resolved explicit type {} to {}", explicit_type.span().lexeme(), node_type);
             node_type

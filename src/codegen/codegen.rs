@@ -9,6 +9,7 @@ use log::trace;
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
+use crate::source::*;
 // use crate::source::*;
 
 #[derive(PartialEq)]
@@ -22,7 +23,7 @@ enum CodegenStage {
 pub struct Codegen {
     writer: CWriter,
     lib: Rc<Lib>,
-    current_type: Option<Symbol>,
+    current_type: Option<TypeMetadata>,
     stage: CodegenStage,
     is_builtin: bool,
     temp_count: u32,
@@ -31,12 +32,7 @@ pub struct Codegen {
 
 impl Codegen {
     pub fn generate(lib: Lib) {
-        fs::create_dir_all("build").unwrap();
-
-        let file = File::create("build/main.c").unwrap();
-        let writer = CWriter::new(file);
-
-        Codegen::write(lib, writer);
+        Codegen::write(lib);
 
         Command::new("/usr/local/opt/llvm/bin/clang")
             .args(&[
@@ -53,14 +49,15 @@ impl Codegen {
             .unwrap();
     }
 
-    fn write(mut lib: Lib, writer: CWriter) {
+    fn write(mut lib: Lib) {
         SpecializationPropagator::propogate(&mut lib);
 
-        let mut writer = writer;
-
-        writer.writeln(&format!("\n// {}", lib.name));
-
         let lib = Rc::new(lib);
+
+        fs::create_dir_all("build").unwrap();
+
+        let file = File::create("build/main.c").unwrap();
+        let writer = CWriter::new(Rc::clone(&lib), file);
 
         let mut codegen = Codegen {
             writer: writer,
@@ -75,17 +72,17 @@ impl Codegen {
         let lib = lib.as_ref();
 
         codegen.stage = CodegenStage::ForwardStructDecls;
-        codegen.chunk(lib, &mut |codegen, lib| {
+        codegen.write_chunk(lib, &mut |codegen, lib| {
             codegen.gen_type_decls(&lib.type_decls);
         });
 
         codegen.stage = CodegenStage::StructBodies;
-        codegen.chunk(lib, &mut |codegen, lib| {
+        codegen.write_chunk(lib, &mut |codegen, lib| {
             codegen.gen_type_decls(&lib.type_decls);
         });
 
         codegen.stage = CodegenStage::FuncPrototypes;
-        codegen.chunk(lib, &mut |codegen, lib| {
+        codegen.write_chunk(lib, &mut |codegen, lib| {
             codegen.gen_type_decls(&lib.type_decls);
             codegen.gen_function_decls(&lib.function_decls);
             codegen.is_builtin = true;
@@ -94,7 +91,7 @@ impl Codegen {
         });
 
         codegen.stage = CodegenStage::FuncBodies;
-        codegen.chunk(lib, &mut |codegen, lib| {
+        codegen.write_chunk(lib, &mut |codegen, lib| {
             codegen.gen_type_decls(&lib.type_decls);
             codegen.gen_function_decls(&lib.function_decls);
             codegen.is_builtin = true;
@@ -107,12 +104,12 @@ impl Codegen {
         }
     }
 
-    fn chunk<F>(&mut self, lib: &Lib, function: &mut F)
+    fn write_chunk<F>(&mut self, lib: &Lib, function: &mut F)
     where
         F: Fn(&mut Codegen, &Lib) -> (),
     {
         for dep in &lib.dependencies {
-            self.chunk(dep, function);
+            self.write_chunk(dep, function);
         }
         function(self, lib);
     }
@@ -195,6 +192,8 @@ impl Codegen {
             self.writer.end_decl_func();
         }
 
+        trace!(target: "codegen", "Finished function {} with specialization {}", func_symbol, specialization);
+
         self.specialization = None;
     }
 }
@@ -206,46 +205,49 @@ impl StmtVisitor for Codegen {
         let type_symbol = decl.name.get_symbol().unwrap();
         let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
 
-        match self.stage {
-            CodegenStage::ForwardStructDecls => self
-                .writer
-                .write_struct_forward_decl(&type_symbol.mangled()),
-            CodegenStage::StructBodies => {
-                self.writer.start_decl_struct(&type_symbol.mangled());
-                for field in &decl.fields {
-                    self.visit_variable_decl(field);
+        for spec in &type_metadata.specializations {
+            trace!(target: "codegen", "Writing type {} with specialization {}", type_symbol, spec);
+            match self.stage {
+                CodegenStage::ForwardStructDecls => self.writer.write_struct_forward_decl(&type_metadata, spec),
+                CodegenStage::StructBodies => {
+                    self.writer.write_struct(&type_metadata, spec);
+                },
+                CodegenStage::FuncPrototypes | CodegenStage::FuncBodies => {
+                    let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
+                    let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
+                    let init_metadata = self.lib.function_metadata(&init_symbol).unwrap();
+        
+                    if let CodegenStage::FuncPrototypes = self.stage {
+                        self.writer.write_function_prototype(self.lib.as_ref(), &init_metadata, &spec);
+                    } else {
+                        self.writer.start_decl_func(self.lib.as_ref(), &init_metadata, &spec);
+                        self.writer
+                            .decl_var(&init_metadata.return_type, "new_item", None);
+                        for field in &type_metadata.field_symbols {
+                            let target = format!("new_item.{}", field.mangled());
+                            self.writer.write_assignment(&target, &field.mangled());
+                        }
+                        self.writer.write_return(Some(String::from("new_item")));
+                        self.writer.end_decl_func();
+                    }
                 }
-                self.writer.end_decl_struct(&type_symbol.mangled());
             }
+            trace!(target: "codegen", "Finished type {} with specialization {}", type_symbol, spec);
+        }
+
+        trace!(target: "codegen", "Writing methods for {}", type_symbol);
+         match self.stage {
             CodegenStage::FuncPrototypes | CodegenStage::FuncBodies => {
-                self.current_type = Some(type_symbol.clone());
+                self.current_type = Some(type_metadata.clone());
 
                 self.gen_function_decls(&decl.methods);
                 self.gen_function_decls(&decl.meta_methods);
 
-                let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
-                let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
-                let init_metadata = self.lib.function_metadata(&init_symbol).unwrap();
-
-                let init_spec = GenericSpecialization::empty();
-
-                if let CodegenStage::FuncPrototypes = self.stage {
-                    self.writer.write_function_prototype(self.lib.as_ref(), &init_metadata, &init_spec);
-                } else {
-                    self.writer.start_decl_func(self.lib.as_ref(), &init_metadata, &init_spec);
-                    self.writer
-                        .decl_var(&init_metadata.return_type, "new_item", None);
-                    for field in type_metadata.field_symbols {
-                        let target = format!("new_item.{}", field.mangled());
-                        self.writer.write_assignment(&target, &field.mangled());
-                    }
-                    self.writer.write_return(Some(String::from("new_item")));
-                    self.writer.end_decl_func();
-                }
-
                 self.current_type = None;
             }
+            _ => (),
         }
+        trace!(target: "codegen", "Finished methods for {}", type_symbol);
     }
 
     fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Self::StmtResult {
@@ -397,7 +399,7 @@ impl ExprVisitor for Codegen {
         let function_symbol = function.get_symbol().unwrap();
         let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
 
-        let specialization = if function.specialization.is_empty() {
+        let mut specialization = if function.specialization.is_empty() {
             let arg_types: Vec<_> = args.iter().map(|a| a.get_type().unwrap()).collect();
             GenericSpecialization::infer(self.lib.as_ref(), &function_metadata, &arg_types)
                 .ok()
@@ -407,14 +409,24 @@ impl ExprVisitor for Codegen {
                 .iter()
                 .map(|s| s.guarantee_resolved())
                 .collect::<Vec<_>>();
-            GenericSpecialization::new(&function_metadata.generics, explicit_types)
+
+            if function_symbol.last_component() == "init" {
+                let type_init = self.lib.type_metadata(&function_symbol.parent().unwrap().parent().unwrap()).unwrap();
+                GenericSpecialization::new(&type_init.generics, explicit_types)
+            } else {
+                GenericSpecialization::new(&function_metadata.generics, explicit_types)
+            }
         };
 
-        let specialization = if let Some(caller_specs) = self.specialization.as_ref() {
-            specialization.resolve_generics_using(self.lib.as_ref(), caller_specs)
-        } else {
-            specialization
-        };
+        if let Some(target ) = target {
+            if let NodeType::Instance(_, specs) = target.get_type().unwrap() {
+                specialization = specialization.merge(self.lib.as_ref(), &specs);
+            }
+        }
+
+        if let Some(caller_specs) = self.specialization.as_ref() {
+            specialization = specialization.merge(self.lib.as_ref(), caller_specs)
+        }
 
         let function_name = function_metadata.function_name(self.lib.as_ref(), &specialization);
         let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
@@ -480,7 +492,7 @@ impl ExprVisitor for Codegen {
         if self
             .current_type
             .as_ref()
-            .map(|t| t.owns(&symbol))
+            .map(|t| t.symbol.owns(&symbol))
             .unwrap_or(false)
         {
             format!("self->{}", symbol.mangled())

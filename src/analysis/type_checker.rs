@@ -56,7 +56,6 @@ pub struct TypeChecker {
     reporter: Rc<dyn Reporter>,
     lib: Rc<Lib>,
     call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
-    type_specialization_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
     scopes: Vec<Scope>,
     is_builtin: bool,
 }
@@ -73,7 +72,6 @@ impl TypeChecker {
             reporter,
             lib: Rc::clone(&lib),
             call_map: HashMap::new(),
-            type_specialization_map: HashMap::new(),
             scopes: vec![top_level],
             is_builtin: false,
         };
@@ -96,13 +94,11 @@ impl TypeChecker {
         checker.pop_scope();
 
         let call_map = std::mem::replace(&mut checker.call_map, HashMap::new());
-        let type_map = std::mem::replace(&mut checker.type_specialization_map, HashMap::new());
 
         std::mem::drop(checker);
 
         let mut lib = Rc::try_unwrap(lib).ok().unwrap();
         lib.symbols.call_map = call_map;
-        lib.symbols.type_specialization_map = type_map;
         lib
     }
 
@@ -242,7 +238,7 @@ impl TypeChecker {
     fn resolve_explicit_type(&mut self, explicit_type: &ExplicitType) -> Result {
         let context = self.symbolic_context();
 
-        if let Some(deduced) = explicit_type.resolve(&self.lib, &context) {
+        if let Some(deduced) = explicit_type.resolve_with_lib(&self.lib, &context) {
             if let (&NodeType::Any, false) = (&deduced, self.is_builtin) {
                 Err(Diagnostic::error(
                     explicit_type,
@@ -710,16 +706,6 @@ impl ExprVisitor for TypeChecker {
                 );
                 match &explicit_type {
                     Some(NodeType::Instance(type_symbol, specs)) => {
-                        let enclosing_func = self
-                            .current_scope()
-                            .function_metadata
-                            .as_ref()
-                            .map(|f| f.symbol.clone())
-                            .unwrap_or(Symbol::main_symbol());
-                        self.type_specialization_map
-                            .entry(enclosing_func)
-                            .or_insert(Vec::new())
-                            .push((type_symbol.clone(), specs.clone()));
                         self.confirm_fully_specialized(&function.compute_span(), explicit_type.as_ref().unwrap())?;
                         let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
                         (Symbol::init_symbol(Some(&meta_symbol)), Some(specs.clone()), &[])

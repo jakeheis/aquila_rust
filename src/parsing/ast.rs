@@ -1,5 +1,5 @@
 use super::Expr;
-use crate::analysis::{NodeType, Symbol};
+use crate::analysis::{NodeType, Symbol, SymbolTable};
 use crate::lexing::*;
 use crate::library::Lib;
 use crate::source::*;
@@ -287,6 +287,7 @@ impl ContainsSpan for TypedToken {
     }
 }
 
+#[derive(Debug)]
 pub struct ResolvedToken {
     pub token: Token,
     symbol: RefCell<Option<Symbol>>,
@@ -320,12 +321,14 @@ impl ResolvedToken {
     }
 }
 
+#[derive(Debug)]
 pub enum ExplicitTypeKind {
     Simple(ResolvedToken),
     Array(Box<ExplicitType>, Token),
     Pointer(Box<ExplicitType>),
 }
 
+#[derive(Debug)]
 pub struct ExplicitType {
     pub kind: ExplicitTypeKind,
     span: Span,
@@ -342,8 +345,12 @@ impl ExplicitType {
         }
     }
 
-    pub fn resolve(&self, lib: &Lib, context: &[Symbol]) -> Option<NodeType> {
-        let result = NodeType::deduce_from_lib(self, lib, context);
+    pub fn resolve_with_lib(&self, lib: &Lib, context: &[Symbol]) -> Option<NodeType> {
+        self.resolve(&lib.symbols, &lib.dependencies, context)
+    }
+
+    pub fn resolve(&self, table: &SymbolTable, deps: &[Lib], context: &[Symbol]) -> Option<NodeType> {
+        let result = NodeType::deduce_from(self, table, deps, context);
         self.cached_type.replace(result.clone());
         result
     }
