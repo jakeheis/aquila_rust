@@ -65,6 +65,8 @@ type Adder[T] {
 
 let customized_adder = Adder[Adder[int]](3, 4);
 
+let result = customized_adder.add_mysterious(4, Adder[int](3, 1));
+
 let vec_int = Vec.new[int]();
 vec_int.insert(4);
 vec_int.insert(6);

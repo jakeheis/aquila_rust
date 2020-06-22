@@ -133,8 +133,8 @@ impl std::fmt::Display for SymbolTable {
             writeln!(f, "{}", metadata)?;
         }
         writeln!(f, "Function metadata:")?;
-        for (symbol, meta) in self.function_metadata.iter() {
-            writeln!(f, "  {} -> {}", symbol, meta)?;
+        for (_, meta) in self.function_metadata.iter() {
+            writeln!(f, "{}", meta)?;
         }
         Ok(())
     }
@@ -291,7 +291,7 @@ impl<'a> SymbolTableBuilder<'a> {
 
         let new_type = NodeType::function(param_types.clone(), return_type.clone());
         let function_kind = match self.context.last() {
-            Some(p) if p.is_meta() => FunctionKind::MetaMethod(p.clone()),
+            Some(p) if p.is_meta() => FunctionKind::MetaMethod(p.parent().unwrap().clone()),
             Some(p) => {
                 if self.symbols.get_type_metadata(&p).is_some() {
                     FunctionKind::Method(p.clone())

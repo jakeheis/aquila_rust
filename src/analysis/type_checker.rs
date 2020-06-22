@@ -757,7 +757,7 @@ impl ExprVisitor for TypeChecker {
             ));
         }
 
-        let specialization = if function_specialization.is_empty() {
+        let function_specialization = if function_specialization.is_empty() {
             match GenericSpecialization::infer(self.lib.as_ref(), &metadata, &arg_types) {
                 Ok(spec) => spec,
                 Err(symbol) => {
@@ -786,6 +786,12 @@ impl ExprVisitor for TypeChecker {
             GenericSpecialization::new(&metadata.generics, specialization?)
         };
 
+        let merged = if let Some(object_specialization) = object_specialization.as_ref() {
+            function_specialization.merge(self.lib.as_ref(), object_specialization)
+        } else {
+            function_specialization
+        };
+
         {
             let enclosing_func = self
                 .current_scope()
@@ -796,10 +802,10 @@ impl ExprVisitor for TypeChecker {
             self.call_map
                 .entry(enclosing_func)
                 .or_insert(Vec::new())
-                .push((func_symbol.clone(), specialization.clone()));
+                .push((func_symbol.clone(), merged.clone()));
         }
 
-        function_type = function_type.specialize(self.lib.as_ref(), &specialization);
+        function_type = function_type.specialize(self.lib.as_ref(), &merged);
 
         for ((index, param), arg) in function_type.parameters.into_iter().enumerate().zip(arg_types) {
             if let Err(diag) = self.ensure_no_amibguity(&args[index], &arg) {

@@ -416,7 +416,7 @@ impl ExprVisitor for Codegen {
             specialization
         };
 
-        let function_name = function_metadata.function_name(&specialization);
+        let function_name = function_metadata.function_name(self.lib.as_ref(), &specialization);
         let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
 
         let rendered = if let Some(target) = target {

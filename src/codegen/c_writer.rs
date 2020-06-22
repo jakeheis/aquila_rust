@@ -147,7 +147,7 @@ impl CWriter {
         self.writeln("");
         self.writeln(&format!(
             "{}({}){}",
-            self.type_and_name(&function_type.return_type, &function.function_name(specialization)),
+            self.type_and_name(&function_type.return_type, &function.function_name(lib, specialization)),
             param_str,
             terminator
         ));

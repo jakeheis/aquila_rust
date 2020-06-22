@@ -148,6 +148,8 @@ impl<'a> FunctionSpecializationPropagator<'a> {
             visited: HashSet::new(),
         };
         prop.go();
+
+        trace!(target: "spec_propagate", "{}", lib.symbols);
     }
 
     pub fn flattened_call_map(
@@ -170,7 +172,7 @@ impl<'a> FunctionSpecializationPropagator<'a> {
     fn propagate(&mut self, cur: &Symbol, current_spec: &GenericSpecialization) {
         let metadata = self.lib.function_metadata(cur);
         let func_id = metadata
-            .map(|m| m.function_name(current_spec))
+            .map(|m| m.function_name(self.lib, current_spec))
             .unwrap_or(cur.mangled());
         if self.visited.contains(&func_id) {
             return;
@@ -181,8 +183,9 @@ impl<'a> FunctionSpecializationPropagator<'a> {
         self.visited.insert(func_id);
 
         trace!(target: "spec_propagate", "Adding function spec {} to {}", current_spec, cur);
-        let metadata = self.lib.function_metadata_mut(cur).unwrap();
-        metadata.specializations.push(current_spec.clone());
+        if let Some(mut_metadata) = self.lib.function_metadata_mut(cur) {
+            mut_metadata.specializations.push(current_spec.clone());
+        }
 
         if let Some(calls) = self.call_map.get(cur) {
             let calls = calls.clone();
