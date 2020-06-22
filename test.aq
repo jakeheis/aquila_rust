@@ -61,11 +61,20 @@ type Adder[T] {
   meta def example(): Adder[T] {
     return Adder[T](1, 2);
   }
+
+  def extra_fun[U](object: U, other: T): Adder[U] {
+    first(object);
+    first(other);
+    return Adder[U](1, 2);
+  }
 }
 
-let customized_adder = Adder[Adder[int]](3, 4);
+let customized_adder = Adder[Adder[bool]](3, 4);
 
-let result = customized_adder.add_mysterious(4, Adder[int](3, 1));
+customized_adder.extra_fun("hi", Adder[bool](3, 1));
+
+let result = customized_adder.add_mysterious(4, Adder[bool](3, 1));
+result.add(5);
 
 let vec_int = Vec.new[int]();
 vec_int.insert(4);

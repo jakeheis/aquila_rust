@@ -123,6 +123,19 @@ impl Lib {
         }
     }
 
+    pub fn type_metadata_mut(&mut self, symbol: &Symbol) -> Option<&mut TypeMetadata> {
+        if let Some(found) = self.symbols.get_type_metadata_mut(symbol) {
+            Some(found)
+        } else {
+            for dep in &mut self.dependencies {
+                if let Some(found) = dep.type_metadata_mut(symbol) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+    }
+
     pub fn function_metadata(&self, symbol: &Symbol) -> Option<FunctionMetadata> {
         if let Some(found) = self.symbols.get_func_metadata(symbol) {
             Some(found.clone())

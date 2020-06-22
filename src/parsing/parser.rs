@@ -172,6 +172,7 @@ impl Parser {
 
     fn synchronize(&mut self) {
         trace!(target: "parser", "Synchronizing after {}", self.previous());
+        self.advance();
         while !self.is_at_end() && self.previous().kind != TokenKind::Semicolon {
             let done = match self.peek() {
                 TokenKind::Type
@@ -180,7 +181,7 @@ impl Parser {
                 | TokenKind::If
                 | TokenKind::Return
                 | TokenKind::RightBrace => true,
-                TokenKind::Semicolon => {
+                TokenKind::Semicolon | TokenKind::LeftBrace => {
                     self.advance();
                     true
                 }

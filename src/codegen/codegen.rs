@@ -54,7 +54,7 @@ impl Codegen {
     }
 
     fn write(mut lib: Lib, writer: CWriter) {
-        FunctionSpecializationPropagator::propogate(&mut lib);
+        SpecializationPropagator::propogate(&mut lib);
 
         let mut writer = writer;
 

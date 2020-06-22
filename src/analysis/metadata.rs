@@ -111,18 +111,14 @@ impl std::fmt::Display for TypeMetadata {
             .collect::<Vec<_>>()
             .join(",");
         write!(f, "  meta methods: {}", meta_methods)?;
-        
+
         if !self.specializations.is_empty() {
-                let specs = self
-                .specializations
-                .iter()
-                .map(|m| m.to_string())
-                .collect::<Vec<_>>()
-                .join(",");
-            write!(f, "  specializations: {}", specs)
-        } else {
-            Ok(())
+            for spec in &self.specializations {
+                write!(f, "\n  {}", spec)?;
+            }
         }
+        
+        Ok(())
     }
 }
 
@@ -153,7 +149,6 @@ impl FunctionMetadata {
 
         match &self.kind {
             FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
-                println!("Getting parent of {}, which is {}", self.symbol, owner);
                 let type_meta = lib.type_metadata(&owner).unwrap();
                 format!("{}__{}__{}", type_meta.type_name(specialization), self.symbol.last_component(), func_specialization)
             },
@@ -174,11 +169,11 @@ impl FunctionMetadata {
 
 impl std::fmt::Display for FunctionMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let start = match &self.kind {
+        match &self.kind {
             FunctionKind::TopLevel => writeln!(f, "Function({})", self.symbol.mangled()),
             FunctionKind::Method(owner) => writeln!(f, "Method(object: {}, method: {})", owner.mangled(), self.symbol.last_component()),
             FunctionKind::MetaMethod(owner) => writeln!(f, "MetaMethod(object: {}, meta_method: {})", owner.mangled(), self.symbol.last_component()),
-        };
+        }?;
 
         let generics: Vec<String> = self
             .generics
@@ -279,6 +274,19 @@ impl GenericSpecialization {
             resolved_self.map.insert(symbol.clone(), node_type.clone());
         }
         resolved_self
+    }
+
+    pub fn subset(&self, owner: &Symbol) -> Self {
+        let map = self.map.iter().flat_map(|(symbol, node_type)| {
+            if owner.owns(symbol) {
+                Some((symbol.clone(), node_type.clone()))
+            } else {
+                None
+            }
+        }).collect();
+        GenericSpecialization {
+            map
+        }
     }
 
     pub fn type_for(&self, symbol: &Symbol) -> Option<&NodeType> {
