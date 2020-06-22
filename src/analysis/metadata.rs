@@ -133,6 +133,10 @@ impl FunctionMetadata {
     pub fn full_type(&self) -> FunctionType {
         FunctionType::new(self.parameter_types.clone(), self.return_type.clone())
     }
+
+    pub fn node_type(&self) -> NodeType {
+        NodeType::Function(Box::new(self.full_type()))
+    }
 }
 
 impl std::fmt::Display for FunctionMetadata {

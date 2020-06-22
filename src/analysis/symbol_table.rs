@@ -82,7 +82,6 @@ impl std::fmt::Display for Symbol {
 
 #[derive(Clone)]
 pub struct SymbolTable {
-    type_map: HashMap<Symbol, NodeType>,
     pub type_metadata: HashMap<Symbol, TypeMetadata>,
     pub function_metadata: HashMap<Symbol, FunctionMetadata>,
     pub span_map: HashMap<Symbol, Span>,
@@ -92,7 +91,6 @@ pub struct SymbolTable {
 impl SymbolTable {
     pub fn new() -> Self {
         SymbolTable {
-            type_map: HashMap::new(),
             type_metadata: HashMap::new(),
             function_metadata: HashMap::new(),
             span_map: HashMap::new(),
@@ -100,29 +98,8 @@ impl SymbolTable {
         }
     }
 
-    pub fn insert(&mut self, symbol: Symbol, node_type: NodeType, span: Span) {
-        self.type_map.insert(symbol.clone(), node_type);
-        self.span_map.insert(symbol, span);
-    }
-
-    pub fn insert_func_metadata(&mut self, symbol: Symbol, metadata: FunctionMetadata) {
-        self.function_metadata.insert(symbol, metadata);
-    }
-
     pub fn insert_type_metadata(&mut self, symbol: Symbol, metadata: TypeMetadata) {
         self.type_metadata.insert(symbol, metadata);
-    }
-
-    pub fn get_type(&self, symbol: &Symbol) -> Option<&NodeType> {
-        self.type_map.get(symbol)
-    }
-
-    pub fn get_func_metadata(&self, symbol: &Symbol) -> Option<&FunctionMetadata> {
-        self.function_metadata.get(symbol)
-    }
-
-    pub fn get_func_metadata_mut(&mut self, symbol: &Symbol) -> Option<&mut FunctionMetadata> {
-        self.function_metadata.get_mut(symbol)
     }
 
     pub fn get_type_metadata(&self, symbol: &Symbol) -> Option<&TypeMetadata> {
@@ -132,14 +109,23 @@ impl SymbolTable {
     pub fn get_type_metadata_mut(&mut self, symbol: &Symbol) -> Option<&mut TypeMetadata> {
         self.type_metadata.get_mut(symbol)
     }
+
+    pub fn insert_func_metadata(&mut self, symbol: Symbol, metadata: FunctionMetadata) {
+        self.function_metadata.insert(symbol, metadata);
+    }
+
+    pub fn get_func_metadata(&self, symbol: &Symbol) -> Option<&FunctionMetadata> {
+        self.function_metadata.get(symbol)
+    }
+
+    pub fn get_func_metadata_mut(&mut self, symbol: &Symbol) -> Option<&mut FunctionMetadata> {
+        self.function_metadata.get_mut(symbol)
+    }
 }
 
 impl std::fmt::Display for SymbolTable {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         writeln!(f, "SymbolTable:")?;
-        for (symbol, node_type) in self.type_map.iter() {
-            writeln!(f, "  {} -> {}", symbol, node_type)?;
-        }
         writeln!(f, "Type metadata:")?;
         for (_, metadata) in self.type_metadata.iter() {
             writeln!(f, "{}", metadata)?;
@@ -185,10 +171,6 @@ impl<'a> SymbolTableBuilder<'a> {
         }
     }
 
-    fn insert<S: ContainsSpan>(&mut self, symbol: Symbol, node_type: NodeType, span: &S) {
-        self.symbols.insert(symbol, node_type, span.span().clone());
-    }
-
     fn insert_func_metadata(&mut self, symbol: Symbol, metadata: FunctionMetadata) {
         self.symbols.insert_func_metadata(symbol, metadata)
     }
@@ -231,7 +213,6 @@ impl<'a> SymbolTableBuilder<'a> {
             type_metadata.field_symbols.push(field_symbol.clone());
 
             trace!(target: "symbol_table", "Inserting field {} (symbol = {})", token.lexeme(), field_symbol);
-            self.insert(field_symbol, field_type, token);
         }
 
         type_metadata.methods = self.build_functions(&decl.methods);
@@ -240,16 +221,13 @@ impl<'a> SymbolTableBuilder<'a> {
         type_metadata.meta_methods = self.build_functions(&decl.meta_methods);
 
         let init_symbol = Symbol::init_symbol(self.context.last());
-        if self.symbols.get_type(&init_symbol).is_none() {
+        if self.symbols.get_func_metadata(&init_symbol).is_none() {
             let generic_types: Vec<_> = type_metadata
                     .generics
                     .iter()
                     .map(|symbol| NodeType::Instance(symbol.clone(), GenericSpecialization::empty(&symbol)))
                     .collect();
             let instance_type = NodeType::Instance(type_symbol.clone(), GenericSpecialization::new(&type_symbol, generic_types));
-            let init_type =
-                NodeType::function(type_metadata.field_types.clone(), instance_type.clone());
-            self.insert(init_symbol.clone(), init_type.clone(), &decl.name);
 
             type_metadata.meta_methods.push(init_symbol.clone());
 
@@ -331,7 +309,6 @@ impl<'a> SymbolTableBuilder<'a> {
 
         trace!(target: "symbol_table", "Finished building function {} -- {}", decl.name.token.lexeme(), new_type);
 
-        self.insert(function_symbol.clone(), new_type.clone(), &decl.name);
         decl.name.set_type(new_type.clone());
 
         function_symbol

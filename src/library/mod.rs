@@ -110,19 +110,6 @@ impl Lib {
         Ok(lib)
     }
 
-    pub fn resolve_symbol(&self, symbol: &Symbol) -> Option<NodeType> {
-        if let Some(found) = self.symbols.get_type(symbol) {
-            Some(found.clone())
-        } else {
-            for dep in &self.dependencies {
-                if let Some(found) = dep.resolve_symbol(symbol) {
-                    return Some(found);
-                }
-            }
-            None
-        }
-    }
-
     pub fn type_metadata(&self, symbol: &Symbol) -> Option<TypeMetadata> {
         if let Some(found) = self.symbols.get_type_metadata(symbol) {
             Some(found.clone())

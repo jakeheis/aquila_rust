@@ -15,7 +15,7 @@ type Result = DiagnosticResult<NodeType>;
 
 struct Scope {
     id: Option<Symbol>,
-    symbols: SymbolTable,
+    variable_types: HashMap<Symbol, NodeType>,
     function_metadata: Option<FunctionMetadata>,
 }
 
@@ -23,7 +23,7 @@ impl Scope {
     fn new(id: Option<Symbol>, function_metadata: Option<FunctionMetadata>) -> Self {
         Scope {
             id,
-            symbols: SymbolTable::new(),
+            variable_types: HashMap::new(),
             function_metadata,
         }
     }
@@ -37,16 +37,18 @@ impl Scope {
 
         trace!(target: "type_checker", "Defining {} (symbol = {}) as {}", name.span().lexeme(), new_symbol, var_type);
 
-        self.symbols
-            .insert(new_symbol.clone(), var_type.clone(), name.span().clone());
+        self.variable_types.insert(new_symbol.clone(), var_type.clone());
 
         name.set_symbol(new_symbol);
         name.set_type(var_type.clone());
     }
 
     fn put_in_scope(&mut self, symbol: &Symbol, var_type: &NodeType) {
-        self.symbols
-            .insert(symbol.clone(), var_type.clone(), Span::empty());
+        self.variable_types.insert(symbol.clone(), var_type.clone());
+    }
+
+    fn type_of(&self, symbol: &Symbol) -> Option<&NodeType> {
+        self.variable_types.get(symbol)
     }
 }
 
@@ -200,17 +202,11 @@ impl TypeChecker {
     fn resolve_var(&self, name: &str) -> Option<(Symbol, NodeType)> {
         for scope in self.scopes.iter().rev() {
             let possible_symbol = Symbol::new_str((&scope.id).as_ref(), name);
-            if let Some(node_type) = scope.symbols.get_type(&possible_symbol) {
+            if let Some(node_type) = scope.type_of(&possible_symbol) {
                 return Some((possible_symbol, node_type.clone()));
             }
         }
-
-        let lib_symbol = Symbol::new_str(None, name);
-        if let Some(node_type) = self.lib.resolve_symbol(&lib_symbol) {
-            Some((lib_symbol, node_type))
-        } else {
-            None
-        }
+        None
     }
 
     fn check_type_match(
@@ -286,8 +282,8 @@ impl StmtVisitor for TypeChecker {
 
         self.push_scope_meta();
         for meta_method in &metadata.meta_methods {
-            let method_type = self.lib.resolve_symbol(&meta_method).unwrap();
-            self.current_scope().put_in_scope(meta_method, &method_type);
+            let method_metadata = self.lib.function_metadata(&meta_method).unwrap();
+            self.current_scope().put_in_scope(meta_method, &method_metadata.node_type());
         }
         for meta_method in &decl.meta_methods {
             self.visit_function_decl(meta_method);
@@ -299,8 +295,8 @@ impl StmtVisitor for TypeChecker {
         }
 
         for method in &metadata.methods {
-            let method_type = self.lib.resolve_symbol(&method).unwrap();
-            self.current_scope().put_in_scope(method, &method_type);
+            let method_metadata = self.lib.function_metadata(&method).unwrap();
+            self.current_scope().put_in_scope(method, &method_metadata.node_type());
         }
         for method in &decl.methods {
             self.visit_function_decl(method);
