@@ -5,7 +5,7 @@ use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
 use log::trace;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct Symbol {
@@ -254,7 +254,7 @@ impl<'a> SymbolTableBuilder<'a> {
                     parameter_symbols: type_metadata.field_symbols.clone(),
                     parameter_types: type_metadata.field_types.clone(),
                     return_type: instance_type,
-                    specializations: Vec::new(),
+                    specializations: HashSet::new(),
                 },
             )
         }
@@ -319,7 +319,7 @@ impl<'a> SymbolTableBuilder<'a> {
             parameter_symbols: param_symbols,
             parameter_types: param_types,
             return_type: return_type,
-            specializations: Vec::new(),
+            specializations: HashSet::new(),
         };
         self.insert_func_metadata(function_symbol.clone(), function_metadata);
 

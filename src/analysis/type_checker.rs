@@ -57,7 +57,7 @@ pub struct TypeChecker {
     reporter: Rc<dyn Reporter>,
     lib: Rc<Lib>,
     call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
-    explicit_type_specializations: HashMap<Symbol, Vec<GenericSpecialization>>,
+    explicit_type_specializations: HashMap<Symbol, HashSet<GenericSpecialization>>,
     scopes: Vec<Scope>,
     is_builtin: bool,
 }
@@ -107,11 +107,8 @@ impl TypeChecker {
 
         for (symbol, specs) in explicit_type_map {
             let t = lib.type_metadata_mut(&symbol).unwrap();
-            let mut already_added: HashSet<String> = HashSet::new();
             for spec in specs {
-                if already_added.insert(spec.symbolic_list()) {
-                    t.specializations.push(spec);
-                }
+                t.specializations.insert(spec);
             }
         }
 
@@ -265,8 +262,8 @@ impl TypeChecker {
                 if let NodeType::Instance(type_symbol, spec) = &deduced {
                     self.explicit_type_specializations
                         .entry(type_symbol.clone())
-                        .or_insert(Vec::new())
-                        .push(spec.clone());
+                        .or_insert(HashSet::new())
+                        .insert(spec.clone());
                 }
                 Ok(deduced)
             }
@@ -788,10 +785,7 @@ impl ExprVisitor for TypeChecker {
                             )
                         }
                         _ => {
-                            return Err(Diagnostic::error(
-                                function.span(),
-                                "Undefined function",
-                            ));
+                            return Err(Diagnostic::error(function.span(), "Undefined function"));
                         }
                     }
                 }
@@ -960,18 +954,12 @@ impl ExprVisitor for TypeChecker {
             );
             match &explicit_type {
                 Some(NodeType::Instance(symbol, spec)) => {
-                    self.confirm_fully_specialized(
-                        name.span(),
-                        explicit_type.as_ref().unwrap(),
-                    )?;
+                    self.confirm_fully_specialized(name.span(), explicit_type.as_ref().unwrap())?;
                     trace!(target: "type_checker", "Treating variable as metatype of {}", symbol);
                     name.set_symbol(symbol.clone());
                     expr.set_type(NodeType::Metatype(symbol.clone(), spec.clone()))
                 }
-                _ => Err(Diagnostic::error(
-                    name.span(),
-                    "Undefined variable",
-                )),
+                _ => Err(Diagnostic::error(name.span(), "Undefined variable")),
             }
         }
     }

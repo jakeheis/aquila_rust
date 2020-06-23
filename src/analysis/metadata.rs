@@ -1,6 +1,6 @@
 use crate::analysis::{FunctionType, NodeType, Symbol};
 use crate::library::Lib;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug)]
 pub struct TypeMetadata {
@@ -10,7 +10,7 @@ pub struct TypeMetadata {
     pub field_types: Vec<NodeType>,
     pub methods: Vec<Symbol>,
     pub meta_methods: Vec<Symbol>,
-    pub specializations: Vec<GenericSpecialization>,
+    pub specializations: HashSet<GenericSpecialization>,
 }
 
 impl TypeMetadata {
@@ -22,7 +22,7 @@ impl TypeMetadata {
             field_types: Vec::new(),
             methods: Vec::new(),
             meta_methods: Vec::new(),
-            specializations: Vec::new(),
+            specializations: HashSet::new(),
         }
     }
 
@@ -34,7 +34,7 @@ impl TypeMetadata {
             field_types: Vec::new(),
             methods: Vec::new(),
             meta_methods: Vec::new(),
-            specializations: Vec::new(),
+            specializations: HashSet::new(),
         }
     }
 
@@ -151,7 +151,7 @@ pub struct FunctionMetadata {
     pub parameter_symbols: Vec<Symbol>,
     pub parameter_types: Vec<NodeType>,
     pub return_type: NodeType,
-    pub specializations: Vec<GenericSpecialization>,
+    pub specializations: HashSet<GenericSpecialization>,
 }
 
 impl FunctionMetadata {
@@ -372,6 +372,14 @@ impl PartialEq for GenericSpecialization {
         //     }
         // }
         // true
+    }
+}
+
+impl Eq for GenericSpecialization {}
+
+impl std::hash::Hash for GenericSpecialization {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.symbolic_list().hash(state);
     }
 }
 

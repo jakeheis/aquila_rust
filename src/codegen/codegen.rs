@@ -8,6 +8,7 @@ use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
 use log::trace;
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
@@ -131,7 +132,7 @@ impl Codegen {
             parameter_symbols: Vec::new(),
             parameter_types: Vec::new(),
             return_type: NodeType::Int,
-            specializations: Vec::new(),
+            specializations: HashSet::new(),
         };
 
         self.writer.start_decl_func(

@@ -91,7 +91,10 @@ impl Stmt {
         right_brace: &Token,
     ) -> Self {
         let span = Span::join(&type_span, right_brace);
-        let generics: Vec<_> = generics.into_iter().map(|g| ResolvedToken::new_non_specialized(g)).collect();
+        let generics: Vec<_> = generics
+            .into_iter()
+            .map(|g| ResolvedToken::new_non_specialized(g))
+            .collect();
         let decl = TypeDecl {
             name: ResolvedToken::new_non_specialized(name),
             generics,
@@ -113,7 +116,10 @@ impl Stmt {
         is_meta: bool,
     ) -> Self {
         let span = Span::join(&start_span, right_brace_span);
-        let generics: Vec<_> = generics.into_iter().map(|g| ResolvedToken::new_non_specialized(g)).collect();
+        let generics: Vec<_> = generics
+            .into_iter()
+            .map(|g| ResolvedToken::new_non_specialized(g))
+            .collect();
         let decl = FunctionDecl {
             name: ResolvedToken::new_non_specialized(name),
             generics,
@@ -316,7 +322,7 @@ impl ResolvedToken {
             token,
             symbol: RefCell::new(None),
             specialization,
-            span
+            span,
         }
     }
 

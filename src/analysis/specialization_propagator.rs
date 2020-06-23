@@ -69,16 +69,14 @@ impl<'a> SpecializationPropagator<'a> {
 
         trace!(target: "spec_propagate", "Adding function spec {} to {}", current_spec, cur);
         if let Some(mut_metadata) = self.lib.function_metadata_mut(cur) {
-            mut_metadata.specializations.push(current_spec.clone());
+            mut_metadata.specializations.insert(current_spec.clone());
         }
 
         match metadata.map(|m| m.kind) {
             Some(FunctionKind::Method(owner)) | Some(FunctionKind::MetaMethod(owner)) => {
                 let subset = current_spec.subset(&owner);
                 let type_metadata = self.lib.type_metadata_mut(&owner).unwrap();
-                if !type_metadata.specializations.contains(&subset) {
-                    type_metadata.specializations.push(subset);
-                }
+                type_metadata.specializations.insert(subset);
             }
             _ => (),
         }
