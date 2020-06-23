@@ -10,7 +10,6 @@ use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
 // use crate::source::*;
-// use crate::source::*;
 
 #[derive(PartialEq)]
 enum CodegenStage {
@@ -421,8 +420,11 @@ impl ExprVisitor for Codegen {
         };
 
         if let Some(target ) = target {
-            if let NodeType::Instance(_, specs) = target.get_type().unwrap() {
-                specialization = specialization.merge(self.lib.as_ref(), &specs);
+            match target.get_type().unwrap() {
+                NodeType::Instance(_, specs) | NodeType::Metatype(_, specs) => {
+                    specialization = specialization.merge(self.lib.as_ref(), &specs);
+                },
+                _ => ()
             }
         }
 
@@ -490,7 +492,7 @@ impl ExprVisitor for Codegen {
             if let Some(spec) = self.specialization.as_ref() {
                 if spec.map.contains_key(&symbol) {
                     let spec_type = expr_type.specialize(self.lib.as_ref(), spec);
-                    return self.writer.convert_type(&spec_type, String::new()).0;
+                    return self.writer.convert_type(&spec_type, String::new(), false).0;
                 }
             }
         }
@@ -543,7 +545,7 @@ impl ExprVisitor for Codegen {
     ) -> Self::ExprResult {
         let cast_type = explicit_type.guarantee_resolved();
         let cast_type = cast_type.specialize_opt(self.lib.as_ref(), self.specialization.as_ref());
-        let (cast_type, _) = self.writer.convert_type(&cast_type, String::new());
+        let (cast_type, _) = self.writer.convert_type(&cast_type, String::new(), false);
         let value = value.accept(self);
 
         format!("({})({})", cast_type, value)

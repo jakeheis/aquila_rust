@@ -93,23 +93,23 @@ type String {
 
 }
 
-type Vec {
+type Vec[T] {
 
-    let storage: ptr any;
+    let storage: ptr T;
     let count: int;
     let capacity: int;
     let element_size: int;
 
-    meta def new[T](): Vec {
+    meta def new(): Vec[T] {
         let storage = Memory.allocate_block[T](10);
-        return Vec(storage, 0, 0, Memory.size[T]());
+        return Vec[T](storage, 0, 0, Memory.size[T]());
     }
 
-    def insert[T](object: T) {
+    def insert(object: T) {
         insert_ptr(&object);
     }
 
-    def insert_ptr[T](object: ptr T) {
+    def insert_ptr(object: ptr T) {
         if count == capacity {
             capacity = capacity * 2;
             storage = Memory.reallocate(cast[ptr T](storage), capacity);
@@ -121,7 +121,7 @@ type Vec {
         count = count + 1;
     }
 
-    def get[T](index: int): ptr T {
+    def get(index: int): ptr T {
         return Memory.offset(cast[ptr T](storage), index);
     }
 

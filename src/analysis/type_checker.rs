@@ -336,18 +336,23 @@ impl StmtVisitor for TypeChecker {
         let (func_symbol, metadata) = self.push_function_scope(&decl.name);
         decl.name.set_symbol(func_symbol.clone());
 
-        let explicit_type_span = decl.return_type.as_ref();
+        let explicit_return_type = decl.return_type.as_ref();
+        if let Some(e) = explicit_return_type {
+            if let Err(diag) = self.confirm_fully_specialized(e, &metadata.return_type) {
+                self.report_error(diag);
+            }
+        }
         let return_type = match &metadata.return_type {
             NodeType::Array(..) => {
                 self.report_error(Diagnostic::error(
-                    explicit_type_span.unwrap(),
+                    explicit_return_type.unwrap(),
                     "Cannot return an array",
                 ));
                 &NodeType::Ambiguous
             }
             NodeType::Ambiguous => {
                 self.report_error(Diagnostic::error(
-                    explicit_type_span.unwrap(),
+                    explicit_return_type.unwrap(),
                     "Undefined type",
                 ));
                 &NodeType::Ambiguous
@@ -774,7 +779,7 @@ impl ExprVisitor for TypeChecker {
         } else {
             if function_specialization.len() != metadata.generics.len() {
                 let message = format!(
-                    "Expected {} specializations, got {} (func check)",
+                    "Expected {} specializations, got {}",
                     metadata.generics.len(),
                     function_specialization.len()
                 );

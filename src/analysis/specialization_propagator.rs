@@ -34,6 +34,7 @@ impl<'a> SpecializationPropagator<'a> {
         prop.go();
 
         trace!(target: "spec_propagate", "{}", lib.symbols);
+        trace!(target: "spec_propagate", "{}", lib.dependencies[0].symbols);
     }
 
     pub fn flattened_call_map(

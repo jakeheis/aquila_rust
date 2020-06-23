@@ -41,7 +41,8 @@ impl CWriter {
         self.indent += 1;
         
         for (node_type, symbol) in type_metadata.field_types.iter().zip(&type_metadata.field_symbols) {
-            self.decl_var(&node_type.specialize(self.lib.as_ref(), specialization), &symbol.mangled(), None);
+            let (c_type, name) = self.convert_type(&node_type.specialize(self.lib.as_ref(), specialization), symbol.mangled(), true);
+            self.writeln(&format!("{} {};", c_type, name));
         }
         
         self.indent -= 1;
@@ -83,7 +84,7 @@ impl CWriter {
     }
 
     pub fn type_and_name(&self, var_type: &NodeType, name: &str) -> String {
-        let (t, n) = self.convert_type(var_type, String::from(name));
+        let (t, n) = self.convert_type(var_type, String::from(name), false);
         format!("{} {}", t, n)
     }
 
@@ -178,7 +179,7 @@ impl CWriter {
         self.end_conditional_block();
     }
 
-    pub fn convert_type(&self, node_type: &NodeType, name: String) -> (String, String) {
+    pub fn convert_type(&self, node_type: &NodeType, name: String, include_struct: bool) -> (String, String) {
         let simple = match node_type {
             NodeType::Void => Some("void"),
             NodeType::Int => Some("int"),
@@ -191,18 +192,24 @@ impl CWriter {
         }
 
         match node_type {
-            NodeType::Instance(..) => (node_type.symbolic_form(), name),
+            NodeType::Instance(..) => {
+                if include_struct {
+                    (format!("struct {}", node_type.symbolic_form()), name)
+                } else {
+                    (node_type.symbolic_form(), name)
+                }
+            }
             NodeType::Pointer(ty) => {
                 let ty: &NodeType = &ty.coerce_array_to_ptr();
                 if let NodeType::Any = ty {
                     (String::from("void*"), name)
                 } else {
-                    let (type_portion, name_portion) = self.convert_type(ty, name);
+                    let (type_portion, name_portion) = self.convert_type(ty, name, include_struct);
                     (format!("{}*", type_portion), name_portion)
                 }
             }
             NodeType::Array(ty, count) => {
-                let (type_portion, name_portion) = self.convert_type(ty, name);
+                let (type_portion, name_portion) = self.convert_type(ty, name, include_struct);
                 (type_portion, format!("{}[{}]", name_portion, count))
             }
             other_type => panic!("Can't convert type {}", other_type),

@@ -294,8 +294,10 @@ impl GenericSpecialization {
     }
 
     pub fn display_list(&self) -> String {
-        self.map.iter().map(|(symbol, node_type)| {
-            format!("{}={}", symbol.last_component(), node_type)
+        let mut keys: Vec<_> = self.map.keys().collect();
+        keys.sort();
+        keys.iter().map(|symbol| {
+            format!("{}={}", symbol.last_component(), self.map.get(symbol).unwrap())
         }).collect::<Vec<String>>().join(",")
     }
 

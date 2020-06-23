@@ -3,6 +3,7 @@ use crate::diagnostic::*;
 use crate::library::*;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use log::trace;
 
 pub struct CycleChecker {
     field_map: HashMap<Symbol, HashSet<Symbol>>,
@@ -22,6 +23,8 @@ impl CycleChecker {
             }
             field_map.insert(type_symbol.clone(), field_set);
         }
+
+        trace!(target: "cycle_checker", "Field map: {:#?}", field_map);
 
         let mut checker = CycleChecker {
             field_map,

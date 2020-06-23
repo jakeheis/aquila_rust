@@ -76,17 +76,20 @@ customized_adder.extra_fun("hi", Adder[bool](3, 1));
 let result = customized_adder.add_mysterious(4, Adder[bool](3, 1));
 print result.add(5);
 
-let vec_int = Vec.new[int]();
+let vec_int = Vec[int].new();
 vec_int.insert(4);
 vec_int.insert(6);
-print *(vec_int.get[int](1));
 
-let vec = Vec.new[Adder[byte]]();
+print "Expect 6:";
+print *(vec_int.get(1));
+
+let vec = Vec[Adder[byte]].new();
  
-vec.insert(Adder[int](10, 2));
-vec.insert(Adder[int](3, 4));
+vec.insert(Adder[byte](10, 2));
+vec.insert(Adder[byte](3, 4));
 
-print (*vec.get[Adder[int]](1)).add(2);
+print "Expect 9:";
+print (*vec.get(1)).add(2);
 
 print Adder[int](1, 2).add(2);
 
