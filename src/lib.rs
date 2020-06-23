@@ -8,10 +8,15 @@ pub mod source;
 
 use codegen::Codegen;
 use library::Lib;
+use diagnostic::{Reporter, DefaultReporter};
 pub use source::*;
 
 pub fn run(source: Source) -> Result<(), &'static str> {
-    let lib = Lib::from_source(source)?;
+    run_with_reporter(source, DefaultReporter::new())
+}
+
+pub fn run_with_reporter(source: Source, reporter: std::rc::Rc<dyn Reporter>) -> Result<(), &'static str> {
+    let lib = Lib::from_source(source, reporter)?;
     Codegen::generate(lib);
     Ok(())
 }

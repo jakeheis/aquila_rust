@@ -94,15 +94,10 @@ fn assert_failure(tokens: Vec<Token>, expected: &[Diagnostic]) -> TestResult {
     )
 }
 
-fn test_parse(mut tokens: Vec<Token>) -> (ParsedProgram, Vec<Diagnostic>) {
+fn test_parse(mut tokens: Vec<Token>) -> (Vec<Stmt>, Vec<Diagnostic>) {
     tokens.push(test_token::semicolon());
-    let (source, combined) = test_token::join(&tokens);
-    let program = LexedProgram {
-        source: source,
-        tokens: combined,
-    };
+    let (_, combined) = test_token::join(&tokens);
     let (reporter, mut diagnostics) = TestReporter::new();
-    let parser = Parser::new(program, reporter);
-    let parsed = parser.parse();
-    (parsed, diagnostics.unwrap())
+    let parser = Parser::new(combined, reporter);
+    (parser.parse(), diagnostics.unwrap())
 }

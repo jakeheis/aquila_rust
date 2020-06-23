@@ -182,6 +182,7 @@ pub mod test_token {
     }
 }
 
+/*
 #[allow(dead_code)]
 pub mod test_ast {
 
@@ -189,13 +190,21 @@ pub mod test_ast {
     use aquila::lexing::*;
     use aquila::parsing::*;
 
+    pub fn int_explicit_type() -> ExplicitType {
+        let int_token = ResolvedToken::new(test_token::int_type(), Vec::new());
+        let span = int_token.compute_span();
+        let kind = ExplicitTypeKind::Simple(int_token);
+        ExplicitType::new(span.clone(), kind, &span)
+    }
+
     pub fn window_type() -> Stmt {
         Stmt::type_decl(
             test_token::type_keyword().span,
             test_token::type_name(),
+            Vec::new(),
             vec![Stmt::variable_decl(
                 test_token::property_name(),
-                Some(test_token::int_type()),
+                Some(int_explicit_type()),
                 None,
             )],
             vec![Stmt::function_decl(
@@ -203,7 +212,7 @@ pub mod test_ast {
                 test_token::func_name(),
                 vec![Stmt::variable_decl(
                     test_token::test(TokenKind::Identifier, "rhs"),
-                    Some(test_token::int_type()),
+                    Some(int_explicit_type()),
                     None,
                 )],
                 Some(test_token::int_type()),
@@ -225,7 +234,7 @@ pub mod test_ast {
         )
     }
 }
-
+*/
 pub struct DiagnosticCapture {
     diagnostics: Rc<RefCell<Vec<Diagnostic>>>,
 }
@@ -257,6 +266,9 @@ impl TestReporter {
 impl Reporter for TestReporter {
     fn report(&self, diagnostic: Diagnostic) {
         self.diagnostics.borrow_mut().push(diagnostic);
+    }
+    fn has_errored(&self) -> bool {
+        !self.diagnostics.borrow().is_empty()
     }
 }
 

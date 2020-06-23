@@ -79,7 +79,6 @@ fn test_lex(text: &str) -> (Vec<Token>, Vec<Diagnostic>) {
     let (reporter, mut diagnostics) = TestReporter::new();
 
     let lexer = Lexer::new(test_source, reporter);
-    let program = lexer.lex();
 
-    return (program.tokens, diagnostics.unwrap());
+    return (lexer.lex(), diagnostics.unwrap());
 }

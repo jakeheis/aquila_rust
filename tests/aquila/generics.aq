@@ -1,0 +1,32 @@
+type GenericMadness[T] {
+
+    meta def make_new[U](): GenericMadness[U] {
+        return GenericMadness[U]();
+    }
+
+    def spawn[X](object: X): GenericMadness[GenericMadness[X]] {
+        return GenericMadness[GenericMadness[X]]();
+    }
+
+}
+
+type MoreMadness[V] {
+
+    let object: GenericMadness[V];
+
+    meta def create(object: V): MoreMadness[V] {
+        let inner = GenericMadness[bool].make_new[V]();
+        return MoreMadness[V](inner);
+    }
+
+    def inner[W](ob: W): GenericMadness[V] {
+        return object;
+    }
+
+}
+
+let madness: GenericMadness[int] = GenericMadness[ptr byte].make_new[int]();
+let spawned: GenericMadness[GenericMadness[ptr int]] = madness.spawn(&4);
+
+let more: MoreMadness[bool] = MoreMadness[bool].create(true);
+let inner: GenericMadness[bool] = more.inner(false);

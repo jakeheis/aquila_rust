@@ -23,15 +23,15 @@ const LOG_TYPE_CHECKER: bool = false;
 const LOG_STDLIB: bool = false;
 
 impl Lib {
-    pub fn from_source(source: Source) -> Result<Lib, &'static str> {
+    pub fn from_source(source: Source, reporter: Rc<dyn Reporter>) -> Result<Lib, &'static str> {
         let name = source.name().to_string();
-        Lib::build_lib(source, &name, true)
+        Lib::build_lib(source, &name, true, reporter)
     }
 
-    pub fn stdlib() -> Lib {
+    pub fn stdlib(reporter: Rc<dyn Reporter>) -> Lib {
         let src =
             source::file("/Users/jakeheiser/Desktop/Projects/Rust/aquila/src/library/stdlib.aq");
-        let lib = Lib::build_lib(src, "stdlib", false).unwrap();
+        let lib = Lib::build_lib(src, "stdlib", false, reporter).unwrap();
         core::add_builtin_symbols(&lib);
         if LOG_STDLIB {
             println!("std {}", lib.symbols);
@@ -39,11 +39,9 @@ impl Lib {
         lib
     }
 
-    fn build_lib(source: Source, name: &str, link_stdlib: bool) -> Result<Lib, &'static str> {
-        let reporter: Rc<dyn Reporter> = DefaultReporter::new();
-
+    fn build_lib(source: Source, name: &str, link_stdlib: bool, reporter: Rc<dyn Reporter>) -> Result<Lib, &'static str> {
         let dependencies = if link_stdlib {
-            vec![Lib::stdlib()]
+            vec![Lib::stdlib(Rc::clone(&reporter))]
         } else {
             vec![]
         };
