@@ -71,7 +71,7 @@ impl ASTPrinter {
                     .unwrap_or(String::from("<none>"));
                 self.write_ln(&format!(
                     "ExplicitType(name: {}, symbol: {})",
-                    token.compute_span().lexeme(),
+                    token.span().lexeme(),
                     symbol
                 ));
                 self.indent(|visitor| {
@@ -140,19 +140,13 @@ impl StmtVisitor for ASTPrinter {
             .get_symbol()
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
-        let resolved_type = decl
-            .name
-            .get_type()
-            .map(|t| t.to_string())
-            .unwrap_or(String::from("<none>"));
-        let generics: Vec<_> = decl.generics.iter().map(|g| g.token.lexeme()).collect();
+        let generics: Vec<_> = decl.generics.iter().map(|g| g.span().lexeme()).collect();
         let generics = format!("<{}>", generics.join(","));
         self.write_ln(&format!(
-            "FunctionDecl(name: {}, generics: {}, symbol: {}, resolved_type: {}, meta: {})",
+            "FunctionDecl(name: {}, generics: {}, symbol: {}, meta: {})",
             decl.name.span().lexeme(),
             generics,
             symbol,
-            resolved_type,
             decl.is_meta,
         ));
         self.indent(|visitor| {
@@ -179,16 +173,10 @@ impl StmtVisitor for ASTPrinter {
             .get_symbol()
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
-        let resolved_type = decl
-            .name
-            .get_type()
-            .map(|s| s.to_string())
-            .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
-            "VariableDecl(name: {}, symbol: {}, resolved_type: {})",
+            "VariableDecl(name: {}, symbol: {})",
             decl.name.span().lexeme(),
             symbol,
-            resolved_type,
         ));
         self.indent(|visitor| {
             if let Some(e) = decl.explicit_type.as_ref() {
@@ -358,7 +346,7 @@ impl ExprVisitor for ASTPrinter {
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "Field(name: {}, symbol: {})",
-            field.compute_span().lexeme(),
+            field.span().lexeme(),
             symbol
         ));
         self.indent(|visitor| {
@@ -377,7 +365,7 @@ impl ExprVisitor for ASTPrinter {
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "Variable(name: {}, symbol: {})",
-            name.compute_span().lexeme(),
+            name.span().lexeme(),
             symbol
         ))
     }

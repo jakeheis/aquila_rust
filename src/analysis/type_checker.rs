@@ -191,14 +191,14 @@ impl TypeChecker {
         self.push_scope(symbol, None);
     }
 
-    fn push_type_scope(&mut self, name: &TypedToken) -> (Symbol, TypeMetadata) {
+    fn push_type_scope(&mut self, name: &ResolvedToken) -> (Symbol, TypeMetadata) {
         let symbol = Symbol::new(self.current_symbol(), &name.token);
         let metadata = self.lib.type_metadata(&symbol).unwrap();
         self.push_scope(symbol.clone(), None);
         (symbol, metadata)
     }
 
-    fn push_function_scope(&mut self, name: &TypedToken) -> (Symbol, FunctionMetadata) {
+    fn push_function_scope(&mut self, name: &ResolvedToken) -> (Symbol, FunctionMetadata) {
         let symbol = Symbol::new(self.current_symbol(), &name.token);
         let metadata = self.lib.function_metadata(&symbol).unwrap();
         self.push_scope(symbol.clone(), Some(metadata.clone()));
@@ -698,7 +698,7 @@ impl ExprVisitor for TypeChecker {
                             )
                         } else {
                             return Err(Diagnostic::error(
-                                &Span::join(target, &function.compute_span()),
+                                &Span::join(target, function.span()),
                                 &format!(
                                     "Type '{}' does not have method '{}'",
                                     target_type, function_name
@@ -718,7 +718,7 @@ impl ExprVisitor for TypeChecker {
                             )
                         } else {
                             return Err(Diagnostic::error(
-                                &Span::join(target, &function.compute_span()),
+                                &Span::join(target, function.span()),
                                 &format!(
                                     "Type '{}' does not have meta method '{}'",
                                     target_type, function_name
@@ -762,7 +762,7 @@ impl ExprVisitor for TypeChecker {
                         }
                         _ => {
                             return Err(Diagnostic::error(
-                                &function.compute_span(),
+                                function.span(),
                                 &format!("Cannot call type {}", node_type),
                             ))
                         }
@@ -777,7 +777,7 @@ impl ExprVisitor for TypeChecker {
                     match &explicit_type {
                         Some(NodeType::Instance(type_symbol, specs)) => {
                             self.confirm_fully_specialized(
-                                &function.compute_span(),
+                                function.span(),
                                 explicit_type.as_ref().unwrap(),
                             )?;
                             let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
@@ -789,7 +789,7 @@ impl ExprVisitor for TypeChecker {
                         }
                         _ => {
                             return Err(Diagnostic::error(
-                                &function.compute_span(),
+                                function.span(),
                                 "Undefined function",
                             ));
                         }
@@ -849,7 +849,7 @@ impl ExprVisitor for TypeChecker {
                 metadata.generics.len(),
                 function_specialization.len()
             );
-            return Err(Diagnostic::error(&function.compute_span(), &message));
+            return Err(Diagnostic::error(function.span(), &message));
         }
 
         let specialization: std::result::Result<Vec<NodeType>, _> = function_specialization
@@ -916,11 +916,11 @@ impl ExprVisitor for TypeChecker {
                     expr.set_type(field_type.specialize(self.lib.as_ref(), &specialization))
                 } else {
                     Err(Diagnostic::error(
-                        &Span::join(target, &field.compute_span()),
+                        &Span::join(target, field.span()),
                         &format!(
                             "Type '{}' does not has field '{}'",
                             type_symbol.id,
-                            field.compute_span().lexeme()
+                            field.span().lexeme()
                         ),
                     ))
                 }
@@ -945,7 +945,7 @@ impl ExprVisitor for TypeChecker {
     }
 
     fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
-        if let Some((found_symbol, node_type)) = self.resolve_var(name.compute_span().lexeme()) {
+        if let Some((found_symbol, node_type)) = self.resolve_var(name.span().lexeme()) {
             if !name.specialization.is_empty() {
                 return Err(Diagnostic::error(expr, "Cannot specialize variable"));
             }
@@ -961,7 +961,7 @@ impl ExprVisitor for TypeChecker {
             match &explicit_type {
                 Some(NodeType::Instance(symbol, spec)) => {
                     self.confirm_fully_specialized(
-                        &name.compute_span(),
+                        name.span(),
                         explicit_type.as_ref().unwrap(),
                     )?;
                     trace!(target: "type_checker", "Treating variable as metatype of {}", symbol);
@@ -969,7 +969,7 @@ impl ExprVisitor for TypeChecker {
                     expr.set_type(NodeType::Metatype(symbol.clone(), spec.clone()))
                 }
                 _ => Err(Diagnostic::error(
-                    &name.compute_span(),
+                    name.span(),
                     "Undefined variable",
                 )),
             }

@@ -6,16 +6,16 @@ use crate::source::*;
 use std::cell::RefCell;
 
 pub struct TypeDecl {
-    pub name: TypedToken,
-    pub generics: Vec<TypedToken>,
+    pub name: ResolvedToken,
+    pub generics: Vec<ResolvedToken>,
     pub fields: Vec<VariableDecl>,
     pub methods: Vec<FunctionDecl>,
     pub meta_methods: Vec<FunctionDecl>,
 }
 
 pub struct FunctionDecl {
-    pub name: TypedToken,
-    pub generics: Vec<TypedToken>,
+    pub name: ResolvedToken,
+    pub generics: Vec<ResolvedToken>,
     pub parameters: Vec<VariableDecl>,
     pub return_type: Option<ExplicitType>,
     pub body: Vec<Stmt>,
@@ -91,9 +91,9 @@ impl Stmt {
         right_brace: &Token,
     ) -> Self {
         let span = Span::join(&type_span, right_brace);
-        let generics: Vec<_> = generics.into_iter().map(|g| TypedToken::new(g)).collect();
+        let generics: Vec<_> = generics.into_iter().map(|g| ResolvedToken::new_non_specialized(g)).collect();
         let decl = TypeDecl {
-            name: TypedToken::new(name),
+            name: ResolvedToken::new_non_specialized(name),
             generics,
             fields,
             methods,
@@ -113,9 +113,9 @@ impl Stmt {
         is_meta: bool,
     ) -> Self {
         let span = Span::join(&start_span, right_brace_span);
-        let generics: Vec<_> = generics.into_iter().map(|g| TypedToken::new(g)).collect();
+        let generics: Vec<_> = generics.into_iter().map(|g| ResolvedToken::new_non_specialized(g)).collect();
         let decl = FunctionDecl {
-            name: TypedToken::new(name),
+            name: ResolvedToken::new_non_specialized(name),
             generics,
             parameters,
             return_type,
@@ -247,7 +247,7 @@ pub trait StmtVisitor {
     fn visit_builtin_stmt(&mut self, inner: &Box<Stmt>) -> Self::StmtResult;
 }
 
-// Expr
+// Tokens
 
 pub struct TypedToken {
     pub token: Token,
@@ -292,14 +292,31 @@ pub struct ResolvedToken {
     pub token: Token,
     symbol: RefCell<Option<Symbol>>,
     pub specialization: Vec<ExplicitType>,
+    span: Span,
 }
 
 impl ResolvedToken {
+    pub fn new_non_specialized(token: Token) -> Self {
+        let span = token.span.clone();
+        ResolvedToken {
+            token,
+            symbol: RefCell::new(None),
+            specialization: Vec::new(),
+            span,
+        }
+    }
+
     pub fn new(token: Token, specialization: Vec<ExplicitType>) -> Self {
+        let span = if let Some(last) = specialization.last() {
+            Span::join(&token.span, last)
+        } else {
+            token.span.clone()
+        };
         ResolvedToken {
             token,
             symbol: RefCell::new(None),
             specialization,
+            span
         }
     }
 
@@ -310,13 +327,11 @@ impl ResolvedToken {
     pub fn get_symbol(&self) -> Option<Symbol> {
         self.symbol.borrow().as_ref().map(|s| s.clone())
     }
+}
 
-    pub fn compute_span(&self) -> Span {
-        if let Some(last) = self.specialization.last() {
-            Span::join(&self.token.span, last)
-        } else {
-            self.token.span.clone()
-        }
+impl ContainsSpan for ResolvedToken {
+    fn span(&self) -> &Span {
+        &self.span
     }
 }
 

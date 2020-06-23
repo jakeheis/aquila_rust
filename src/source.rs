@@ -177,20 +177,6 @@ impl ContainsSpan for Stmt {
     }
 }
 
-pub trait ComputesSpan {
-    fn compute_span(&self) -> Option<Span>;
-}
-
-impl<T: ContainsSpan> ComputesSpan for Vec<T> {
-    fn compute_span(&self) -> Option<Span> {
-        if self.len() > 0 {
-            Some(Span::join(self[0].span(), self.last().unwrap().span()))
-        } else {
-            None
-        }
-    }
-}
-
 pub trait ReplaceableSpan {
     fn replace_span<T: ContainsSpan>(self, new_span: &T) -> Self;
 }

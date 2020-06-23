@@ -325,12 +325,10 @@ impl<'a> SymbolTableBuilder<'a> {
 
         trace!(target: "symbol_table", "Finished building function {} -- {}", decl.name.token.lexeme(), new_type);
 
-        decl.name.set_type(new_type.clone());
-
         function_symbol
     }
 
-    fn insert_generics(&mut self, owner: &Symbol, generics: &[TypedToken]) -> Vec<Symbol> {
+    fn insert_generics(&mut self, owner: &Symbol, generics: &[ResolvedToken]) -> Vec<Symbol> {
         let mut generic_symbols = Vec::new();
         for generic in generics {
             let generic_symbol = Symbol::new(self.context.last(), &generic.token);
