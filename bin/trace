@@ -1,5 +1,7 @@
 #!/usr/local/bin/zsh
 
+set -e
+
 if [ $# -eq 0 ]
   then
     RUST_BACKTRACE=1 RUST_LOG=trace cargo run > out.out 2>&1

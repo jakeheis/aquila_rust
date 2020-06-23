@@ -8,7 +8,7 @@ use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
 use log::trace;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 type Result = DiagnosticResult<NodeType>;
@@ -56,6 +56,7 @@ pub struct TypeChecker {
     reporter: Rc<dyn Reporter>,
     lib: Rc<Lib>,
     call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
+    explicit_type_specializations: HashMap<Symbol, Vec<GenericSpecialization>>,
     scopes: Vec<Scope>,
     is_builtin: bool,
 }
@@ -72,6 +73,7 @@ impl TypeChecker {
             reporter,
             lib: Rc::clone(&lib),
             call_map: HashMap::new(),
+            explicit_type_specializations: HashMap::new(),
             scopes: vec![top_level],
             is_builtin: false,
         };
@@ -94,11 +96,23 @@ impl TypeChecker {
         checker.pop_scope();
 
         let call_map = std::mem::replace(&mut checker.call_map, HashMap::new());
+        let explicit_type_map = std::mem::replace(&mut checker.explicit_type_specializations, HashMap::new());
 
         std::mem::drop(checker);
 
         let mut lib = Rc::try_unwrap(lib).ok().unwrap();
         lib.symbols.call_map = call_map;
+
+        for (symbol, specs) in explicit_type_map {
+            let t = lib.type_metadata_mut(&symbol).unwrap();
+            let mut already_added: HashSet<String> = HashSet::new();
+            for spec in specs {
+                if already_added.insert(spec.symbolic_list()) {
+                    t.specializations.push(spec);
+                }
+            }
+        }
+
         lib
     }
 
@@ -246,6 +260,9 @@ impl TypeChecker {
                 ))
             } else {
                 self.confirm_fully_specialized(explicit_type, &deduced)?;
+                if let NodeType::Instance(type_symbol, spec) = &deduced {
+                    self.explicit_type_specializations.entry(type_symbol.clone()).or_insert(Vec::new()).push(spec.clone());
+                }
                 Ok(deduced)
             }
         } else {
@@ -785,6 +802,7 @@ impl ExprVisitor for TypeChecker {
                 .as_ref()
                 .map(|f| f.symbol.clone())
                 .unwrap_or(Symbol::main_symbol());
+            trace!(target: "type_checker", "Adding call from {} to {} with {}", enclosing_func, func_symbol, merged);
             self.call_map
                 .entry(enclosing_func)
                 .or_insert(Vec::new())

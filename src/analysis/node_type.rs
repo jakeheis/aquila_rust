@@ -280,6 +280,15 @@ impl NodeType {
                     NodeType::Instance(symbol.clone(), new_spec)
                 }
             },
+            NodeType::Metatype(symbol, spec) => {
+                if let Some(specialized_type) = specialization.type_for(symbol) {
+                    // spec will be empty; generic parameters aren't specialized themselves, so it can be ignored
+                    specialized_type.clone()
+                } else {
+                    let new_spec = spec.resolve_generics_using(lib, specialization);
+                    NodeType::Metatype(symbol.clone(), new_spec)
+                }
+            },
             NodeType::Pointer(to) => NodeType::pointer_to(to.specialize(lib, specialization)),
             NodeType::Array(of, size) => {
                 let specialized = of.specialize(lib, specialization);

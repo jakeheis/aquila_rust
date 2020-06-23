@@ -9,7 +9,7 @@ use log::trace;
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
-use crate::source::*;
+// use crate::source::*;
 // use crate::source::*;
 
 #[derive(PartialEq)]
@@ -222,7 +222,7 @@ impl StmtVisitor for Codegen {
                     } else {
                         self.writer.start_decl_func(self.lib.as_ref(), &init_metadata, &spec);
                         self.writer
-                            .decl_var(&init_metadata.return_type, "new_item", None);
+                            .decl_var(&init_metadata.return_type.specialize(self.lib.as_ref(), &spec), "new_item", None);
                         for field in &type_metadata.field_symbols {
                             let target = format!("new_item.{}", field.mangled());
                             self.writer.write_assignment(&target, &field.mangled());
@@ -399,6 +399,8 @@ impl ExprVisitor for Codegen {
         let function_symbol = function.get_symbol().unwrap();
         let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
 
+        trace!(target: "codegen", "Writing call to {}", function_symbol);
+
         let mut specialization = if function.specialization.is_empty() {
             let arg_types: Vec<_> = args.iter().map(|a| a.get_type().unwrap()).collect();
             GenericSpecialization::infer(self.lib.as_ref(), &function_metadata, &arg_types)
@@ -425,7 +427,7 @@ impl ExprVisitor for Codegen {
         }
 
         if let Some(caller_specs) = self.specialization.as_ref() {
-            specialization = specialization.merge(self.lib.as_ref(), caller_specs)
+            specialization = specialization.resolve_generics_using(self.lib.as_ref(), caller_specs)
         }
 
         let function_name = function_metadata.function_name(self.lib.as_ref(), &specialization);
@@ -484,10 +486,14 @@ impl ExprVisitor for Codegen {
         let symbol = name.get_symbol().unwrap();
         let expr_type = expr.get_type().unwrap();
 
-        // if let NodeType::Metatype(type_symbol, spec) = expr_type {
-        //     let specialized_type = &self.specialization.as_ref().unwrap().node_types[num];
-        //     return self.writer.convert_type(specialized_type, String::new()).0;
-        // }
+        if let NodeType::Metatype(symbol, _) = &expr_type {
+            if let Some(spec) = self.specialization.as_ref() {
+                if spec.map.contains_key(&symbol) {
+                    let spec_type = expr_type.specialize(self.lib.as_ref(), spec);
+                    return self.writer.convert_type(&spec_type, String::new()).0;
+                }
+            }
+        }
 
         if self
             .current_type
