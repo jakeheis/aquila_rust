@@ -1,9 +1,9 @@
 pub use crate::analysis::NodeType;
 use crate::analysis::{FunctionKind, FunctionMetadata, GenericSpecialization, TypeMetadata};
+use crate::library::Lib;
 use crate::source::ContainsSpan;
 use std::fs::File;
 use std::io::Write;
-use crate::library::Lib;
 use std::rc::Rc;
 
 pub struct CWriter {
@@ -14,7 +14,11 @@ pub struct CWriter {
 
 impl CWriter {
     pub fn new(lib: Rc<Lib>, file: File) -> Self {
-        let mut writer = CWriter { lib, file, indent: 0 };
+        let mut writer = CWriter {
+            lib,
+            file,
+            indent: 0,
+        };
 
         writer.write_includes();
 
@@ -28,23 +32,42 @@ impl CWriter {
         self.writeln("#include <string.h>");
     }
 
-    pub fn write_struct_forward_decl(&mut self, type_metadata: &TypeMetadata, specialization: &GenericSpecialization) {
+    pub fn write_struct_forward_decl(
+        &mut self,
+        type_metadata: &TypeMetadata,
+        specialization: &GenericSpecialization,
+    ) {
         self.writeln("");
-        self.writeln(&format!("struct {};", type_metadata.type_name(specialization)));
+        self.writeln(&format!(
+            "struct {};",
+            type_metadata.type_name(specialization)
+        ));
     }
 
-    pub fn write_struct(&mut self, type_metadata: &TypeMetadata, specialization: &GenericSpecialization) {
+    pub fn write_struct(
+        &mut self,
+        type_metadata: &TypeMetadata,
+        specialization: &GenericSpecialization,
+    ) {
         let name = type_metadata.type_name(specialization);
 
         self.writeln("");
         self.writeln(&format!("typedef struct {} {{", name));
         self.indent += 1;
-        
-        for (node_type, symbol) in type_metadata.field_types.iter().zip(&type_metadata.field_symbols) {
-            let (c_type, name) = self.convert_type(&node_type.specialize(self.lib.as_ref(), specialization), symbol.mangled(), true);
+
+        for (node_type, symbol) in type_metadata
+            .field_types
+            .iter()
+            .zip(&type_metadata.field_symbols)
+        {
+            let (c_type, name) = self.convert_type(
+                &node_type.specialize(self.lib.as_ref(), specialization),
+                symbol.mangled(),
+                true,
+            );
             self.writeln(&format!("{} {};", c_type, name));
         }
-        
+
         self.indent -= 1;
         self.writeln(&format!("}} {};", name));
     }
@@ -135,7 +158,8 @@ impl CWriter {
     ) {
         let function_type = function.full_type().specialize(lib, specialization);
 
-        let mut param_str: Vec<String> = function_type.parameters
+        let mut param_str: Vec<String> = function_type
+            .parameters
             .iter()
             .zip(&function.parameter_symbols)
             .map(|(param_type, name)| self.type_and_name(param_type, &name.mangled()))
@@ -144,10 +168,7 @@ impl CWriter {
         if let FunctionKind::Method(owner) = &function.kind {
             let self_instance = NodeType::Instance(owner.clone(), specialization.subset(owner));
             let self_type = NodeType::pointer_to(self_instance);
-            param_str.insert(
-                0,
-                self.type_and_name(&self_type, "self"),
-            );
+            param_str.insert(0, self.type_and_name(&self_type, "self"));
         }
 
         let param_str = param_str.join(",");
@@ -155,7 +176,10 @@ impl CWriter {
         self.writeln("");
         self.writeln(&format!(
             "{}({}){}",
-            self.type_and_name(&function_type.return_type, &function.function_name(lib, specialization)),
+            self.type_and_name(
+                &function_type.return_type,
+                &function.function_name(lib, specialization)
+            ),
             param_str,
             terminator
         ));
@@ -180,7 +204,12 @@ impl CWriter {
         self.end_conditional_block();
     }
 
-    pub fn convert_type(&self, node_type: &NodeType, name: String, include_struct: bool) -> (String, String) {
+    pub fn convert_type(
+        &self,
+        node_type: &NodeType,
+        name: String,
+        include_struct: bool,
+    ) -> (String, String) {
         let simple = match node_type {
             NodeType::Void => Some("void"),
             NodeType::Int => Some("int"),

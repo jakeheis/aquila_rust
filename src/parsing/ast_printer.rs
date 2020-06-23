@@ -338,7 +338,10 @@ impl ExprVisitor for ASTPrinter {
             if function.specialization.len() > 0 {
                 visitor.write_ln("Specializations");
                 visitor.indent(|visitor| {
-                    function.specialization.iter().for_each(|a| visitor.write_explicit_type(a));
+                    function
+                        .specialization
+                        .iter()
+                        .for_each(|a| visitor.write_explicit_type(a));
                 });
             }
             visitor.write_ln("Arguments");

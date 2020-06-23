@@ -9,7 +9,10 @@ use common::*;
 fn gauntlet() -> Result<(), &'static str> {
     let i = fs::read_dir("/Users/jakeheiser/Desktop/Projects/Rust/aquila/tests/aquila").unwrap();
     for file in i {
-        println!("Testing file: {}", file.as_ref().ok().unwrap().path().to_str().unwrap());
+        println!(
+            "Testing file: {}",
+            file.as_ref().ok().unwrap().path().to_str().unwrap()
+        );
         test_file(file.unwrap().path())?;
     }
     Ok(())
@@ -29,9 +32,7 @@ fn test_file(file: PathBuf) -> Result<(), &'static str> {
 
     let source = aquila::source::file(file.to_str().unwrap());
     match aquila::run_with_reporter(source, reporter) {
-        Ok(_) => {
-            assert_eq!(diagnostics.unwrap().len(), 0)
-        },
+        Ok(_) => assert_eq!(diagnostics.unwrap().len(), 0),
         Err(message) => {
             println!("Diagnostics:");
             for diag in diagnostics.unwrap() {
@@ -59,7 +60,7 @@ fn test_file(file: PathBuf) -> Result<(), &'static str> {
                 return Err("Invalid output");
             }
         }
-        
+
         Ok(())
     } else {
         Ok(())

@@ -11,8 +11,7 @@ pub struct SpecializationPropagator<'a> {
 
 impl<'a> SpecializationPropagator<'a> {
     pub fn propogate(lib: &mut Lib) {
-        let mut call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>> =
-            HashMap::new();
+        let mut call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>> = HashMap::new();
         SpecializationPropagator::flattened_call_map(lib, &mut call_map);
 
         for (caller, calls) in &call_map {
@@ -80,8 +79,8 @@ impl<'a> SpecializationPropagator<'a> {
                 if !type_metadata.specializations.contains(&subset) {
                     type_metadata.specializations.push(subset);
                 }
-            },
-            _ => ()
+            }
+            _ => (),
         }
 
         if let Some(calls) = self.call_map.get(cur) {

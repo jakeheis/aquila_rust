@@ -76,7 +76,9 @@ impl Lexer {
             'a'..='z' | 'A'..='Z' | '_' => self.identifier(),
             '"' => self.string(),
             ',' => self.make_token(TokenKind::Comma),
-            '.' => self.conditional_make_token('[', TokenKind::PeriodLeftBracket, TokenKind::Period),
+            '.' => {
+                self.conditional_make_token('[', TokenKind::PeriodLeftBracket, TokenKind::Period)
+            }
             ';' => self.make_token(TokenKind::Semicolon),
             ':' => self.make_token(TokenKind::Colon),
             ' ' => None,

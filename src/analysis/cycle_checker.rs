@@ -1,9 +1,9 @@
 use super::*;
 use crate::diagnostic::*;
 use crate::library::*;
+use log::trace;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
-use log::trace;
 
 pub struct CycleChecker {
     field_map: HashMap<Symbol, HashSet<Symbol>>,

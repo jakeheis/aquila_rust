@@ -9,11 +9,7 @@ pub enum ExprKind {
     Assignment(Box<Expr>, Box<Expr>),
     Binary(Box<Expr>, Token, Box<Expr>),
     Unary(Token, Box<Expr>),
-    FunctionCall(
-        Option<Box<Expr>>,
-        ResolvedToken,
-        Vec<Expr>,
-    ),
+    FunctionCall(Option<Box<Expr>>, ResolvedToken, Vec<Expr>),
     Field(Box<Expr>, ResolvedToken),
     Literal(Token),
     Variable(ResolvedToken),
@@ -94,10 +90,7 @@ impl Expr {
         right_paren: &Token,
     ) -> Self {
         let span = Span::join(&function.compute_span(), right_paren);
-        Expr::new(
-            ExprKind::FunctionCall(target, function, args),
-            span,
-        )
+        Expr::new(ExprKind::FunctionCall(target, function, args), span)
     }
 
     pub fn field(target: Expr, name: Token, specialization: Vec<ExplicitType>) -> Self {
@@ -114,7 +107,10 @@ impl Expr {
 
     pub fn variable(name: Token, specialization: Vec<ExplicitType>) -> Self {
         let span = name.span().clone();
-        Expr::new(ExprKind::Variable(ResolvedToken::new(name, specialization)), span)
+        Expr::new(
+            ExprKind::Variable(ResolvedToken::new(name, specialization)),
+            span,
+        )
     }
 
     pub fn array(left_bracket: Span, elements: Vec<Expr>, right_bracket: &Token) -> Self {

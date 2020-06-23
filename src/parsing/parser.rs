@@ -3,8 +3,8 @@ use super::expr::*;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::source::*;
-use std::rc::Rc;
 use log::trace;
+use std::rc::Rc;
 
 type Result<T> = DiagnosticResult<T>;
 
@@ -533,18 +533,10 @@ impl Parser {
         let right_paren = self.consume(TokenKind::RightParen, "Expect ')' after arguments")?;
 
         match lhs.kind {
-            ExprKind::Field(object, field) => Ok(Expr::function_call(
-                Some(object),
-                field,
-                args,
-                right_paren,
-            )),
-            ExprKind::Variable(name) => Ok(Expr::function_call(
-                None,
-                name,
-                args,
-                right_paren,
-            )),
+            ExprKind::Field(object, field) => {
+                Ok(Expr::function_call(Some(object), field, args, right_paren))
+            }
+            ExprKind::Variable(name) => Ok(Expr::function_call(None, name, args, right_paren)),
             _ => {
                 let span = Span::join(&lhs, right_paren);
                 Err(Diagnostic::error(&span, "Cannot call non-function"))
@@ -553,7 +545,9 @@ impl Parser {
     }
 
     fn field(&mut self, lhs: Expr, can_assign: bool) -> Result<Expr> {
-        let field_name = self.consume(TokenKind::Identifier, "Expect field name after '.'")?.clone();
+        let field_name = self
+            .consume(TokenKind::Identifier, "Expect field name after '.'")?
+            .clone();
 
         let specialization = self.parse_possible_specialization()?;
 
@@ -751,7 +745,7 @@ impl Parser {
             None
         }
     }
-    
+
     fn consume(&mut self, kind: TokenKind, message: &str) -> Result<&Token> {
         if self.is_at_end() {
             return Err(Diagnostic::error(self.previous(), message));
@@ -809,9 +803,11 @@ impl TokenKind {
             TokenKind::Minus | TokenKind::Bang | TokenKind::Ampersand | TokenKind::Star => {
                 Some(Parser::unary)
             }
-            TokenKind::True | TokenKind::False | TokenKind::Int | TokenKind::Double | TokenKind::StringLiteral => {
-                Some(Parser::literal)
-            }
+            TokenKind::True
+            | TokenKind::False
+            | TokenKind::Int
+            | TokenKind::Double
+            | TokenKind::StringLiteral => Some(Parser::literal),
             TokenKind::Identifier => Some(Parser::variable),
             TokenKind::LeftBracket => Some(Parser::array),
             TokenKind::LeftParen => Some(Parser::grouping),

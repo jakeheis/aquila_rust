@@ -7,15 +7,18 @@ pub mod parsing;
 pub mod source;
 
 use codegen::Codegen;
+use diagnostic::{DefaultReporter, Reporter};
 use library::Lib;
-use diagnostic::{Reporter, DefaultReporter};
 pub use source::*;
 
 pub fn run(source: Source) -> Result<(), &'static str> {
     run_with_reporter(source, DefaultReporter::new())
 }
 
-pub fn run_with_reporter(source: Source, reporter: std::rc::Rc<dyn Reporter>) -> Result<(), &'static str> {
+pub fn run_with_reporter(
+    source: Source,
+    reporter: std::rc::Rc<dyn Reporter>,
+) -> Result<(), &'static str> {
     let lib = Lib::from_source(source, std::rc::Rc::clone(&reporter))?;
     Codegen::generate(lib, reporter)?;
     Ok(())

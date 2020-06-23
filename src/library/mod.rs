@@ -5,8 +5,8 @@ use crate::lexing::*;
 use crate::parsing::*;
 use crate::source::*;
 use crate::source::{self, Source};
-use std::rc::Rc;
 use log::trace;
+use std::rc::Rc;
 
 pub struct Lib {
     pub name: String,
@@ -39,7 +39,12 @@ impl Lib {
         lib
     }
 
-    fn build_lib(source: Source, name: &str, link_stdlib: bool, reporter: Rc<dyn Reporter>) -> Result<Lib, &'static str> {
+    fn build_lib(
+        source: Source,
+        name: &str,
+        link_stdlib: bool,
+        reporter: Rc<dyn Reporter>,
+    ) -> Result<Lib, &'static str> {
         let dependencies = if link_stdlib {
             vec![Lib::stdlib(Rc::clone(&reporter))]
         } else {

@@ -291,8 +291,7 @@ impl ContainsSpan for TypedToken {
 pub struct ResolvedToken {
     pub token: Token,
     symbol: RefCell<Option<Symbol>>,
-    pub specialization: Vec<ExplicitType>
-
+    pub specialization: Vec<ExplicitType>,
 }
 
 impl ResolvedToken {
@@ -300,7 +299,7 @@ impl ResolvedToken {
         ResolvedToken {
             token,
             symbol: RefCell::new(None),
-            specialization
+            specialization,
         }
     }
 
@@ -349,7 +348,12 @@ impl ExplicitType {
         self.resolve(&lib.symbols, &lib.dependencies, context)
     }
 
-    pub fn resolve(&self, table: &SymbolTable, deps: &[Lib], context: &[Symbol]) -> Option<NodeType> {
+    pub fn resolve(
+        &self,
+        table: &SymbolTable,
+        deps: &[Lib],
+        context: &[Symbol],
+    ) -> Option<NodeType> {
         let result = NodeType::deduce_from(self, table, deps, context);
         self.cached_type.replace(result.clone());
         result

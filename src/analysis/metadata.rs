@@ -1,4 +1,4 @@
-use crate::analysis::{NodeType, Symbol, FunctionType};
+use crate::analysis::{FunctionType, NodeType, Symbol};
 use crate::library::Lib;
 use std::collections::HashMap;
 
@@ -39,9 +39,19 @@ impl TypeMetadata {
     }
 
     pub fn type_name(&self, specialization: &GenericSpecialization) -> String {
-        let specialization = self.generics.iter().map(|g| {
-            specialization.type_for(g).expect(&format!("Expected type for generic {}\n{}", g, specialization)).symbolic_form()
-        }).collect::<Vec<_>>();
+        let specialization = self
+            .generics
+            .iter()
+            .map(|g| {
+                specialization
+                    .type_for(g)
+                    .expect(&format!(
+                        "Expected type for generic {}\n{}",
+                        g, specialization
+                    ))
+                    .symbolic_form()
+            })
+            .collect::<Vec<_>>();
         if specialization.is_empty() {
             self.symbol.mangled()
         } else {
@@ -51,7 +61,11 @@ impl TypeMetadata {
 
     pub fn field_named(&self, name: &str) -> Option<(Symbol, &NodeType)> {
         let possible_symbol = Symbol::new_str(Some(&self.symbol), name);
-        if let Some(index) = self.field_symbols.iter().position(|s| s == &possible_symbol) {
+        if let Some(index) = self
+            .field_symbols
+            .iter()
+            .position(|s| s == &possible_symbol)
+        {
             Some((possible_symbol, &self.field_types[index]))
         } else {
             None
@@ -117,11 +131,10 @@ impl std::fmt::Display for TypeMetadata {
                 write!(f, "\n  {}", spec)?;
             }
         }
-        
+
         Ok(())
     }
 }
-
 
 #[derive(Clone, Debug)]
 pub enum FunctionKind {
@@ -143,18 +156,24 @@ pub struct FunctionMetadata {
 
 impl FunctionMetadata {
     pub fn function_name(&self, lib: &Lib, specialization: &GenericSpecialization) -> String {
-        let func_specialization = self.generics.iter().map(|g| {
-            specialization.type_for(g).unwrap().symbolic_form()
-        }).collect::<Vec<_>>().join("__");
+        let func_specialization = self
+            .generics
+            .iter()
+            .map(|g| specialization.type_for(g).unwrap().symbolic_form())
+            .collect::<Vec<_>>()
+            .join("__");
 
         match &self.kind {
             FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
                 let type_meta = lib.type_metadata(&owner).unwrap();
-                format!("{}__{}__{}", type_meta.type_name(specialization), self.symbol.last_component(), func_specialization)
-            },
-            FunctionKind::TopLevel => {
-                self.symbol.mangled() + &func_specialization
+                format!(
+                    "{}__{}__{}",
+                    type_meta.type_name(specialization),
+                    self.symbol.last_component(),
+                    func_specialization
+                )
             }
+            FunctionKind::TopLevel => self.symbol.mangled() + &func_specialization,
         }
     }
 
@@ -171,8 +190,18 @@ impl std::fmt::Display for FunctionMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match &self.kind {
             FunctionKind::TopLevel => writeln!(f, "Function({})", self.symbol.mangled()),
-            FunctionKind::Method(owner) => writeln!(f, "Method(object: {}, method: {})", owner.mangled(), self.symbol.last_component()),
-            FunctionKind::MetaMethod(owner) => writeln!(f, "MetaMethod(object: {}, meta_method: {})", owner.mangled(), self.symbol.last_component()),
+            FunctionKind::Method(owner) => writeln!(
+                f,
+                "Method(object: {}, method: {})",
+                owner.mangled(),
+                self.symbol.last_component()
+            ),
+            FunctionKind::MetaMethod(owner) => writeln!(
+                f,
+                "MetaMethod(object: {}, meta_method: {})",
+                owner.mangled(),
+                self.symbol.last_component()
+            ),
         }?;
 
         let generics: Vec<String> = self
@@ -214,7 +243,7 @@ impl std::fmt::Display for FunctionMetadata {
 
 #[derive(Clone, Debug)]
 pub struct GenericSpecialization {
-    pub map: HashMap<Symbol, NodeType>
+    pub map: HashMap<Symbol, NodeType>,
 }
 
 impl GenericSpecialization {
@@ -223,9 +252,7 @@ impl GenericSpecialization {
         for (symbol, node_type) in generic_list.iter().zip(node_types) {
             map.insert(symbol.clone(), node_type.clone());
         }
-        GenericSpecialization {
-            map
-        }
+        GenericSpecialization { map }
     }
 
     pub fn empty() -> Self {
@@ -234,7 +261,11 @@ impl GenericSpecialization {
         }
     }
 
-    pub fn infer(lib: &Lib, metadata: &FunctionMetadata, arg_types: &[NodeType]) -> Result<Self, Symbol> {
+    pub fn infer(
+        lib: &Lib,
+        metadata: &FunctionMetadata,
+        arg_types: &[NodeType],
+    ) -> Result<Self, Symbol> {
         let mut spec_map: HashMap<Symbol, NodeType> = HashMap::new();
         for gen in &metadata.generics {
             spec_map.insert(gen.clone(), NodeType::Ambiguous);
@@ -253,9 +284,7 @@ impl GenericSpecialization {
             }
         }
 
-        Ok(GenericSpecialization {
-            map: spec_map
-        })
+        Ok(GenericSpecialization { map: spec_map })
     }
 
     pub fn resolve_generics_using(
@@ -264,11 +293,19 @@ impl GenericSpecialization {
         specialization: &GenericSpecialization,
     ) -> GenericSpecialization {
         GenericSpecialization {
-            map: self.map.iter().map(|(key, value)| (key.clone(), value.specialize(lib, specialization))).collect()
+            map: self
+                .map
+                .iter()
+                .map(|(key, value)| (key.clone(), value.specialize(lib, specialization)))
+                .collect(),
         }
     }
 
-    pub fn merge(&self, lib: &Lib, specialization: &GenericSpecialization) -> GenericSpecialization {
+    pub fn merge(
+        &self,
+        lib: &Lib,
+        specialization: &GenericSpecialization,
+    ) -> GenericSpecialization {
         let mut resolved_self = self.resolve_generics_using(lib, specialization);
         for (symbol, node_type) in &specialization.map {
             if !self.map.contains_key(symbol) {
@@ -279,16 +316,18 @@ impl GenericSpecialization {
     }
 
     pub fn subset(&self, owner: &Symbol) -> Self {
-        let map = self.map.iter().flat_map(|(symbol, node_type)| {
-            if owner.owns(symbol) {
-                Some((symbol.clone(), node_type.clone()))
-            } else {
-                None
-            }
-        }).collect();
-        GenericSpecialization {
-            map
-        }
+        let map = self
+            .map
+            .iter()
+            .flat_map(|(symbol, node_type)| {
+                if owner.owns(symbol) {
+                    Some((symbol.clone(), node_type.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        GenericSpecialization { map }
     }
 
     pub fn type_for(&self, symbol: &Symbol) -> Option<&NodeType> {
@@ -298,17 +337,25 @@ impl GenericSpecialization {
     pub fn display_list(&self) -> String {
         let mut keys: Vec<_> = self.map.keys().collect();
         keys.sort();
-        keys.iter().map(|symbol| {
-            format!("{}={}", symbol.last_component(), self.map.get(symbol).unwrap())
-        }).collect::<Vec<String>>().join(",")
+        keys.iter()
+            .map(|symbol| {
+                format!(
+                    "{}={}",
+                    symbol.last_component(),
+                    self.map.get(symbol).unwrap()
+                )
+            })
+            .collect::<Vec<String>>()
+            .join(",")
     }
 
     pub fn symbolic_list(&self) -> String {
         let mut keys: Vec<_> = self.map.keys().collect();
         keys.sort();
-        keys.iter().map(|k| {
-            self.map.get(k).unwrap().symbolic_form()
-        }).collect::<Vec<String>>().join("__")
+        keys.iter()
+            .map(|k| self.map.get(k).unwrap().symbolic_form())
+            .collect::<Vec<String>>()
+            .join("__")
     }
 }
 

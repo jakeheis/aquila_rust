@@ -185,7 +185,8 @@ impl<'a> SymbolTableBuilder<'a> {
         let new_symbol = Symbol::new(self.context.last(), &decl.name.token);
 
         let metadata = TypeMetadata::new(new_symbol.clone());
-        self.symbols.insert_type_metadata(new_symbol.clone(), metadata);
+        self.symbols
+            .insert_type_metadata(new_symbol.clone(), metadata);
 
         decl.name.set_symbol(new_symbol);
     }
@@ -204,9 +205,16 @@ impl<'a> SymbolTableBuilder<'a> {
         self.context.push(type_symbol.clone());
 
         let generics = self.insert_generics(&type_symbol, &decl.generics);
-        self.symbols.get_type_metadata_mut(&type_symbol).unwrap().generics = generics;
-        
-        let mut type_metadata = self.symbols.get_type_metadata(&type_symbol).unwrap().clone();
+        self.symbols
+            .get_type_metadata_mut(&type_symbol)
+            .unwrap()
+            .generics = generics;
+
+        let mut type_metadata = self
+            .symbols
+            .get_type_metadata(&type_symbol)
+            .unwrap()
+            .clone();
 
         for field in &decl.fields {
             let (token, field_type) = self.var_decl_type(field);
@@ -226,12 +234,12 @@ impl<'a> SymbolTableBuilder<'a> {
         let init_symbol = Symbol::init_symbol(self.context.last());
         if self.symbols.get_func_metadata(&init_symbol).is_none() {
             let generic_types: Vec<_> = type_metadata
-                    .generics
-                    .iter()
-                    .map(|symbol| NodeType::Instance(symbol.clone(), GenericSpecialization::empty()))
-                    .collect();
+                .generics
+                .iter()
+                .map(|symbol| NodeType::Instance(symbol.clone(), GenericSpecialization::empty()))
+                .collect();
             let instance_type = NodeType::Instance(
-                type_symbol.clone(), 
+                type_symbol.clone(),
                 GenericSpecialization::new(&type_metadata.generics, generic_types),
             );
 
@@ -255,7 +263,9 @@ impl<'a> SymbolTableBuilder<'a> {
 
         self.context.pop(); // Type pop
 
-        self.symbols.type_metadata.insert(type_symbol, type_metadata);
+        self.symbols
+            .type_metadata
+            .insert(type_symbol, type_metadata);
 
         trace!(target: "symbol_table", "Finished building type {}", decl.name.token.lexeme());
     }
@@ -325,7 +335,9 @@ impl<'a> SymbolTableBuilder<'a> {
         for generic in generics {
             let generic_symbol = Symbol::new(self.context.last(), &generic.token);
             let generic_type = TypeMetadata::generic(owner, generic.token.lexeme());
-            self.symbols.type_metadata.insert(generic_symbol.clone(), generic_type);
+            self.symbols
+                .type_metadata
+                .insert(generic_symbol.clone(), generic_type);
 
             trace!(target: "symbol_table", "Inserting generic {} (symbol = {})", generic.token.lexeme(), generic_symbol);
             generic_symbols.push(generic_symbol);
@@ -339,8 +351,7 @@ impl<'a> SymbolTableBuilder<'a> {
     }
 
     fn resolve_explicit_type(&self, explicit_type: &ExplicitType) -> NodeType {
-        if let Some(node_type) = explicit_type.resolve(&self.symbols, self.deps, &self.context)
-        {
+        if let Some(node_type) = explicit_type.resolve(&self.symbols, self.deps, &self.context) {
             trace!(target: "symbol_table", "Resolved explicit type {} to {}", explicit_type.span().lexeme(), node_type);
             node_type
         } else {
