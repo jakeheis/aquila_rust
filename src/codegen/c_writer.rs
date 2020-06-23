@@ -115,6 +115,7 @@ impl CWriter {
         if let Some((node_type, expr)) = expr {
             let format_specificer = match node_type {
                 NodeType::Int | NodeType::Bool => "%i",
+                NodeType::Double => "%f",
                 node_type if node_type.is_pointer_to(NodeType::Byte) => "%s",
                 _ => unreachable!(),
             };
@@ -183,6 +184,7 @@ impl CWriter {
         let simple = match node_type {
             NodeType::Void => Some("void"),
             NodeType::Int => Some("int"),
+            NodeType::Double => Some("double"),
             NodeType::Bool => Some("bool"),
             NodeType::Byte => Some("char"),
             _ => None,

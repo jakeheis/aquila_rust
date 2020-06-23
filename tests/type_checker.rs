@@ -1,8 +1,8 @@
-use aquila::analysis::*;
-use aquila::parsing::*;
+// use aquila::analysis::*;
+// use aquila::parsing::*;
 
-mod common;
-use common::*;
+// mod common;
+// use common::*;
 /*
 #[test]
 fn cant_infer_type() -> TestResult {

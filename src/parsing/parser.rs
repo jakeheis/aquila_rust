@@ -598,7 +598,7 @@ impl Parser {
     fn parse_possible_specialization(&mut self) -> Result<Vec<ExplicitType>> {
         if self.peek() == TokenKind::LeftBracket {
             match self.peek_next() {
-                Some(TokenKind::Number) => Ok(Vec::new()), // Do nothing, it's a subscript
+                Some(TokenKind::Int) => Ok(Vec::new()), // Do nothing, it's a subscript
                 _ => {
                     self.consume(TokenKind::LeftBracket, "")?;
                     self.parse_specialization()
@@ -719,7 +719,7 @@ impl Parser {
                 "Expect ';' after array type before count",
             )?;
             let count = self
-                .consume(TokenKind::Number, "Expect array count after ';'")?
+                .consume(TokenKind::Int, "Expect array count after ';'")?
                 .clone();
             self.consume(TokenKind::RightBracket, "Expect ']' after array count")?;
             ExplicitTypeKind::Array(Box::new(inside), count)
@@ -809,7 +809,7 @@ impl TokenKind {
             TokenKind::Minus | TokenKind::Bang | TokenKind::Ampersand | TokenKind::Star => {
                 Some(Parser::unary)
             }
-            TokenKind::True | TokenKind::False | TokenKind::Number | TokenKind::StringLiteral => {
+            TokenKind::True | TokenKind::False | TokenKind::Int | TokenKind::Double | TokenKind::StringLiteral => {
                 Some(Parser::literal)
             }
             TokenKind::Identifier => Some(Parser::variable),

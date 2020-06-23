@@ -15,7 +15,7 @@ fn math() -> TestResult {
 #[test]
 fn numbers() -> TestResult {
     assert_success("4", &[test_token::four()])?;
-    assert_success("0.01", &[test_token::test(TokenKind::Number, "0.01")])
+    assert_success("0.01", &[test_token::test(TokenKind::Double, "0.01")])
 }
 
 #[test]

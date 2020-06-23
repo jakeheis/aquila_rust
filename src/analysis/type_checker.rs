@@ -543,7 +543,7 @@ impl StmtVisitor for TypeChecker {
         if let Some(expr) = expr.as_ref() {
             if let Some(node_type) = self.check_expr(expr) {
                 match node_type {
-                    NodeType::Int | NodeType::Bool => {
+                    NodeType::Int | NodeType::Double | NodeType::Bool => {
                         let _ = expr.set_type(node_type);
                     }
                     node_type if node_type.is_pointer_to(NodeType::Byte) => {
@@ -649,7 +649,7 @@ impl ExprVisitor for TypeChecker {
             };
         }
 
-        let entries = match op.kind {
+        let entries: &[NodeType] = match op.kind {
             TokenKind::Minus => &NEGATE_ENTRIES,
             TokenKind::Bang => &INVERT_ENTRIES,
             _ => unreachable!(),
@@ -864,7 +864,8 @@ impl ExprVisitor for TypeChecker {
 
     fn visit_literal_expr(&mut self, expr: &Expr, token: &Token) -> Self::ExprResult {
         let node_type = match token.kind {
-            TokenKind::Number => NodeType::Int,
+            TokenKind::Int => NodeType::Int,
+            TokenKind::Double => NodeType::Double,
             TokenKind::True => NodeType::Bool,
             TokenKind::False => NodeType::Bool,
             TokenKind::StringLiteral => NodeType::pointer_to(NodeType::Byte),
@@ -951,21 +952,37 @@ impl ExprVisitor for TypeChecker {
     }
 }
 
-const NEGATE_ENTRIES: [NodeType; 1] = [NodeType::Int];
+const NEGATE_ENTRIES: [NodeType; 2] = [NodeType::Int, NodeType::Double];
 
 const INVERT_ENTRIES: [NodeType; 1] = [NodeType::Bool];
 
 type BinaryEntry = (NodeType, NodeType, NodeType);
 
-const ADDITION_ENTRIES: [BinaryEntry; 1] = [(NodeType::Int, NodeType::Int, NodeType::Int)];
+const ADDITION_ENTRIES: [BinaryEntry; 4] = [
+    (NodeType::Int, NodeType::Int, NodeType::Int),
+    (NodeType::Double, NodeType::Int, NodeType::Double),
+    (NodeType::Int, NodeType::Double, NodeType::Double),
+    (NodeType::Double, NodeType::Double, NodeType::Double),
+];
 
-const MATH_ENTRIES: [BinaryEntry; 1] = [(NodeType::Int, NodeType::Int, NodeType::Int)];
+const MATH_ENTRIES: [BinaryEntry; 4] = [
+    (NodeType::Int, NodeType::Int, NodeType::Int),
+    (NodeType::Double, NodeType::Int, NodeType::Double),
+    (NodeType::Int, NodeType::Double, NodeType::Double),
+    (NodeType::Double, NodeType::Double, NodeType::Double),
+];
 
 const LOGIC_ENTRIES: [BinaryEntry; 1] = [(NodeType::Bool, NodeType::Bool, NodeType::Bool)];
 
-const EQUALITY_ENTRIES: [BinaryEntry; 2] = [
+const EQUALITY_ENTRIES: [BinaryEntry; 3] = [
     (NodeType::Int, NodeType::Int, NodeType::Bool),
+    (NodeType::Double, NodeType::Double, NodeType::Bool),
     (NodeType::Bool, NodeType::Bool, NodeType::Bool),
 ];
 
-const COMPARISON_ENTRIES: [BinaryEntry; 1] = [(NodeType::Int, NodeType::Int, NodeType::Bool)];
+const COMPARISON_ENTRIES: [BinaryEntry; 4] = [
+    (NodeType::Int, NodeType::Int, NodeType::Bool),
+    (NodeType::Int, NodeType::Double, NodeType::Bool),
+    (NodeType::Double, NodeType::Int, NodeType::Bool),
+    (NodeType::Double, NodeType::Double, NodeType::Bool),
+];

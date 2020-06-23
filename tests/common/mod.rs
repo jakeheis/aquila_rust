@@ -2,6 +2,7 @@ pub use aquila::diagnostic::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+#[allow(dead_code)]
 pub type TestResult = std::result::Result<(), String>;
 
 #[allow(dead_code)]
@@ -24,6 +25,7 @@ pub mod test_source {
     }
 }
 
+#[allow(dead_code)]
 pub mod test_span {
 
     use super::test_source;
@@ -52,15 +54,15 @@ pub mod test_token {
     }
 
     pub fn four() -> Token {
-        test(TokenKind::Number, "4")
+        test(TokenKind::Int, "4")
     }
 
     pub fn five() -> Token {
-        test(TokenKind::Number, "5")
+        test(TokenKind::Int, "5")
     }
 
     pub fn six() -> Token {
-        test(TokenKind::Number, "6")
+        test(TokenKind::Int, "6")
     }
 
     pub fn star() -> Token {
@@ -272,6 +274,7 @@ impl Reporter for TestReporter {
     }
 }
 
+#[allow(dead_code)]
 pub fn assert_slices_equal<T, U>(
     kind: &str,
     got: &[T],

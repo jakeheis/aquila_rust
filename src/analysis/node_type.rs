@@ -46,6 +46,7 @@ impl std::fmt::Display for FunctionType {
 pub enum NodeType {
     Void,
     Int,
+    Double,
     Bool,
     Byte,
     Instance(Symbol, GenericSpecialization),
@@ -63,6 +64,7 @@ impl NodeType {
         match token.lexeme() {
             "void" => Some(NodeType::Void),
             "int" => Some(NodeType::Int),
+            "double" => Some(NodeType::Double),
             "bool" => Some(NodeType::Bool),
             "byte" => Some(NodeType::Byte),
             "any" => Some(NodeType::Any),
@@ -225,6 +227,7 @@ impl NodeType {
         match (self, unambiguous) {
             (NodeType::Void, NodeType::Void)
             | (NodeType::Int, NodeType::Int)
+            | (NodeType::Double, NodeType::Double)
             | (NodeType::Bool, NodeType::Bool)
             | (NodeType::Byte, NodeType::Byte) => true,
             (NodeType::Instance(lhs, lhs_spec), NodeType::Instance(rhs, rhs_spec))
@@ -352,7 +355,7 @@ impl NodeType {
                     ty.mangled() + "__" + &spec.symbolic_list()
                 }
             },
-            NodeType::Int | NodeType::Void | NodeType::Bool | NodeType::Byte => self.to_string(),
+            NodeType::Int | NodeType::Double | NodeType::Void | NodeType::Bool | NodeType::Byte => self.to_string(),
             NodeType::Pointer(to) => format!("ptr__{}", to.symbolic_form()),
             _ => panic!("can't get symbolic form of type {}", self),
         }
@@ -380,6 +383,7 @@ impl std::fmt::Display for NodeType {
         let kind = match self {
             NodeType::Void => String::from("void"),
             NodeType::Int => String::from("int"),
+            NodeType::Double => String::from("double"),
             NodeType::Bool => String::from("bool"),
             NodeType::Byte => String::from("byte"),
             NodeType::Any => String::from("any"),

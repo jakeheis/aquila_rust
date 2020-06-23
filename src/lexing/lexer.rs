@@ -129,8 +129,10 @@ impl Lexer {
                     break;
                 }
             }
+            self.make_token(TokenKind::Double)
+        } else {
+            self.make_token(TokenKind::Int)
         }
-        self.make_token(TokenKind::Number)
     }
 
     fn string(&mut self) -> Option<Token> {
