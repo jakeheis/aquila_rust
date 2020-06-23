@@ -32,6 +32,7 @@ pub enum TokenKind {
     LeftParen,
     RightParen,
     LeftBracket,
+    PeriodLeftBracket,
     RightBracket,
     GenericOpen,
     GenericClose,

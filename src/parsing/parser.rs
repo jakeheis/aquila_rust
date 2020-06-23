@@ -836,7 +836,7 @@ impl TokenKind {
             | TokenKind::LessEqual => Some((Parser::binary, Precedence::Comparison)),
             TokenKind::LeftParen | TokenKind::Bar => Some((Parser::call, Precedence::Call)),
             TokenKind::Period => Some((Parser::field, Precedence::Call)),
-            TokenKind::LeftBracket => Some((Parser::subscript, Precedence::Call)),
+            TokenKind::PeriodLeftBracket => Some((Parser::subscript, Precedence::Call)),
             _ => None,
         }
     }
