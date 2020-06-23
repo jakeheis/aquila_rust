@@ -75,10 +75,10 @@ type String {
         let new_size = size + strlen(lit);
 
         let new_storage = Memory.allocate_block[byte](new_size);
-        Memory.copy_block(storage, new_storage, size - 1);
+        Memory.copy_block[byte](storage, new_storage, size - 1);
 
-        let second_part = Memory.offset(new_storage, size - 1);
-        Memory.copy_block(lit, second_part, strlen(lit) + 1);
+        let second_part = Memory.offset[byte](new_storage, size - 1);
+        Memory.copy_block[byte](lit, second_part, strlen(lit) + 1);
 
         return String(new_storage, new_size);
     }
@@ -106,23 +106,42 @@ type Vec[T] {
     }
 
     def insert(object: T) {
-        insert_ptr(&object);
-    }
-
-    def insert_ptr(object: ptr T) {
         if count == capacity {
             capacity = capacity * 2;
-            storage = Memory.reallocate(cast[ptr T](storage), capacity);
+            storage = Memory.reallocate[T](storage, capacity);
         }
 
-        let insertion_location = Memory.offset(cast[ptr T](storage), count);
-        Memory.copy(object, insertion_location);
+        copy_in(count, &object);
 
         count = count + 1;
     }
 
     def get(index: int): ptr T {
-        return Memory.offset(cast[ptr T](storage), index);
+        if index >= count {
+            fatal_error("Index out of bounds");
+        }
+        return Memory.offset[T](storage, index);
+    }
+
+    def replace(index: int, object: T) {
+        if index > count {
+            fatal_error("Index out of bounds");
+        }
+        if index == count {
+            insert(object);
+        } else {
+            copy_in(index, &object);
+        }
+    }
+
+    def pop(): T {
+        count = count - 1;
+        return *Memory.offset[T](storage, count);
+    }
+
+    def copy_in(index: int, object: ptr T) {
+        let location = Memory.offset[T](storage, index);
+        Memory.copy[T](object, location);
     }
 
 }

@@ -11,7 +11,11 @@ pub struct SpecializationPropagator<'a> {
 
 impl<'a> SpecializationPropagator<'a> {
     pub fn propogate(lib: &mut Lib) {
-        for (caller, calls) in &lib.symbols.call_map {
+        let mut call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>> =
+            HashMap::new();
+        SpecializationPropagator::flattened_call_map(lib, &mut call_map);
+
+        for (caller, calls) in &call_map {
             for (call, spec) in calls {
                 let suffix = if spec.map.is_empty() {
                     String::new()
@@ -21,10 +25,6 @@ impl<'a> SpecializationPropagator<'a> {
                 trace!(target: "spec_propagate", "Call entry: {} -> {}{}", caller, call, suffix);
             }
         }
-
-        let mut call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>> =
-            HashMap::new();
-        SpecializationPropagator::flattened_call_map(lib, &mut call_map);
 
         let mut prop = SpecializationPropagator {
             lib,

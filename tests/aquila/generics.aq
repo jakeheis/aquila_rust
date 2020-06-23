@@ -26,7 +26,7 @@ type MoreMadness[V] {
 }
 
 let madness: GenericMadness[int] = GenericMadness[ptr byte].make_new[int]();
-let spawned: GenericMadness[GenericMadness[ptr int]] = madness.spawn(&4);
+let spawned: GenericMadness[GenericMadness[ptr int]] = madness.spawn[ptr int](&4);
 
 let more: MoreMadness[bool] = MoreMadness[bool].create(true);
-let inner: GenericMadness[bool] = more.inner(6);
+let inner: GenericMadness[bool] = more.inner[int](6);

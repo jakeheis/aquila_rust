@@ -271,7 +271,9 @@ impl GenericSpecialization {
     pub fn merge(&self, lib: &Lib, specialization: &GenericSpecialization) -> GenericSpecialization {
         let mut resolved_self = self.resolve_generics_using(lib, specialization);
         for (symbol, node_type) in &specialization.map {
-            resolved_self.map.insert(symbol.clone(), node_type.clone());
+            if !self.map.contains_key(symbol) {
+                resolved_self.map.insert(symbol.clone(), node_type.clone());
+            }
         }
         resolved_self
     }

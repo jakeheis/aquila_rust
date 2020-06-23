@@ -713,7 +713,21 @@ impl ExprVisitor for TypeChecker {
         } else {
             if let Some((found_symbol, node_type)) = self.resolve_var(function_name) {
                 match node_type {
-                    NodeType::Function(..) => (found_symbol, None, &function.specialization),
+                    NodeType::Function(..) => {
+                        let func_metadata = self.lib.function_metadata(&found_symbol).unwrap();
+                        let object_spec = match &func_metadata.kind {
+                            FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
+                                let implicit_self = self.lib.type_metadata(owner).unwrap();
+                                let implicit_object_spec = GenericSpecialization::new(
+                                    &implicit_self.generics, 
+                                    implicit_self.generics.iter().map(|g| NodeType::Instance(g.clone(), GenericSpecialization::empty())).collect()
+                                );
+                                Some(implicit_object_spec)
+                            },
+                            _ => None
+                        };
+                        (found_symbol, object_spec, &function.specialization)
+                    },
                     _ => return Err(Diagnostic::error(
                         &function.compute_span(),
                         &format!("Cannot call type {}", node_type),
@@ -765,18 +779,26 @@ impl ExprVisitor for TypeChecker {
             ));
         }
 
-        let function_specialization = if function_specialization.is_empty() {
-            match GenericSpecialization::infer(self.lib.as_ref(), &metadata, &arg_types) {
-                Ok(spec) => spec,
-                Err(symbol) => {
-                    let message = format!(
-                        "Couldn't infer generic type {}",
-                        symbol.last_component()
-                    );
-                    return Err(Diagnostic::error(expr, &message));
-                }
-            }
-        } else {
+        /*
+        Problem: with implicit self calls, object specializations are not being passed long
+        If the function has parameters which involve the object specialization, it can be inferred
+        Return types can't be inferred because right now this fun can't tell what is expected to be returned
+        Eventualy should have some system for including what type is expected of each expr so better inference can happen
+        Implicit self should be handled better and type spec should be in object_specialization
+        */
+        
+        // let function_specialization = if function_specialization.is_empty() {
+        //     match GenericSpecialization::infer(self.lib.as_ref(), &metadata, &arg_types) {
+        //         Ok(spec) => spec,
+        //         Err(symbol) => {
+        //             let message = format!(
+        //                 "Couldn't infer generic type {}",
+        //                 symbol.last_component()
+        //             );
+        //             return Err(Diagnostic::error(expr, &message));
+        //         }
+        //     }
+        // } else {
             if function_specialization.len() != metadata.generics.len() {
                 let message = format!(
                     "Expected {} specializations, got {}",
@@ -790,9 +812,10 @@ impl ExprVisitor for TypeChecker {
                 .iter()
                 .map(|s| self.resolve_explicit_type(s))
                 .collect();
+                // GenericSpecialization::new(&metadata.generics, specialization?)
 
-            GenericSpecialization::new(&metadata.generics, specialization?)
-        };
+                let function_specialization = GenericSpecialization::new(&metadata.generics, specialization?);
+        // };
 
         let merged = if let Some(object_specialization) = object_specialization.as_ref() {
             function_specialization.merge(self.lib.as_ref(), object_specialization)

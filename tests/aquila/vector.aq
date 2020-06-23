@@ -1,0 +1,24 @@
+let my_vec: Vec[int] = Vec[int].new();
+my_vec.insert(8);
+my_vec.insert(4);
+my_vec.insert(7);
+
+/// 8
+print *my_vec.get(1) * 2;
+
+/// 5
+my_vec.replace(0, 5);
+print *my_vec.get(0);
+
+/// 7
+print my_vec.pop();
+
+let vec_of_vecs: Vec[Vec[bool]] = Vec[Vec[bool]].new();
+vec_of_vecs.insert(Vec[bool].new());
+vec_of_vecs.insert(Vec[bool].new());
+
+(*vec_of_vecs.get(1)).insert(false);
+(*vec_of_vecs.get(1)).insert(true);
+
+/// 1
+print *(*vec_of_vecs.get(1)).get(1);

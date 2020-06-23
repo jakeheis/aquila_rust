@@ -16,8 +16,8 @@ pub fn run(source: Source) -> Result<(), &'static str> {
 }
 
 pub fn run_with_reporter(source: Source, reporter: std::rc::Rc<dyn Reporter>) -> Result<(), &'static str> {
-    let lib = Lib::from_source(source, reporter)?;
-    Codegen::generate(lib);
+    let lib = Lib::from_source(source, std::rc::Rc::clone(&reporter))?;
+    Codegen::generate(lib, reporter)?;
     Ok(())
 }
 

@@ -9,7 +9,8 @@ use log::trace;
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
-// use crate::source::*;
+use crate::diagnostic::*;
+use crate::source::*;
 
 #[derive(PartialEq)]
 enum CodegenStage {
@@ -26,14 +27,15 @@ pub struct Codegen {
     stage: CodegenStage,
     is_builtin: bool,
     temp_count: u32,
-    specialization: Option<GenericSpecialization>,
+    type_specialization: Option<GenericSpecialization>,
+    func_specialization: Option<GenericSpecialization>,
 }
 
 impl Codegen {
-    pub fn generate(lib: Lib) {
+    pub fn generate(lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {
         Codegen::write(lib);
 
-        Command::new("/usr/local/opt/llvm/bin/clang")
+        let status = Command::new("/usr/local/opt/llvm/bin/clang")
             .args(&[
                 "-g",
                 "-Iinclude",
@@ -46,6 +48,13 @@ impl Codegen {
             .current_dir("build")
             .status()
             .unwrap();
+        
+            if !status.success() {
+                reporter.report(Diagnostic::error(&Span::empty(), "C build failed"));
+                Err("C build failed")
+            } else {
+                Ok(())
+            }
     }
 
     fn write(mut lib: Lib) {
@@ -65,7 +74,8 @@ impl Codegen {
             stage: CodegenStage::ForwardStructDecls,
             is_builtin: false,
             temp_count: 0,
-            specialization: None,
+            type_specialization: None,
+            func_specialization: None,
         };
 
         let lib = lib.as_ref();
@@ -150,11 +160,16 @@ impl Codegen {
         }
     }
 
+    fn specialize_type(&self, node_type: &NodeType) -> NodeType {
+        node_type.specialize_opt(self.lib.as_ref(), self.func_specialization.as_ref())
+                .specialize_opt(self.lib.as_ref(), self.type_specialization.as_ref())
+    }
+
     fn write_temp(&mut self, temp_type: &NodeType, value: String) -> String {
         let temp_name = format!("_temp_{}", self.temp_count);
         self.temp_count += 1;
 
-        let temp_type = temp_type.specialize_opt(self.lib.as_ref(), self.specialization.as_ref());
+        let temp_type = self.specialize_type(temp_type);
         let temp_type = self.writer.type_and_name(&temp_type, &temp_name);
         let temp = format!("{} = {};", temp_type, value);
         self.writer.writeln(&temp);
@@ -176,7 +191,7 @@ impl Codegen {
 
         trace!(target: "codegen", "Writing function {} with specialization {}", func_symbol, specialization);
 
-        self.specialization = Some(specialization.clone());
+        self.func_specialization = Some(specialization.clone());
 
         if self.stage == CodegenStage::FuncPrototypes {
             self.writer
@@ -193,7 +208,7 @@ impl Codegen {
 
         trace!(target: "codegen", "Finished function {} with specialization {}", func_symbol, specialization);
 
-        self.specialization = None;
+        self.func_specialization = None;
     }
 }
 
@@ -267,7 +282,7 @@ impl StmtVisitor for Codegen {
             var_type = NodeType::Pointer(of.clone());
         }
 
-        let var_type = var_type.specialize_opt(self.lib.as_ref(), self.specialization.as_ref());
+        let var_type = self.specialize_type(&var_type);
 
         let value = decl.initial_value.as_ref().map(|v| v.accept(self));
         self.writer
@@ -428,13 +443,13 @@ impl ExprVisitor for Codegen {
             }
         }
 
-        if let Some(caller_specs) = self.specialization.as_ref() {
-            specialization = specialization.resolve_generics_using(self.lib.as_ref(), caller_specs)
+        if let Some(caller_specs) = self.func_specialization.as_ref() {
+            specialization = specialization.merge(self.lib.as_ref(), caller_specs)
         }
 
         let function_name = function_metadata.function_name(self.lib.as_ref(), &specialization);
         let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
-
+        
         let rendered = if let Some(target) = target {
             let target_str = target.accept(self);
             let target_str = match &target.kind {
@@ -489,7 +504,7 @@ impl ExprVisitor for Codegen {
         let expr_type = expr.get_type().unwrap();
 
         if let NodeType::Metatype(symbol, _) = &expr_type {
-            if let Some(spec) = self.specialization.as_ref() {
+            if let Some(spec) = self.func_specialization.as_ref() {
                 if spec.map.contains_key(&symbol) {
                     let spec_type = expr_type.specialize(self.lib.as_ref(), spec);
                     return self.writer.convert_type(&spec_type, String::new(), false).0;
@@ -544,7 +559,7 @@ impl ExprVisitor for Codegen {
         value: &Expr,
     ) -> Self::ExprResult {
         let cast_type = explicit_type.guarantee_resolved();
-        let cast_type = cast_type.specialize_opt(self.lib.as_ref(), self.specialization.as_ref());
+        let cast_type = self.specialize_type(&cast_type);
         let (cast_type, _) = self.writer.convert_type(&cast_type, String::new(), false);
         let value = value.accept(self);
 

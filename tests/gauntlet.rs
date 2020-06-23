@@ -46,9 +46,12 @@ fn test_file(file: PathBuf) -> Result<(), &'static str> {
             .output()
             .unwrap();
 
-        assert_eq!(output.status.success(), true);
-
         let got_lines = String::from_utf8(output.stdout).unwrap();
+
+        if !output.status.success() {
+            println!("Output:\n{}", got_lines);
+            return Err("Run failed");
+        }
 
         for (index, (got, expected)) in got_lines.lines().zip(expected_output).enumerate() {
             if got != expected {
