@@ -1,6 +1,6 @@
 use super::check;
 use super::NodeType;
-use super::{ContextTracker, TypeResolution};
+use super::ContextTracker;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::library::*;
@@ -64,43 +64,27 @@ impl ExprChecker {
                     FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
                         let implicit_self = self.lib.type_metadata(owner).unwrap();
                         let implicit_spec = implicit_self.dummy_specialization();
-                        Ok((func_metadata, implicit_spec, false))
+                        return Ok((func_metadata, implicit_spec, false))
                     }
-                    _ => Ok((func_metadata, GenericSpecialization::empty(), false)),
+                    _ => return Ok((func_metadata, GenericSpecialization::empty(), false)),
                 }
             }
-            Some((_, node_type)) => Err(Diagnostic::error(
+            Some((_, node_type)) => return Err(Diagnostic::error(
                 span,
                 &format!("Cannot call object of type {}", node_type),
             )),
-            _ => self.resolve_init_func(function),
+            _ => (),
         }
-    }
 
-    fn resolve_init_func(
-        &self,
-        function: &ResolvedToken,
-    ) -> DiagnosticResult<(FunctionMetadata, GenericSpecialization, bool)> {
-        let explicit_type = TypeResolution::deduce_from_simple_explicit(
-            function,
-            &self.lib.symbols,
-            &self.lib.dependencies,
-            &self.context.symbolic_context(),
-        );
-        match &explicit_type {
-            Some(NodeType::Instance(type_symbol, specs)) => {
-                check::confirm_fully_specialized(
-                    self.lib.as_ref(),
-                    function.span(),
-                    explicit_type.as_ref().unwrap(),
-                )?;
+        match self.context.resolve_token_as_type(function) {
+            Ok(NodeType::Instance(type_symbol, specs)) => {
                 let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
                 let init_metadata = self
                     .lib
                     .function_metadata(&Symbol::init_symbol(Some(&meta_symbol)));
                 Ok((init_metadata.unwrap(), specs.clone(), true))
             }
-            Some(..) => Err(Diagnostic::error(
+            Ok(..) => Err(Diagnostic::error(
                 function.span(),
                 "Cannot call a primitive",
             )),
@@ -258,7 +242,7 @@ impl ExprVisitor for ExprChecker {
             let specialization: std::result::Result<Vec<NodeType>, _> = function
                 .specialization
                 .iter()
-                .map(|s| self.context.resolve_explicit_type(s))
+                .map(|s| self.context.resolve_type(s))
                 .collect();
             GenericSpecialization::new(&metadata.generics, specialization?)
         };
@@ -357,19 +341,9 @@ impl ExprVisitor for ExprChecker {
             name.set_symbol(found_symbol);
             expr.set_type(node_type.clone())
         } else {
-            let explicit_type = TypeResolution::deduce_from_simple_explicit(
-                name,
-                &self.lib.symbols,
-                &self.lib.dependencies,
-                &self.context.symbolic_context(),
-            );
+            let explicit_type = self.context.resolve_token_as_type(name);
             match &explicit_type {
-                Some(NodeType::Instance(symbol, spec)) => {
-                    check::confirm_fully_specialized(
-                        self.lib.as_ref(),
-                        name.span(),
-                        explicit_type.as_ref().unwrap(),
-                    )?;
+                Ok(NodeType::Instance(symbol, spec)) => {
                     trace!(target: "type_checker", "Treating variable as metatype of {}", symbol);
                     name.set_symbol(symbol.clone());
                     expr.set_type(NodeType::Metatype(symbol.clone(), spec.clone()))
@@ -429,7 +403,7 @@ impl ExprVisitor for ExprChecker {
         value: &Expr,
     ) -> Self::ExprResult {
         value.accept(self)?;
-        expr.set_type(self.context.resolve_explicit_type(explicit_type)?)
+        expr.set_type(self.context.resolve_type(explicit_type)?)
     }
 }
 

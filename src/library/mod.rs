@@ -76,11 +76,9 @@ impl Lib {
             specialization_tracker: SpecializationTracker::new(),
         };
 
-        lib.symbols = SymbolTableBuilder::build_symbols(
-            &lib.type_decls,
-            &lib.function_decls,
-            &lib.builtins,
-            &lib.dependencies,
+        lib = SymbolTableBuilder::build_symbols(
+            lib,
+            Rc::clone(&reporter),
         );
 
         trace!(target: "symbol_table", "{}", lib.symbols);

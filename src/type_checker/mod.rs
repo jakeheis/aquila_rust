@@ -3,7 +3,7 @@ mod node_type;
 mod symbol_table;
 mod type_checker;
 
-pub use node_type::TypeResolution;
+pub use node_type::{TypeResolution, TypeResolutionError};
 pub use symbol_table::SymbolTableBuilder;
 pub use type_checker::TypeChecker;
 
@@ -18,7 +18,6 @@ use std::rc::Rc;
 mod check {
     use super::NodeType;
     use crate::diagnostic::*;
-    use crate::library::Lib;
     use crate::parsing::*;
     use crate::source::ContainsSpan;
 
@@ -48,37 +47,6 @@ mod check {
             Ok(())
         } else {
             Err(type_mismatch(expr, given, expected))
-        }
-    }
-
-    pub fn confirm_fully_specialized<S: ContainsSpan>(
-        lib: &Lib,
-        span: &S,
-        node_type: &NodeType,
-    ) -> DiagnosticResult<()> {
-        match &node_type {
-            NodeType::Instance(type_symbol, specialization)
-            | NodeType::Metatype(type_symbol, specialization) => {
-                for spec in specialization.map.values() {
-                    confirm_fully_specialized(lib, span, spec)?;
-                }
-
-                let matching_type = lib.type_metadata(type_symbol).unwrap();
-                let spec_length = specialization.map.len();
-                if spec_length != matching_type.generics.len() {
-                    let message = format!(
-                        "Expected {} specializations, got {}",
-                        matching_type.generics.len(),
-                        spec_length
-                    );
-                    Err(Diagnostic::error(span, &message))
-                } else {
-                    Ok(())
-                }
-            }
-            NodeType::Pointer(to) => confirm_fully_specialized(lib, span, to),
-            NodeType::Array(of, _) => confirm_fully_specialized(lib, span, of),
-            _ => Ok(()),
         }
     }
 }
@@ -242,30 +210,27 @@ impl ContextTracker {
         }
     }
 
-    pub fn resolve_explicit_type(
-        &mut self,
-        explicit_type: &ExplicitType,
-    ) -> DiagnosticResult<NodeType> {
+    fn resolve_type(&self, explicit_type: &ExplicitType) -> DiagnosticResult<NodeType> {
         let context = self.symbolic_context();
-
-        if let Some(deduced) = TypeResolution::resolve_with_lib(explicit_type, &self.lib, &context)
-        {
-            if let NodeType::Any = deduced {
-                Err(Diagnostic::error(
-                    explicit_type,
-                    "Cannot have type any; must be ptr any",
-                ))
-            } else {
-                check::confirm_fully_specialized(self.lib.as_ref(), explicit_type, &deduced)?;
-                if let NodeType::Instance(type_symbol, spec) = &deduced {
-                    self.lib
-                        .specialization_tracker
-                        .add_required_type_spec(type_symbol.clone(), spec.clone());
-                }
-                Ok(deduced)
+        let resolver = TypeResolution::new(&self.lib, &self.lib.symbols, &context);
+        match resolver.resolve(explicit_type) {
+            Ok(resolved_type) => Ok(resolved_type),
+            Err(error) => {
+                Err(match error {
+                    TypeResolutionError::IncorrectlySpecialized(diag) => diag,
+                    TypeResolutionError::NotFound => Diagnostic::error(explicit_type, "Type not found"),
+                })
             }
-        } else {
-            Err(Diagnostic::error(explicit_type, "Undefined type"))
         }
+    }
+
+    fn resolve_token_as_type(&self, token: &ResolvedToken) -> Result<NodeType, TypeResolutionError> {
+        let context = self.symbolic_context();
+        let resolver = TypeResolution::new(
+            &self.lib,
+            &self.lib.symbols,
+            &context
+        );
+        resolver.resolve_simple(token)
     }
 }

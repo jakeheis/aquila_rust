@@ -128,25 +128,17 @@ impl StmtVisitor for TypeChecker {
         let (func_symbol, metadata) = self.context.push_function_scope(&decl.name);
         decl.name.set_symbol(func_symbol.clone());
 
-        let explicit_return_type = decl.return_type.as_ref();
-        if let Some(e) = explicit_return_type {
-            if let Err(diag) =
-                check::confirm_fully_specialized(self.lib.as_ref(), e, &metadata.return_type)
-            {
-                self.report_error(diag);
-            }
-        }
         let return_type = match &metadata.return_type {
             NodeType::Array(..) => {
                 self.report_error(Diagnostic::error(
-                    explicit_return_type.unwrap(),
+                    decl.return_type.as_ref().unwrap(),
                     "Cannot return an array",
                 ));
                 &NodeType::Ambiguous
             }
             NodeType::Ambiguous => {
                 self.report_error(Diagnostic::error(
-                    explicit_return_type.unwrap(),
+                    decl.return_type.as_ref().unwrap(),
                     "Undefined type",
                 ));
                 &NodeType::Ambiguous
@@ -187,7 +179,7 @@ impl StmtVisitor for TypeChecker {
         let explicit_type =
             decl.explicit_type
                 .as_ref()
-                .and_then(|k| match self.context.resolve_explicit_type(k) {
+                .and_then(|k| match self.context.resolve_type(k) {
                     Ok(explicit_type) => Some(explicit_type),
                     Err(diagnostic) => {
                         self.report_error(diagnostic);

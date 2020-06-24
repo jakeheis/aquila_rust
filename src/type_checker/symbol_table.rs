@@ -1,36 +1,42 @@
-use super::TypeResolution;
+use super::{TypeResolution, TypeResolutionError};
 use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::*;
-use crate::source::*;
+use crate::diagnostic::*;
 use log::trace;
 use std::collections::HashSet;
+use std::rc::Rc;
 
-pub struct SymbolTableBuilder<'a> {
+pub struct SymbolTableBuilder {
+    lib: Rc<Lib>,
     symbols: SymbolTable,
-    deps: &'a [Lib],
     context: Vec<Symbol>,
+    reporter: Rc<dyn Reporter>
 }
 
-impl<'a> SymbolTableBuilder<'a> {
-    pub fn build_symbols(
-        type_decls: &[TypeDecl],
-        function_decls: &[FunctionDecl],
-        builtins: &[FunctionDecl],
-        deps: &[Lib],
-    ) -> SymbolTable {
+impl SymbolTableBuilder {
+    pub fn build_symbols(lib: Lib, reporter: Rc<dyn Reporter>) -> Lib {
+        let lib = Rc::new(lib);
+
         let mut builder = SymbolTableBuilder {
+            lib: Rc::clone(&lib),
             symbols: SymbolTable::new(),
-            deps: deps,
             context: Vec::new(),
+            reporter,
         };
 
-        builder.build_type_headers(&type_decls);
-        builder.build_type_internals(&type_decls);
-        builder.build_functions(&function_decls);
-        builder.build_functions(&builtins);
+        builder.build_type_headers(&lib.type_decls);
+        builder.build_type_internals(&lib.type_decls);
+        builder.build_functions(&lib.function_decls);
+        builder.build_functions(&lib.builtins);
 
-        builder.symbols
+        let symbols = std::mem::replace(&mut builder.symbols, SymbolTable::new());
+        std::mem::drop(builder);
+
+        let mut lib = Rc::try_unwrap(lib).ok().unwrap();
+        lib.symbols = symbols;
+
+        lib
     }
 
     fn build_type_headers(&mut self, type_decls: &[TypeDecl]) {
@@ -160,7 +166,7 @@ impl<'a> SymbolTableBuilder<'a> {
         let return_type = decl
             .return_type
             .as_ref()
-            .map(|r| self.resolve_explicit_type(r))
+            .map(|r| self.resolve_type(r))
             .unwrap_or(NodeType::Void);
 
         self.context.pop();
@@ -210,18 +216,22 @@ impl<'a> SymbolTableBuilder<'a> {
     }
 
     fn var_decl_type<'b>(&self, var_decl: &'b VariableDecl) -> (&'b Token, NodeType) {
-        let explicit_type = self.resolve_explicit_type(var_decl.explicit_type.as_ref().unwrap());
-        (&var_decl.name.token, explicit_type)
+        let resolved_type = self.resolve_type(var_decl.explicit_type.as_ref().unwrap());
+        (&var_decl.name.token, resolved_type)
     }
 
-    fn resolve_explicit_type(&self, explicit_type: &ExplicitType) -> NodeType {
-        if let Some(node_type) =
-            TypeResolution::resolve(explicit_type, &self.symbols, self.deps, &self.context)
-        {
-            trace!(target: "symbol_table", "Resolved explicit type {} to {}", explicit_type.span().lexeme(), node_type);
-            node_type
-        } else {
-            NodeType::Ambiguous
+    fn resolve_type(&self, explicit_type: &ExplicitType) -> NodeType {
+        let resolver = TypeResolution::new(&self.lib, &self.symbols, &self.context);
+        match resolver.resolve(explicit_type) {
+            Ok(resolved_type) => resolved_type,
+            Err(error) => {
+                let diag = match error {
+                    TypeResolutionError::IncorrectlySpecialized(diag) => diag,
+                    TypeResolutionError::NotFound => Diagnostic::error(explicit_type, "Type not found"),
+                };
+                self.reporter.report(diag);
+                NodeType::Ambiguous
+            }
         }
     }
 }
