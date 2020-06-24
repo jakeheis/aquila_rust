@@ -1,8 +1,7 @@
+use super::check;
 use super::expr_checker::*;
 use super::ContextTracker;
-use super::check;
 use crate::diagnostic::*;
-use crate::guard;
 use crate::library::*;
 use crate::parsing::*;
 use std::rc::Rc;
@@ -132,7 +131,7 @@ impl StmtVisitor for TypeChecker {
         let explicit_return_type = decl.return_type.as_ref();
         if let Some(e) = explicit_return_type {
             if let Err(diag) =
-            check::confirm_fully_specialized(self.lib.as_ref(), e, &metadata.return_type)
+                check::confirm_fully_specialized(self.lib.as_ref(), e, &metadata.return_type)
             {
                 self.report_error(diag);
             }
@@ -237,8 +236,7 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_if_stmt(&mut self, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
-            if let Err(diag) = check::check_type_match(condition, &cond_type, &NodeType::Bool)
-            {
+            if let Err(diag) = check::check_type_match(condition, &cond_type, &NodeType::Bool) {
                 self.report_error(diag);
             }
             let _ = condition.set_type(NodeType::Bool);
@@ -265,8 +263,7 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
-            if let Err(diag) = check::check_type_match(condition, &cond_type, &NodeType::Bool)
-            {
+            if let Err(diag) = check::check_type_match(condition, &cond_type, &NodeType::Bool) {
                 self.report_error(diag);
             }
             let _ = condition.set_type(NodeType::Bool);
@@ -280,26 +277,24 @@ impl StmtVisitor for TypeChecker {
     }
 
     fn visit_for_stmt(&mut self, variable: &TypedToken, array: &Expr, body: &[Stmt]) -> Analysis {
-        let array_type = match self.check_expr(array) {
-            Some(NodeType::Array(of, size)) => Some(NodeType::Array(of, size)),
-            None => None,
+        let array_element_type = match self.check_expr(array) {
+            Some(NodeType::Array(of, _)) => of,
+            None => {
+                return Analysis {
+                    guarantees_return: false,
+                }
+            }
             _ => {
                 self.report_error(Diagnostic::error(array, "Can only iterate over arrays"));
-                None
+                return Analysis {
+                    guarantees_return: false,
+                };
             }
         };
-        if array_type.is_none() {
-            return Analysis {
-                guarantees_return: false,
-            };
-        }
-        let array_type = array_type.unwrap();
-        guard!(NodeType::Array[of, _size] = &array_type);
 
         self.context.push_scope_named("for");
-        let of: &NodeType = &of;
         self.context
-            .define_var(variable, &NodeType::pointer_to(of.clone()));
+            .define_var(variable, &NodeType::Pointer(array_element_type));
         let body_analysis = self.check_list(body);
         self.context.pop_scope();
 

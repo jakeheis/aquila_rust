@@ -3,9 +3,7 @@ use crate::library::*;
 use crate::parsing::{ExplicitType, ExplicitTypeKind, ResolvedToken};
 use log::trace;
 
-pub struct TypeResolution {
-
-}
+pub struct TypeResolution {}
 
 impl TypeResolution {
     pub fn resolve_with_lib(et: &ExplicitType, lib: &Lib, context: &[Symbol]) -> Option<NodeType> {
@@ -22,7 +20,7 @@ impl TypeResolution {
         et.cached_type.replace(result.clone());
         result
     }
-    
+
     pub fn deduce_from(
         explicit_type: &ExplicitType,
         table: &SymbolTable,
@@ -55,7 +53,12 @@ impl TypeResolution {
     ) -> Option<NodeType> {
         let mut resolved_spec = Vec::new();
         for explicit_spec in &token.specialization {
-            resolved_spec.push(TypeResolution::resolve(explicit_spec, table, deps, context)?);
+            resolved_spec.push(TypeResolution::resolve(
+                explicit_spec,
+                table,
+                deps,
+                context,
+            )?);
         }
 
         if let Some(primitive) = NodeType::primitive(token.token.lexeme()) {

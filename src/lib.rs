@@ -24,35 +24,3 @@ pub fn run_with_reporter(
     Codegen::generate(lib, reporter)?;
     Ok(())
 }
-
-#[macro_export]
-macro_rules! guard {
-    ($pattern_path:path[$name:ident] = $bound:expr) => {
-        let $name = if let $pattern_path($name) = $bound {
-            $name
-        } else {
-            unreachable!()
-        };
-    };
-    ($pattern_path:path[$( $name:ident ), *] = $bound:expr) => {
-        let ($($name), *) = if let $pattern_path($($name), *) = $bound {
-            ($($name), *)
-        } else {
-            unreachable!()
-        };
-    };
-}
-
-#[macro_export]
-macro_rules! guard_else {
-    ($pattern_path:path[$name:ident] = $bound:expr, $else_body:block) => {
-        let $name = if let $pattern_path($name) = $bound {
-            $name
-        } else $else_body;
-    };
-    ($pattern_path:path[$( $name:ident ), *] = $bound:expr, $else_body:block) => {
-        let ($($name), *) = if let $pattern_path($($name), *) = $bound {
-            ($($name), *)
-        } else $else_body;
-    };
-}

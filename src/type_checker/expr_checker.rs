@@ -1,3 +1,4 @@
+use super::check;
 use super::NodeType;
 use super::{ContextTracker, TypeResolution};
 use crate::diagnostic::*;
@@ -6,7 +7,6 @@ use crate::library::*;
 use crate::parsing::*;
 use log::trace;
 use std::rc::Rc;
-use super::check;
 
 pub struct ExprChecker {
     pub lib: Rc<Lib>,
@@ -417,9 +417,7 @@ impl ExprVisitor for ExprChecker {
 
         match (target_type, arg_type) {
             (NodeType::Array(inside, _), NodeType::Int) => expr.set_type((*inside).clone()),
-            (NodeType::Array(..), other) => {
-                Err(check::type_mismatch(arg, &other, &NodeType::Int))
-            }
+            (NodeType::Array(..), other) => Err(check::type_mismatch(arg, &other, &NodeType::Int)),
             _ => Err(Diagnostic::error(expr, "Can't subscript into non-array")),
         }
     }

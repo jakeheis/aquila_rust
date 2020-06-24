@@ -2,7 +2,6 @@ use super::c_writer::CWriter;
 use super::core;
 use crate::analysis::*;
 use crate::diagnostic::*;
-use crate::guard;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
@@ -216,6 +215,14 @@ impl Codegen {
 
         self.func_specialization = None;
     }
+
+    fn array_count(&self, expr: &Expr) -> usize {
+        if let NodeType::Array(_, count) = expr.get_type().unwrap() {
+            count
+        } else {
+            unreachable!()
+        }
+    }
 }
 
 impl StmtVisitor for Codegen {
@@ -336,7 +343,7 @@ impl StmtVisitor for Codegen {
 
     fn visit_for_stmt(&mut self, variable: &TypedToken, array_expr: &Expr, body: &[Stmt]) {
         let array = array_expr.accept(self);
-        guard!(NodeType::Array[_of, count] = array_expr.get_type().unwrap());
+        let count = self.array_count(array_expr);
 
         let condition = format!("int i = 0; i < {}; i++", count);
         self.writer.start_condition_block("for", condition);
@@ -571,7 +578,7 @@ impl ExprVisitor for Codegen {
         let arg = index_expr.accept(self);
         let index = self.write_temp(&NodeType::Int, arg);
 
-        guard!(NodeType::Array[_inside, count] = target_expr.get_type().unwrap());
+        let count = self.array_count(target_expr);
         self.writer.write_guard(
             format!("{} >= {}", index, count),
             "index out of bounds",

@@ -1,8 +1,8 @@
+use super::TypeResolution;
 use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
-use super::TypeResolution;
 use log::trace;
 use std::collections::HashSet;
 
@@ -215,7 +215,9 @@ impl<'a> SymbolTableBuilder<'a> {
     }
 
     fn resolve_explicit_type(&self, explicit_type: &ExplicitType) -> NodeType {
-        if let Some(node_type) = TypeResolution::resolve(explicit_type, &self.symbols, self.deps, &self.context) {
+        if let Some(node_type) =
+            TypeResolution::resolve(explicit_type, &self.symbols, self.deps, &self.context)
+        {
             trace!(target: "symbol_table", "Resolved explicit type {} to {}", explicit_type.span().lexeme(), node_type);
             node_type
         } else {

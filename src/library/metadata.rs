@@ -1,4 +1,4 @@
-use super::{Lib, Symbol, FunctionType, NodeType};
+use super::{FunctionType, Lib, NodeType, Symbol};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug)]

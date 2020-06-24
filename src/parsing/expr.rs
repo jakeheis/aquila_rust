@@ -1,4 +1,4 @@
-use super::{ResolvedToken, ExplicitType};
+use super::{ExplicitType, ResolvedToken};
 use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::library::NodeType;

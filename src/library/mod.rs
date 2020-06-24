@@ -9,12 +9,12 @@ use log::trace;
 use std::rc::Rc;
 
 mod metadata;
-mod symbol_table;
 mod node_type;
+mod symbol_table;
 
 pub use metadata::{FunctionKind, FunctionMetadata, GenericSpecialization, TypeMetadata};
+pub use node_type::{FunctionType, NodeType};
 pub use symbol_table::{Symbol, SymbolTable};
-pub use node_type::{NodeType, FunctionType};
 
 pub struct Lib {
     pub name: String,

@@ -3,9 +3,9 @@ mod node_type;
 mod symbol_table;
 mod type_checker;
 
+pub use node_type::TypeResolution;
 pub use symbol_table::SymbolTableBuilder;
 pub use type_checker::TypeChecker;
-pub use node_type::TypeResolution;
 
 use crate::diagnostic::*;
 use crate::library::*;
@@ -16,11 +16,11 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 mod check {
+    use super::NodeType;
     use crate::diagnostic::*;
+    use crate::library::Lib;
     use crate::parsing::*;
     use crate::source::ContainsSpan;
-    use super::NodeType;
-    use crate::library::Lib;
 
     pub fn type_mismatch<T: ContainsSpan>(
         span: &T,
@@ -248,7 +248,8 @@ impl ContextTracker {
     ) -> DiagnosticResult<NodeType> {
         let context = self.symbolic_context();
 
-        if let Some(deduced) = TypeResolution::resolve_with_lib(explicit_type, &self.lib, &context) {
+        if let Some(deduced) = TypeResolution::resolve_with_lib(explicit_type, &self.lib, &context)
+        {
             if let NodeType::Any = deduced {
                 Err(Diagnostic::error(
                     explicit_type,
