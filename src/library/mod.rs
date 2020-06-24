@@ -16,6 +16,7 @@ pub struct Lib {
     pub other: Vec<Stmt>,
     pub symbols: SymbolTable,
     pub dependencies: Vec<Lib>,
+    pub specialization_tracker: SpecializationTracker,
 }
 
 const LOG_PARSER: bool = false;
@@ -76,6 +77,7 @@ impl Lib {
             symbols: SymbolTable::new(),
             other,
             dependencies,
+            specialization_tracker: SpecializationTracker::new(),
         };
 
         lib.symbols = SymbolTableBuilder::build_symbols(

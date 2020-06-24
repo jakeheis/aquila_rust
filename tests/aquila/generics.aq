@@ -30,3 +30,5 @@ let spawned: GenericMadness[GenericMadness[ptr int]] = madness.spawn[ptr int](&4
 
 let more: MoreMadness[bool] = MoreMadness[bool].create(true);
 let inner: GenericMadness[bool] = more.inner[int](6);
+
+let unused: MoreMadness[double];

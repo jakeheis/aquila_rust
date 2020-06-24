@@ -12,6 +12,12 @@ type Adder {
 
 print Adder(3, 5).sum();
 
+type Gen[U] {
+
+}
+
+let a: Gen[int];
+
 /*
 enum Hello {
     case one;

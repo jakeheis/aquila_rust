@@ -1,27 +1,27 @@
 use super::metadata::*;
 use super::node_type::*;
+use super::expr_checker::*;
 use super::symbol_table::*;
 use crate::diagnostic::*;
 use crate::guard;
-use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
 use log::trace;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::rc::Rc;
 
 type Result = DiagnosticResult<NodeType>;
 
 #[derive(Clone)]
-enum ScopeType {
+pub enum ScopeType {
     TopLevel,
     InsideType(TypeMetadata),
     InsideMetatype(TypeMetadata),
     InsideFunction(FunctionMetadata),
 }
 
-struct Scope {
+pub struct Scope {
     id: Option<Symbol>,
     variable_types: HashMap<Symbol, NodeType>,
     scope_type: ScopeType,
@@ -36,167 +36,21 @@ impl Scope {
         }
     }
 
-    fn define_var(&mut self, name: &TypedToken, var_type: &NodeType) {
-        if var_type.contains_ambiguity() {
-            panic!("Should never define var as ambiguous");
-        }
-
-        let new_symbol = Symbol::new((&self.id).as_ref(), &name.token);
-
-        trace!(target: "type_checker", "Defining {} (symbol = {}) as {}", name.span().lexeme(), new_symbol, var_type);
-
-        self.variable_types
-            .insert(new_symbol.clone(), var_type.clone());
-
-        name.set_symbol(new_symbol);
-        name.set_type(var_type.clone());
-    }
-
-    fn put_in_scope(&mut self, symbol: &Symbol, var_type: &NodeType) {
-        self.variable_types.insert(symbol.clone(), var_type.clone());
-    }
-
     fn type_of(&self, symbol: &Symbol) -> Option<&NodeType> {
         self.variable_types.get(symbol)
     }
-
-    fn function_metadata(&self) -> Option<&FunctionMetadata> {
-        if let ScopeType::InsideFunction(f) = &self.scope_type {
-            Some(f)
-        } else {
-            None
-        }
-    }
 }
 
-pub struct TypeChecker {
-    reporter: Rc<dyn Reporter>,
+pub struct ContextTracker {
     lib: Rc<Lib>,
-    call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
-    explicit_type_specializations: HashMap<Symbol, HashSet<GenericSpecialization>>,
     scopes: Vec<Scope>,
-    is_builtin: bool,
 }
 
-pub struct Analysis {
-    guarantees_return: bool,
-}
-
-impl TypeChecker {
-    pub fn check(lib: Lib, reporter: Rc<dyn Reporter>) -> Lib {
-        let lib = Rc::new(lib);
-
-        let mut checker = TypeChecker {
-            reporter,
-            lib: Rc::clone(&lib),
-            call_map: HashMap::new(),
-            explicit_type_specializations: HashMap::new(),
+impl ContextTracker {
+    fn new(lib: Rc<Lib>) -> Self {
+        ContextTracker {
+            lib,
             scopes: vec![Scope::new(None, ScopeType::TopLevel)],
-            is_builtin: false,
-        };
-
-        for decl in &lib.type_decls {
-            checker.visit_type_decl(decl);
-        }
-        for decl in &lib.function_decls {
-            checker.visit_function_decl(decl);
-        }
-
-        checker.is_builtin = true;
-        for builtin in &lib.builtins {
-            checker.visit_function_decl(builtin);
-        }
-        checker.is_builtin = false;
-
-        checker.push_scope_named("main");
-        checker.check_list(&lib.other);
-        checker.pop_scope();
-
-        let call_map = std::mem::replace(&mut checker.call_map, HashMap::new());
-        let explicit_type_map =
-            std::mem::replace(&mut checker.explicit_type_specializations, HashMap::new());
-
-        std::mem::drop(checker);
-
-        let mut lib = Rc::try_unwrap(lib).ok().unwrap();
-        lib.symbols.call_map = call_map;
-
-        for (symbol, specs) in explicit_type_map {
-            let t = lib.type_metadata_mut(&symbol).unwrap();
-            for spec in specs {
-                t.specializations.insert(spec);
-            }
-        }
-
-        lib
-    }
-
-    fn check_list(&mut self, stmt_list: &[Stmt]) -> Analysis {
-        let mut warned_unused = false;
-        let mut guarantees_return = false;
-        for stmt in stmt_list {
-            if guarantees_return && warned_unused == false {
-                self.reporter
-                    .report(Diagnostic::warning(stmt, "Code will never be executed"));
-                warned_unused = true;
-            }
-            let analysis = stmt.accept(self);
-            if analysis.guarantees_return {
-                guarantees_return = true;
-            }
-        }
-        Analysis { guarantees_return }
-    }
-
-    fn check_expr(&mut self, expr: &Expr) -> Option<NodeType> {
-        match expr.accept(self) {
-            Ok(t) => Some(t),
-            Err(diag) => {
-                self.report_error(diag);
-                None
-            }
-        }
-    }
-
-    fn report_error(&mut self, diag: Diagnostic) {
-        self.reporter.report(diag);
-    }
-
-    fn type_mismatch<T: ContainsSpan>(
-        &self,
-        span: &T,
-        given: &NodeType,
-        expected: &NodeType,
-    ) -> Diagnostic {
-        let message = format!("Expected {}, got {}", expected, given);
-        Diagnostic::error(span, &message)
-    }
-
-    fn ensure_no_amibguity(&self, expr: &Expr, node_type: &NodeType) -> DiagnosticResult<()> {
-        if node_type.contains_ambiguity() {
-            Err(Diagnostic::error(expr, "Cannot infer type"))
-        } else {
-            Ok(())
-        }
-    }
-
-    fn current_scope(&mut self) -> &mut Scope {
-        self.scopes.last_mut().unwrap()
-    }
-
-    fn current_scope_immut(&self) -> &Scope {
-        self.scopes.last().unwrap()
-    }
-
-    fn current_symbol(&self) -> Option<&Symbol> {
-        self.scopes.last().unwrap().id.as_ref()
-    }
-
-    fn parent_scope(&self) -> Option<&Scope> {
-        if self.scopes.len() > 1 {
-            Some(&self.scopes[self.scopes.len() - 2])
-        } else {
-            None
         }
     }
 
@@ -236,7 +90,70 @@ impl TypeChecker {
         trace!(target: "type_checker", "Popped scope {}", popped.id.unwrap());
     }
 
-    fn resolve_var(&self, name: &str) -> Option<(Symbol, NodeType)> {
+    pub fn symbolic_context(&self) -> Vec<Symbol> {
+        self.scopes
+            .iter()
+            .flat_map(|s| s.id.as_ref().map(|id| id.clone()))
+            .collect()
+    }
+
+    pub fn current_scope(&mut self) -> &mut Scope {
+        self.scopes.last_mut().unwrap()
+    }
+
+    pub fn current_scope_immut(&self) -> &Scope {
+        self.scopes.last().unwrap()
+    }
+
+    pub fn current_symbol(&self) -> Option<&Symbol> {
+        self.scopes.last().unwrap().id.as_ref()
+    }
+
+    pub fn enclosing_type(&self) -> Option<&TypeMetadata> {
+        match &self.current_scope_immut().scope_type {
+            ScopeType::InsideType(t) => Some(t),
+            ScopeType::InsideFunction(_) if self.scopes.len() > 1 => {
+                if let ScopeType::InsideType(t) = &self.scopes[self.scopes.len() - 2].scope_type {
+                    Some(t)
+                } else {
+                    None
+                }
+            },
+            _ => None
+        }
+    }
+
+    pub fn enclosing_function(&self) -> Option<&FunctionMetadata> {
+        if let ScopeType::InsideFunction(f) = &self.current_scope_immut().scope_type {
+            Some(f)
+        } else {
+            None
+        }
+    }
+
+    // Variables
+
+    pub fn put_in_scope(&mut self, symbol: &Symbol, var_type: &NodeType) {
+        self.current_scope().variable_types.insert(symbol.clone(), var_type.clone());
+    }
+
+    pub fn define_var(&mut self, name: &TypedToken, var_type: &NodeType) {
+        if var_type.contains_ambiguity() {
+            panic!("Should never define var as ambiguous");
+        }
+
+        let new_symbol = Symbol::new((&self.current_scope().id).as_ref(), &name.token);
+
+        trace!(target: "type_checker", "Defining {} (symbol = {}) as {}", name.span().lexeme(), new_symbol, var_type);
+
+        self.current_scope().variable_types
+            .insert(new_symbol.clone(), var_type.clone());
+
+        name.set_symbol(new_symbol);
+        name.set_type(var_type.clone());
+    }
+
+    pub fn resolve_var(&self, name: &str) -> Option<(Symbol, NodeType)> {
         for scope in self.scopes.iter().rev() {
             let possible_symbol = Symbol::new_str((&scope.id).as_ref(), name);
             if let Some(node_type) = scope.type_of(&possible_symbol) {
@@ -252,42 +169,19 @@ impl TypeChecker {
         }
     }
 
-    fn check_type_match(
-        &self,
-        expr: &Expr,
-        given: &NodeType,
-        expected: &NodeType,
-    ) -> DiagnosticResult<()> {
-        if given.matches(expected) {
-            Ok(())
-        } else {
-            Err(self.type_mismatch(expr, given, expected))
-        }
-    }
-
-    fn symbolic_context(&self) -> Vec<Symbol> {
-        self.scopes
-            .iter()
-            .flat_map(|s| s.id.as_ref().map(|id| id.clone()))
-            .collect()
-    }
-
-    fn resolve_explicit_type(&mut self, explicit_type: &ExplicitType) -> Result {
+    pub fn resolve_explicit_type(&mut self, explicit_type: &ExplicitType) -> Result {
         let context = self.symbolic_context();
 
         if let Some(deduced) = explicit_type.resolve_with_lib(&self.lib, &context) {
-            if let (&NodeType::Any, false) = (&deduced, self.is_builtin) {
+            if let NodeType::Any = deduced {
                 Err(Diagnostic::error(
                     explicit_type,
                     "Cannot have type any; must be ptr any",
                 ))
             } else {
-                self.confirm_fully_specialized(explicit_type, &deduced)?;
+                TypeChecker::confirm_fully_specialized(self.lib.as_ref(), explicit_type, &deduced)?;
                 if let NodeType::Instance(type_symbol, spec) = &deduced {
-                    self.explicit_type_specializations
-                        .entry(type_symbol.clone())
-                        .or_insert(HashSet::new())
-                        .insert(spec.clone());
+                    self.lib.specialization_tracker.add_required_type_spec(type_symbol.clone(), spec.clone());
                 }
                 Ok(deduced)
             }
@@ -295,9 +189,110 @@ impl TypeChecker {
             Err(Diagnostic::error(explicit_type, "Undefined type"))
         }
     }
+}
 
-    fn confirm_fully_specialized<S: ContainsSpan>(
-        &self,
+pub struct TypeChecker {
+    reporter: Rc<dyn Reporter>,
+    lib: Rc<Lib>,
+    context: ContextTracker,
+}
+
+pub struct Analysis {
+    guarantees_return: bool,
+}
+
+impl TypeChecker {
+    pub fn check(lib: Lib, reporter: Rc<dyn Reporter>) -> Lib {
+        let lib = Rc::new(lib);
+
+        let mut checker = TypeChecker {
+            reporter,
+            lib: Rc::clone(&lib),
+            context: ContextTracker::new(Rc::clone(&lib)),
+        };
+
+        for decl in &lib.type_decls {
+            checker.visit_type_decl(decl);
+        }
+        for decl in &lib.function_decls {
+            checker.visit_function_decl(decl);
+        }
+        for decl in &lib.builtins {
+            decl.name.set_symbol(Symbol::new(None, &decl.name.token));
+        }
+
+        checker.context.push_scope_named("main");
+        checker.check_list(&lib.other);
+        checker.context.pop_scope();
+
+        std::mem::drop(checker);
+
+        let lib = Rc::try_unwrap(lib).ok().unwrap();
+
+        lib
+    }
+
+    fn check_list(&mut self, stmt_list: &[Stmt]) -> Analysis {
+        let mut warned_unused = false;
+        let mut guarantees_return = false;
+        for stmt in stmt_list {
+            if guarantees_return && warned_unused == false {
+                self.reporter
+                    .report(Diagnostic::warning(stmt, "Code will never be executed"));
+                warned_unused = true;
+            }
+            let analysis = stmt.accept(self);
+            if analysis.guarantees_return {
+                guarantees_return = true;
+            }
+        }
+        Analysis { guarantees_return }
+    }
+
+    fn check_expr(&mut self, expr: &Expr) -> Option<NodeType> {
+        let context = std::mem::replace(&mut self.context, ContextTracker::new(Rc::clone(&self.lib)));
+        let mut expr_checker = ExprChecker::new(
+            Rc::clone(&self.lib),
+            context,
+        );
+        let result = expr.accept(&mut expr_checker);
+        std::mem::swap(&mut self.context, &mut expr_checker.context);
+        match result {
+            Ok(t) => Some(t),
+            Err(diag) => {
+                self.report_error(diag);
+                None
+            }
+        }
+    }
+
+    fn report_error(&mut self, diag: Diagnostic) {
+        self.reporter.report(diag);
+    }
+
+    pub fn type_mismatch<T: ContainsSpan>(
+        span: &T,
+        given: &NodeType,
+        expected: &NodeType,
+    ) -> Diagnostic {
+        let message = format!("Expected {}, got {}", expected, given);
+        Diagnostic::error(span, &message)
+    }
+
+    pub fn check_type_match(
+        expr: &Expr,
+        given: &NodeType,
+        expected: &NodeType,
+    ) -> DiagnosticResult<()> {
+        if given.matches(expected) {
+            Ok(())
+        } else {
+            Err(TypeChecker::type_mismatch(expr, given, expected))
+        }
+    }
+
+    pub fn confirm_fully_specialized<S: ContainsSpan>(
+        lib: &Lib,
         span: &S,
         node_type: &NodeType,
     ) -> DiagnosticResult<()> {
@@ -305,10 +300,10 @@ impl TypeChecker {
             NodeType::Instance(type_symbol, specialization)
             | NodeType::Metatype(type_symbol, specialization) => {
                 for spec in specialization.map.values() {
-                    self.confirm_fully_specialized(span, spec)?;
+                    TypeChecker::confirm_fully_specialized(lib, span, spec)?;
                 }
 
-                let matching_type = self.lib.type_metadata(type_symbol).unwrap();
+                let matching_type = lib.type_metadata(type_symbol).unwrap();
                 let spec_length = specialization.map.len();
                 if spec_length != matching_type.generics.len() {
                     let message = format!(
@@ -321,95 +316,9 @@ impl TypeChecker {
                     Ok(())
                 }
             }
-            NodeType::Pointer(to) => self.confirm_fully_specialized(span, to),
-            NodeType::Array(of, _) => self.confirm_fully_specialized(span, of),
+            NodeType::Pointer(to) => TypeChecker::confirm_fully_specialized(lib, span, to),
+            NodeType::Array(of, _) => TypeChecker::confirm_fully_specialized(lib, span, of),
             _ => Ok(()),
-        }
-    }
-
-    fn retrieve_method<S: ContainsSpan>(
-        &mut self,
-        span: &S,
-        target: &NodeType,
-        method: &str,
-    ) -> DiagnosticResult<(Symbol, GenericSpecialization)> {
-        let (target_symbol, specialization, is_meta) = match target {
-            NodeType::Instance(t, s) => (t, s, false),
-            NodeType::Metatype(t, s) => (t, s, true),
-            _ => {
-                return Err(Diagnostic::error(
-                    span,
-                    &format!("Cannot call method on a {}", target),
-                ))
-            }
-        };
-
-        let target_metadata = self.lib.type_metadata(target_symbol).unwrap();
-
-        let method_metadata = if is_meta {
-            target_metadata.meta_method_named(method)
-        } else {
-            target_metadata.method_named(method)
-        };
-
-        match method_metadata {
-            Some(method) => Ok((method, specialization.clone())),
-            None => {
-                let message = format!("Type '{}' does not have method '{}'", target, method);
-                Err(Diagnostic::error(span, &message))
-            }
-        }
-    }
-
-    fn resolve_function<S: ContainsSpan>(
-        &self,
-        span: &S,
-        function: &ResolvedToken,
-    ) -> DiagnosticResult<(FunctionMetadata, GenericSpecialization, bool)> {
-        match self.resolve_var(function.token.lexeme()) {
-            Some((found_symbol, NodeType::Function(_))) => {
-                let func_metadata = self.lib.function_metadata(&found_symbol).unwrap();
-                match &func_metadata.kind {
-                    FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
-                        let implicit_self = self.lib.type_metadata(owner).unwrap();
-                        let implicit_spec = implicit_self.dummy_specialization();
-                        Ok((func_metadata, implicit_spec, false))
-                    }
-                    _ => Ok((func_metadata, GenericSpecialization::empty(), false)),
-                }
-            }
-            Some((_, node_type)) => Err(Diagnostic::error(
-                span,
-                &format!("Cannot call object of type {}", node_type),
-            )),
-            _ => self.resolve_init_func(function),
-        }
-    }
-
-    fn resolve_init_func(
-        &self,
-        function: &ResolvedToken,
-    ) -> DiagnosticResult<(FunctionMetadata, GenericSpecialization, bool)> {
-        let explicit_type = NodeType::deduce_from_simple_explicit(
-            function,
-            &self.lib.symbols,
-            &self.lib.dependencies,
-            &self.symbolic_context(),
-        );
-        match &explicit_type {
-            Some(NodeType::Instance(type_symbol, specs)) => {
-                self.confirm_fully_specialized(function.span(), explicit_type.as_ref().unwrap())?;
-                let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
-                let init_metadata = self
-                    .lib
-                    .function_metadata(&Symbol::init_symbol(Some(&meta_symbol)));
-                Ok((init_metadata.unwrap(), specs.clone(), true))
-            }
-            Some(..) => Err(Diagnostic::error(
-                function.span(),
-                "Cannot call a primitive",
-            )),
-            _ => Err(Diagnostic::error(function.span(), "Undefined function")),
         }
     }
 }
@@ -418,38 +327,33 @@ impl StmtVisitor for TypeChecker {
     type StmtResult = Analysis;
 
     fn visit_type_decl(&mut self, decl: &TypeDecl) -> Analysis {
-        let (type_symbol, metadata) = self.push_type_scope(&decl.name);
+        let (_, metadata) = self.context.push_type_scope(&decl.name);
 
-        self.push_scope_meta(&metadata);
+        self.context.push_scope_meta(&metadata);
         for meta_method in &metadata.meta_methods {
             let method_metadata = self.lib.function_metadata(&meta_method).unwrap();
-            self.current_scope()
-                .put_in_scope(meta_method, &method_metadata.node_type());
+            self.context.put_in_scope(meta_method, &method_metadata.node_type());
         }
         for meta_method in &decl.meta_methods {
             self.visit_function_decl(meta_method);
         }
-        self.pop_scope();
+        self.context.pop_scope();
 
         for field in &decl.fields {
             self.visit_variable_decl(field);
         }
 
-        let new_symbol = Symbol::new_str(Some(&type_symbol), "self");
-        self.current_scope()
-            .variable_types
-            .insert(new_symbol.clone(), metadata.unspecialized_type());
+        self.context.put_in_scope(&Symbol::self_symbol(), &metadata.unspecialized_type());
 
         for method in &metadata.methods {
             let method_metadata = self.lib.function_metadata(&method).unwrap();
-            self.current_scope()
-                .put_in_scope(method, &method_metadata.node_type());
+            self.context.put_in_scope(method, &method_metadata.node_type());
         }
         for method in &decl.methods {
             self.visit_function_decl(method);
         }
 
-        self.pop_scope();
+        self.context.pop_scope();
 
         Analysis {
             guarantees_return: false,
@@ -457,12 +361,12 @@ impl StmtVisitor for TypeChecker {
     }
 
     fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Analysis {
-        let (func_symbol, metadata) = self.push_function_scope(&decl.name);
+        let (func_symbol, metadata) = self.context.push_function_scope(&decl.name);
         decl.name.set_symbol(func_symbol.clone());
 
         let explicit_return_type = decl.return_type.as_ref();
         if let Some(e) = explicit_return_type {
-            if let Err(diag) = self.confirm_fully_specialized(e, &metadata.return_type) {
+            if let Err(diag) = TypeChecker::confirm_fully_specialized(self.lib.as_ref(), e, &metadata.return_type) {
                 self.report_error(diag);
             }
         }
@@ -499,10 +403,9 @@ impl StmtVisitor for TypeChecker {
 
         let analysis = self.check_list(&decl.body);
 
-        self.pop_scope();
+        self.context.pop_scope();
 
-        if !analysis.guarantees_return && !return_type.matches(&NodeType::Void) && !self.is_builtin
-        {
+        if !analysis.guarantees_return && !return_type.matches(&NodeType::Void) {
             let last_param = decl.parameters.last().map(|p| p.span().clone());
             let span_params = Span::join_opt(&decl.name, &last_param);
             let span = Span::join_opt(&span_params, &decl.return_type);
@@ -518,7 +421,7 @@ impl StmtVisitor for TypeChecker {
         let explicit_type =
             decl.explicit_type
                 .as_ref()
-                .and_then(|k| match self.resolve_explicit_type(k) {
+                .and_then(|k| match self.context.resolve_explicit_type(k) {
                     Ok(explicit_type) => Some(explicit_type),
                     Err(diagnostic) => {
                         self.report_error(diagnostic);
@@ -530,9 +433,9 @@ impl StmtVisitor for TypeChecker {
 
         match (explicit_type, implicit_type) {
             (Some(explicit), Some(implicit)) => {
-                self.current_scope().define_var(&decl.name, &explicit);
+                self.context.define_var(&decl.name, &explicit);
 
-                if let Err(diag) = self.check_type_match(
+                if let Err(diag) = TypeChecker::check_type_match(
                     decl.initial_value.as_ref().unwrap(),
                     &implicit,
                     &explicit,
@@ -545,9 +448,9 @@ impl StmtVisitor for TypeChecker {
                     .unwrap()
                     .set_type(explicit.clone());
             }
-            (Some(explicit), None) => self.current_scope().define_var(&decl.name, &explicit),
+            (Some(explicit), None) => self.context.define_var(&decl.name, &explicit),
             (None, Some(implicit)) if !implicit.contains_ambiguity() => {
-                self.current_scope().define_var(&decl.name, &implicit)
+                self.context.define_var(&decl.name, &implicit)
             }
             _ => {
                 self.report_error(Diagnostic::error(&decl.name, "Can't infer type"));
@@ -567,7 +470,7 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_if_stmt(&mut self, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
-            if let Err(diag) = self.check_type_match(condition, &cond_type, &NodeType::Bool) {
+            if let Err(diag) = TypeChecker::check_type_match(condition, &cond_type, &NodeType::Bool) {
                 self.report_error(diag);
             }
             let _ = condition.set_type(NodeType::Bool);
@@ -575,34 +478,34 @@ impl StmtVisitor for TypeChecker {
 
         let mut guarantees_return = true;
 
-        self.push_scope_named("if");
+        self.context.push_scope_named("if");
         let body_analysis = self.check_list(body);
         if body_analysis.guarantees_return == false {
             guarantees_return = false;
         }
-        self.pop_scope();
+        self.context.pop_scope();
 
-        self.push_scope_named("else");
+        self.context.push_scope_named("else");
         let else_analysis = self.check_list(else_body);
         if else_analysis.guarantees_return == false {
             guarantees_return = false;
         }
-        self.pop_scope();
+        self.context.pop_scope();
 
         Analysis { guarantees_return }
     }
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
-            if let Err(diag) = self.check_type_match(condition, &cond_type, &NodeType::Bool) {
+            if let Err(diag) = TypeChecker::check_type_match(condition, &cond_type, &NodeType::Bool) {
                 self.report_error(diag);
             }
             let _ = condition.set_type(NodeType::Bool);
         }
 
-        self.push_scope_named("while");
+        self.context.push_scope_named("while");
         let body_analysis = self.check_list(body);
-        self.pop_scope();
+        self.context.pop_scope();
 
         body_analysis
     }
@@ -624,12 +527,11 @@ impl StmtVisitor for TypeChecker {
         let array_type = array_type.unwrap();
         guard!(NodeType::Array[of, _size] = &array_type);
 
-        self.push_scope_named("for");
+        self.context.push_scope_named("for");
         let of: &NodeType = &of;
-        self.current_scope()
-            .define_var(variable, &NodeType::pointer_to(of.clone()));
+        self.context.define_var(variable, &NodeType::pointer_to(of.clone()));
         let body_analysis = self.check_list(body);
-        self.pop_scope();
+        self.context.pop_scope();
 
         body_analysis
     }
@@ -641,15 +543,15 @@ impl StmtVisitor for TypeChecker {
             .unwrap_or(NodeType::Void);
 
         let expected_return = self
-            .current_scope_immut()
-            .function_metadata()
+            .context
+            .enclosing_function()
             .as_ref()
             .map(|m| &m.return_type);
         let expected_return = expected_return.unwrap_or(&NodeType::Void);
 
         if let Some(expr) = expr.as_ref() {
             let _ = expr.set_type(expected_return.clone());
-            if let Err(diag) = self.check_type_match(expr, &ret_type, &expected_return) {
+            if let Err(diag) = TypeChecker::check_type_match(expr, &ret_type, &expected_return) {
                 self.report_error(diag);
             }
         } else {
@@ -693,366 +595,7 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
-    fn visit_builtin_stmt(&mut self, inner: &Box<Stmt>) -> Self::StmtResult {
-        self.is_builtin = true;
-        let result = inner.accept(self);
-        self.is_builtin = false;
-        result
+    fn visit_builtin_stmt(&mut self, _inner: &Box<Stmt>) -> Self::StmtResult {
+        unreachable!()
     }
 }
-
-impl ExprVisitor for TypeChecker {
-    type ExprResult = Result;
-
-    fn visit_assignment_expr(
-        &mut self,
-        expr: &Expr,
-        target: &Expr,
-        value: &Expr,
-    ) -> Self::ExprResult {
-        let target_type = target.accept(self)?;
-        let value_type = value.accept(self)?;
-        self.check_type_match(value, &value_type, &target_type)?;
-        let _ = value.set_type(target_type);
-        expr.set_type(NodeType::Void)
-    }
-
-    fn visit_binary_expr(
-        &mut self,
-        expr: &Expr,
-        lhs: &Expr,
-        op: &Token,
-        rhs: &Expr,
-    ) -> Self::ExprResult {
-        let lhs_type = lhs.accept(self)?;
-        let rhs_type = rhs.accept(self)?;
-
-        self.ensure_no_amibguity(lhs, &lhs_type)?;
-        self.ensure_no_amibguity(rhs, &rhs_type)?;
-
-        let entries: &[BinaryEntry] = match op.kind {
-            TokenKind::Plus => &ADDITION_ENTRIES,
-            TokenKind::Minus | TokenKind::Star | TokenKind::Slash => &MATH_ENTRIES,
-            TokenKind::AmpersandAmpersand | TokenKind::BarBar => &LOGIC_ENTRIES,
-            TokenKind::EqualEqual | TokenKind::BangEqual => &EQUALITY_ENTRIES,
-            TokenKind::Greater
-            | TokenKind::GreaterEqual
-            | TokenKind::Less
-            | TokenKind::LessEqual => &COMPARISON_ENTRIES,
-            _ => panic!(),
-        };
-
-        if let Some(matching_entry) = entries
-            .iter()
-            .find(|e| e.0.matches(&lhs_type) && e.1.matches(&rhs_type))
-        {
-            expr.set_type(matching_entry.2.clone())
-        } else {
-            let message = format!("Cannot {} on {} and {}", op.lexeme(), lhs_type, rhs_type);
-            Err(Diagnostic::error(&Span::join(lhs, rhs), &message))
-        }
-    }
-
-    fn visit_unary_expr(&mut self, expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
-        let operand_type = operand.accept(self)?;
-
-        self.ensure_no_amibguity(expr, &operand_type)?;
-
-        if let TokenKind::Ampersand = op.kind {
-            let boxed_type = Box::new(operand_type.clone());
-            return expr.set_type(NodeType::Pointer(boxed_type));
-        }
-
-        if let TokenKind::Star = op.kind {
-            return match operand_type {
-                NodeType::Pointer(inner) => expr.set_type((*inner).clone()),
-                _ => {
-                    let message = format!("Cannot dereference object of type {}", operand_type);
-                    Err(Diagnostic::error(operand, &message))
-                }
-            };
-        }
-
-        let entries: &[NodeType] = match op.kind {
-            TokenKind::Minus => &NEGATE_ENTRIES,
-            TokenKind::Bang => &INVERT_ENTRIES,
-            _ => unreachable!(),
-        };
-
-        if entries.iter().find(|e| e.matches(&operand_type)).is_some() {
-            expr.set_type(operand_type.clone())
-        } else {
-            let message = format!("Cannot {} on {}", op.lexeme(), operand_type);
-            Err(Diagnostic::error(operand, &message))
-        }
-    }
-
-    fn visit_function_call_expr(
-        &mut self,
-        expr: &Expr,
-        target: Option<&Expr>,
-        function: &ResolvedToken,
-        args: &[Expr],
-    ) -> Self::ExprResult {
-        let function_name = function.token.lexeme();
-
-        let (metadata, target_specialization, is_init) = if let Some(target) = target {
-            let target_type = target.accept(self)?;
-            let (method, target_specialization) =
-                self.retrieve_method(expr, &target_type, function_name)?;
-
-            let method_metadata = self.lib.function_metadata(&method).unwrap();
-            (method_metadata, target_specialization, false)
-        } else {
-            self.resolve_function(expr, function)?
-        };
-
-        function.set_symbol(metadata.symbol.clone());
-
-        trace!(target: "type_checker", "Callee metadata: {}", metadata);
-
-        let arg_types: DiagnosticResult<Vec<NodeType>> =
-            args.iter().map(|a| a.accept(self)).collect();
-        let arg_types = arg_types?;
-
-        if metadata.parameter_types.len() != arg_types.len() {
-            let message = format!(
-                "Expected {} argument(s), got {}",
-                metadata.parameter_types.len(),
-                arg_types.len()
-            );
-            return Err(Diagnostic::error(expr, &message));
-        }
-
-        // let function_specialization = if function_specialization.is_empty() {
-        //     match GenericSpecialization::infer(self.lib.as_ref(), &metadata, &arg_types) {
-        //         Ok(spec) => spec,
-        //         Err(symbol) => {
-        //             let message = format!(
-        //                 "Couldn't infer generic type {}",
-        //                 symbol.last_component()
-        //             );
-        //             return Err(Diagnostic::error(expr, &message));
-        //         }
-        //     }
-        // } else {
-        let function_specialization = if is_init {
-            GenericSpecialization::empty()
-        } else {
-            if function.specialization.len() != metadata.generics.len() {
-                let message = format!(
-                    "Expected {} specializations, got {}",
-                    metadata.generics.len(),
-                    function.specialization.len()
-                );
-                return Err(Diagnostic::error(function.span(), &message));
-            }
-            let specialization: std::result::Result<Vec<NodeType>, _> = function
-                .specialization
-                .iter()
-                .map(|s| self.resolve_explicit_type(s))
-                .collect();
-            GenericSpecialization::new(&metadata.generics, specialization?)
-        };
-
-        let full_call_specialization =
-            function_specialization.merge(self.lib.as_ref(), &target_specialization);
-        // println!("target {} function {} merged {}", target_specialization, function_specialization, full_call_specialization);
-
-        {
-            let enclosing_func = self
-                .current_scope()
-                .function_metadata()
-                .as_ref()
-                .map(|f| f.symbol.clone())
-                .unwrap_or(Symbol::main_symbol());
-            trace!(target: "type_checker", "Adding call from {} to {} with {}", enclosing_func, metadata.symbol, full_call_specialization);
-            self.call_map
-                .entry(enclosing_func)
-                .or_insert(Vec::new())
-                .push((metadata.symbol.clone(), full_call_specialization.clone()));
-        }
-
-        let function_type = metadata
-            .full_type()
-            .specialize(self.lib.as_ref(), &full_call_specialization);
-
-        for ((index, param), arg) in function_type
-            .parameters
-            .into_iter()
-            .enumerate()
-            .zip(arg_types)
-        {
-            if let Err(diag) = self.ensure_no_amibguity(&args[index], &arg) {
-                self.report_error(diag);
-            }
-            self.check_type_match(&args[index], &arg, &param)?;
-        }
-
-        expr.set_type(function_type.return_type)
-    }
-
-    fn visit_field_expr(
-        &mut self,
-        expr: &Expr,
-        target: &Expr,
-        field: &ResolvedToken,
-    ) -> Self::ExprResult {
-        let target_type = target.accept(self)?;
-        let field_name = field.token.lexeme();
-
-        match target_type {
-            NodeType::Instance(type_symbol, specialization) => {
-                let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
-                if let Some((field_symbol, field_type)) = type_metadata.field_named(field_name) {
-                    field.set_symbol(field_symbol);
-                    expr.set_type(field_type.specialize(self.lib.as_ref(), &specialization))
-                } else {
-                    Err(Diagnostic::error(
-                        &Span::join(target, field.span()),
-                        &format!(
-                            "Type '{}' does not has field '{}'",
-                            type_symbol.id,
-                            field.span().lexeme()
-                        ),
-                    ))
-                }
-            }
-            _ => Err(Diagnostic::error(
-                target,
-                &format!("Cannot access property of '{}'", target_type),
-            )),
-        }
-    }
-
-    fn visit_literal_expr(&mut self, expr: &Expr, token: &Token) -> Self::ExprResult {
-        let node_type = match token.kind {
-            TokenKind::Int => NodeType::Int,
-            TokenKind::Double => NodeType::Double,
-            TokenKind::True => NodeType::Bool,
-            TokenKind::False => NodeType::Bool,
-            TokenKind::StringLiteral => NodeType::pointer_to(NodeType::Byte),
-            _ => panic!(),
-        };
-        expr.set_type(node_type)
-    }
-
-    fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
-        if let TokenKind::SelfKeyword = name.token.kind {
-            if let Some(ScopeType::InsideType(t)) = &self.parent_scope().map(|s| &s.scope_type) {
-                name.set_symbol(Symbol::new_str(None, "self"));
-                return expr.set_type(t.unspecialized_type());
-            } else {
-                return Err(Diagnostic::error(expr, "Self illegal here"));
-            }
-        }
-
-        if let Some((found_symbol, node_type)) = self.resolve_var(name.span().lexeme()) {
-            if !name.specialization.is_empty() {
-                return Err(Diagnostic::error(expr, "Cannot specialize variable"));
-            }
-            name.set_symbol(found_symbol);
-            expr.set_type(node_type.clone())
-        } else {
-            let explicit_type = NodeType::deduce_from_simple_explicit(
-                name,
-                &self.lib.symbols,
-                &self.lib.dependencies,
-                &self.symbolic_context(),
-            );
-            match &explicit_type {
-                Some(NodeType::Instance(symbol, spec)) => {
-                    self.confirm_fully_specialized(name.span(), explicit_type.as_ref().unwrap())?;
-                    trace!(target: "type_checker", "Treating variable as metatype of {}", symbol);
-                    name.set_symbol(symbol.clone());
-                    expr.set_type(NodeType::Metatype(symbol.clone(), spec.clone()))
-                }
-                _ => Err(Diagnostic::error(name.span(), "Undefined variable")),
-            }
-        }
-    }
-
-    fn visit_array_expr(&mut self, expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
-        if elements.is_empty() {
-            let node_type = NodeType::Array(Box::new(NodeType::Ambiguous), 0);
-            return expr.set_type(node_type);
-        }
-
-        let mut element_types: Vec<NodeType> = Vec::new();
-        for element in elements {
-            element_types.push(element.accept(self)?);
-        }
-
-        let expected_type =
-            if let Some(concrete) = element_types.iter().find(|e| !e.contains_ambiguity()) {
-                concrete
-            } else {
-                element_types.first().unwrap()
-            };
-
-        for (index, element_type) in element_types.iter().enumerate() {
-            if !element_type.matches(&expected_type) {
-                return Err(self.type_mismatch(&elements[index], &element_type, &expected_type));
-            }
-        }
-
-        let node_type = NodeType::Array(Box::new(expected_type.clone()), elements.len());
-        expr.set_type(node_type)
-    }
-
-    fn visit_subscript_expr(&mut self, expr: &Expr, target: &Expr, arg: &Expr) -> Self::ExprResult {
-        let target_type = target.accept(self)?;
-        let arg_type = arg.accept(self)?;
-
-        match (target_type, arg_type) {
-            (NodeType::Array(inside, _), NodeType::Int) => expr.set_type((*inside).clone()),
-            (NodeType::Array(..), other) => Err(self.type_mismatch(arg, &other, &NodeType::Int)),
-            _ => Err(Diagnostic::error(expr, "Can't subscript into non-array")),
-        }
-    }
-
-    fn visit_cast_expr(
-        &mut self,
-        expr: &Expr,
-        explicit_type: &ExplicitType,
-        value: &Expr,
-    ) -> Self::ExprResult {
-        value.accept(self)?;
-        expr.set_type(self.resolve_explicit_type(explicit_type)?)
-    }
-}
-
-const NEGATE_ENTRIES: [NodeType; 2] = [NodeType::Int, NodeType::Double];
-
-const INVERT_ENTRIES: [NodeType; 1] = [NodeType::Bool];
-
-type BinaryEntry = (NodeType, NodeType, NodeType);
-
-const ADDITION_ENTRIES: [BinaryEntry; 4] = [
-    (NodeType::Int, NodeType::Int, NodeType::Int),
-    (NodeType::Double, NodeType::Int, NodeType::Double),
-    (NodeType::Int, NodeType::Double, NodeType::Double),
-    (NodeType::Double, NodeType::Double, NodeType::Double),
-];
-
-const MATH_ENTRIES: [BinaryEntry; 4] = [
-    (NodeType::Int, NodeType::Int, NodeType::Int),
-    (NodeType::Double, NodeType::Int, NodeType::Double),
-    (NodeType::Int, NodeType::Double, NodeType::Double),
-    (NodeType::Double, NodeType::Double, NodeType::Double),
-];
-
-const LOGIC_ENTRIES: [BinaryEntry; 1] = [(NodeType::Bool, NodeType::Bool, NodeType::Bool)];
-
-const EQUALITY_ENTRIES: [BinaryEntry; 3] = [
-    (NodeType::Int, NodeType::Int, NodeType::Bool),
-    (NodeType::Double, NodeType::Double, NodeType::Bool),
-    (NodeType::Bool, NodeType::Bool, NodeType::Bool),
-];
-
-const COMPARISON_ENTRIES: [BinaryEntry; 4] = [
-    (NodeType::Int, NodeType::Int, NodeType::Bool),
-    (NodeType::Int, NodeType::Double, NodeType::Bool),
-    (NodeType::Double, NodeType::Int, NodeType::Bool),
-    (NodeType::Double, NodeType::Double, NodeType::Bool),
-];

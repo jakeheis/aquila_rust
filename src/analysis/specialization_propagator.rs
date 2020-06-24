@@ -2,6 +2,29 @@ use crate::analysis::*;
 use crate::library::*;
 use log::trace;
 use std::collections::{HashMap, HashSet};
+use std::cell::RefCell;
+
+pub struct SpecializationTracker {
+    call_map: RefCell<HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>>,
+    explicit_type_specializations: RefCell<HashMap<Symbol, HashSet<GenericSpecialization>>>,
+}
+
+impl SpecializationTracker {
+    pub fn new() -> Self {
+        SpecializationTracker {
+            call_map: RefCell::new(HashMap::new()),
+            explicit_type_specializations: RefCell::new(HashMap::new()),
+        }
+    }
+
+    pub fn add_call(&self, from: Symbol, to: Symbol, with: GenericSpecialization) {
+        self.call_map.borrow_mut().entry(from).or_insert(Vec::new()).push((to, with));
+    }
+
+    pub fn add_required_type_spec(&self, type_symbol: Symbol, spec: GenericSpecialization) {
+        self.explicit_type_specializations.borrow_mut().entry(type_symbol).or_insert(HashSet::new()).insert(spec);
+    }
+}
 
 pub struct SpecializationPropagator<'a> {
     lib: &'a mut Lib,
@@ -11,6 +34,14 @@ pub struct SpecializationPropagator<'a> {
 
 impl<'a> SpecializationPropagator<'a> {
     pub fn propogate(lib: &mut Lib) {
+        let explicit_list = lib.specialization_tracker.explicit_type_specializations.replace(HashMap::new());
+        for (type_symbol, specs) in explicit_list.into_iter() {
+            let type_metadata = lib.type_metadata_mut(&type_symbol).unwrap();
+            for spec in specs {
+                type_metadata.specializations.insert(spec);
+            }
+        }
+
         let mut call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>> = HashMap::new();
         SpecializationPropagator::flattened_call_map(lib, &mut call_map);
 
@@ -40,7 +71,8 @@ impl<'a> SpecializationPropagator<'a> {
         lib: &Lib,
         call_map: &mut HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
     ) {
-        for (caller, callees) in &lib.symbols.call_map {
+        let lib_map = lib.specialization_tracker.call_map.borrow();
+        for (caller, callees) in lib_map.iter() {
             let all = call_map.entry(caller.clone()).or_insert(Vec::new());
             all.append(&mut callees.clone());
         }
