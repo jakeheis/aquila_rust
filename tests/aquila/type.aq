@@ -1,0 +1,36 @@
+type TestType {
+
+    let first: int;
+    let second: int;
+
+    meta def create(): TestType {
+        return TestType(4, 5);
+    }
+
+    meta def create_again(): TestType {
+        return TestType.init(2, 3);
+    }
+
+    def add(): int {
+        return self.subtract();
+    }
+
+    def subtract(): int {
+        return multiply();
+    }
+
+    def multiply(): int {
+        return self.first * self.second;
+    }
+
+}
+
+let instance: TestType = TestType.create();
+
+/// 20
+print instance.add();
+
+let second_instance: TestType = TestType.create_again();
+
+/// 6
+print second_instance.add();

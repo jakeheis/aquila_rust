@@ -1,9 +1,21 @@
 print 4;
 
+type Adder {
+    let lhs: int;
+    let rhs: int;
+
+    def sum(): int {
+        return self.lhs + rhs;
+    }
+
+}
+
+print Adder(3, 5).sum();
+
 /*
 enum Hello {
-  case one;
-  case two;
+    case one;
+    case two;
 }
 
 def fib(num: int): int {

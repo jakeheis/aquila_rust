@@ -89,6 +89,19 @@ impl TypeMetadata {
             None
         }
     }
+
+    pub fn dummy_specialization(&self) -> GenericSpecialization {
+        let dummy_generics = self
+            .generics
+            .iter()
+            .map(|g| NodeType::Instance(g.clone(), GenericSpecialization::empty()))
+            .collect();
+        GenericSpecialization::new(&self.generics, dummy_generics)
+    }
+
+    pub fn unspecialized_type(&self) -> NodeType {
+        NodeType::Instance(self.symbol.clone(), self.dummy_specialization())
+    }
 }
 
 impl std::fmt::Display for TypeMetadata {

@@ -30,9 +30,8 @@ impl Symbol {
         Symbol::new_str(parent, "init")
     }
 
-    pub fn generic_symbol(parent: Option<&Symbol>, index: usize) -> Self {
-        // Symbol::new_str(parent, &format!("{}__Specialization", name.lexeme()))
-        Symbol::new_str(parent, &format!("{}", index))
+    pub fn self_symbol() -> Self {
+        Symbol::new_str(None, "self")
     }
 
     pub fn main_symbol() -> Self {
@@ -69,8 +68,8 @@ impl Symbol {
         self.last_component() == "Meta"
     }
 
-    pub fn is_meta_owned(&self) -> bool {
-        self.parent().map(|p| p.is_meta()).unwrap_or(false)
+    pub fn is_self(&self) -> bool {
+        self.id == "self"
     }
 }
 
@@ -86,7 +85,6 @@ pub struct SymbolTable {
     pub function_metadata: HashMap<Symbol, FunctionMetadata>,
     pub span_map: HashMap<Symbol, Span>,
     pub call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
-    pub type_specialization_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
 }
 
 impl SymbolTable {
@@ -96,7 +94,6 @@ impl SymbolTable {
             function_metadata: HashMap::new(),
             span_map: HashMap::new(),
             call_map: HashMap::new(),
-            type_specialization_map: HashMap::new(),
         }
     }
 

@@ -483,8 +483,12 @@ impl ExprVisitor for Codegen {
             };
 
             if let FunctionKind::Method(..) = function_metadata.kind {
-                let main = format!("&({})", target_str);
-                args.insert(0, main);
+                let first_arg = if target_str == "self" {
+                    target_str.clone()
+                } else {
+                    format!("&({})", target_str)
+                };
+                args.insert(0, first_arg);
             }
 
             format!("{}({})", function_name, args.join(","))
@@ -510,6 +514,9 @@ impl ExprVisitor for Codegen {
         let field_symbol = field.get_symbol().unwrap();
 
         match &target.kind {
+            ExprKind::Variable(t) if t.get_symbol().unwrap().is_self() => {
+                format!("self->{}", field_symbol.mangled())
+            }
             ExprKind::FunctionCall(..) => {
                 let temp_name = self.write_temp(&target.get_type().unwrap(), target_str);
                 format!("{}.{}", temp_name, field_symbol.mangled())

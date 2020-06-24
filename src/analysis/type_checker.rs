@@ -13,18 +13,26 @@ use std::rc::Rc;
 
 type Result = DiagnosticResult<NodeType>;
 
+#[derive(Clone)]
+enum ScopeType {
+    TopLevel,
+    InsideType(TypeMetadata),
+    InsideMetatype(TypeMetadata),
+    InsideFunction(FunctionMetadata),
+}
+
 struct Scope {
     id: Option<Symbol>,
     variable_types: HashMap<Symbol, NodeType>,
-    function_metadata: Option<FunctionMetadata>,
+    scope_type: ScopeType,
 }
 
 impl Scope {
-    fn new(id: Option<Symbol>, function_metadata: Option<FunctionMetadata>) -> Self {
+    fn new(id: Option<Symbol>, scope_type: ScopeType) -> Self {
         Scope {
             id,
             variable_types: HashMap::new(),
-            function_metadata,
+            scope_type,
         }
     }
 
@@ -51,6 +59,14 @@ impl Scope {
     fn type_of(&self, symbol: &Symbol) -> Option<&NodeType> {
         self.variable_types.get(symbol)
     }
+
+    fn function_metadata(&self) -> Option<&FunctionMetadata> {
+        if let ScopeType::InsideFunction(f) = &self.scope_type {
+            Some(f)
+        } else {
+            None
+        }
+    }
 }
 
 pub struct TypeChecker {
@@ -68,14 +84,14 @@ pub struct Analysis {
 
 impl TypeChecker {
     pub fn check(lib: Lib, reporter: Rc<dyn Reporter>) -> Lib {
-        let top_level = Scope::new(None, None);
         let lib = Rc::new(lib);
+
         let mut checker = TypeChecker {
             reporter,
             lib: Rc::clone(&lib),
             call_map: HashMap::new(),
             explicit_type_specializations: HashMap::new(),
-            scopes: vec![top_level],
+            scopes: vec![Scope::new(None, ScopeType::TopLevel)],
             is_builtin: false,
         };
 
@@ -176,35 +192,43 @@ impl TypeChecker {
         self.scopes.last().unwrap().id.as_ref()
     }
 
+    fn parent_scope(&self) -> Option<&Scope> {
+        if self.scopes.len() > 1 {
+            Some(&self.scopes[self.scopes.len() - 2])
+        } else {
+            None
+        }
+    }
+
     fn push_scope_named(&mut self, name: &str) -> Symbol {
         let symbol = Symbol::new_str(self.current_symbol(), name);
-        let function_metadata = self.current_scope().function_metadata.clone();
-        self.push_scope(symbol.clone(), function_metadata);
+        let copied = self.current_scope().scope_type.clone();
+        self.push_scope(symbol.clone(), copied);
         symbol
     }
 
-    fn push_scope_meta(&mut self) {
+    fn push_scope_meta(&mut self, type_meta: &TypeMetadata) {
         let symbol = Symbol::meta_symbol(self.current_symbol());
-        self.push_scope(symbol, None);
+        self.push_scope(symbol, ScopeType::InsideMetatype(type_meta.clone()));
     }
 
     fn push_type_scope(&mut self, name: &ResolvedToken) -> (Symbol, TypeMetadata) {
         let symbol = Symbol::new(self.current_symbol(), &name.token);
         let metadata = self.lib.type_metadata(&symbol).unwrap();
-        self.push_scope(symbol.clone(), None);
+        self.push_scope(symbol.clone(), ScopeType::InsideType(metadata.clone()));
         (symbol, metadata)
     }
 
     fn push_function_scope(&mut self, name: &ResolvedToken) -> (Symbol, FunctionMetadata) {
         let symbol = Symbol::new(self.current_symbol(), &name.token);
         let metadata = self.lib.function_metadata(&symbol).unwrap();
-        self.push_scope(symbol.clone(), Some(metadata.clone()));
+        self.push_scope(symbol.clone(), ScopeType::InsideFunction(metadata.clone()));
         (symbol, metadata)
     }
 
-    fn push_scope(&mut self, id: Symbol, metadata: Option<FunctionMetadata>) {
+    fn push_scope(&mut self, id: Symbol, scope_type: ScopeType) {
         trace!(target: "type_checker", "Pushing scope -- {}", id);
-        self.scopes.push(Scope::new(Some(id), metadata));
+        self.scopes.push(Scope::new(Some(id), scope_type));
     }
 
     fn pop_scope(&mut self) {
@@ -302,15 +326,101 @@ impl TypeChecker {
             _ => Ok(()),
         }
     }
+
+    fn retrieve_method<S: ContainsSpan>(
+        &mut self,
+        span: &S,
+        target: &NodeType,
+        method: &str,
+    ) -> DiagnosticResult<(Symbol, GenericSpecialization)> {
+        let (target_symbol, specialization, is_meta) = match target {
+            NodeType::Instance(t, s) => (t, s, false),
+            NodeType::Metatype(t, s) => (t, s, true),
+            _ => {
+                return Err(Diagnostic::error(
+                    span,
+                    &format!("Cannot call method on a {}", target),
+                ))
+            }
+        };
+
+        let target_metadata = self.lib.type_metadata(target_symbol).unwrap();
+
+        let method_metadata = if is_meta {
+            target_metadata.meta_method_named(method)
+        } else {
+            target_metadata.method_named(method)
+        };
+
+        match method_metadata {
+            Some(method) => Ok((method, specialization.clone())),
+            None => {
+                let message = format!("Type '{}' does not have method '{}'", target, method);
+                Err(Diagnostic::error(span, &message))
+            }
+        }
+    }
+
+    fn resolve_function<S: ContainsSpan>(
+        &self,
+        span: &S,
+        function: &ResolvedToken,
+    ) -> DiagnosticResult<(FunctionMetadata, GenericSpecialization, bool)> {
+        match self.resolve_var(function.token.lexeme()) {
+            Some((found_symbol, NodeType::Function(_))) => {
+                let func_metadata = self.lib.function_metadata(&found_symbol).unwrap();
+                match &func_metadata.kind {
+                    FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
+                        let implicit_self = self.lib.type_metadata(owner).unwrap();
+                        let implicit_spec = implicit_self.dummy_specialization();
+                        Ok((func_metadata, implicit_spec, false))
+                    }
+                    _ => Ok((func_metadata, GenericSpecialization::empty(), false)),
+                }
+            }
+            Some((_, node_type)) => Err(Diagnostic::error(
+                span,
+                &format!("Cannot call object of type {}", node_type),
+            )),
+            _ => self.resolve_init_func(function),
+        }
+    }
+
+    fn resolve_init_func(
+        &self,
+        function: &ResolvedToken,
+    ) -> DiagnosticResult<(FunctionMetadata, GenericSpecialization, bool)> {
+        let explicit_type = NodeType::deduce_from_simple_explicit(
+            function,
+            &self.lib.symbols,
+            &self.lib.dependencies,
+            &self.symbolic_context(),
+        );
+        match &explicit_type {
+            Some(NodeType::Instance(type_symbol, specs)) => {
+                self.confirm_fully_specialized(function.span(), explicit_type.as_ref().unwrap())?;
+                let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
+                let init_metadata = self
+                    .lib
+                    .function_metadata(&Symbol::init_symbol(Some(&meta_symbol)));
+                Ok((init_metadata.unwrap(), specs.clone(), true))
+            }
+            Some(..) => Err(Diagnostic::error(
+                function.span(),
+                "Cannot call a primitive",
+            )),
+            _ => Err(Diagnostic::error(function.span(), "Undefined function")),
+        }
+    }
 }
 
 impl StmtVisitor for TypeChecker {
     type StmtResult = Analysis;
 
     fn visit_type_decl(&mut self, decl: &TypeDecl) -> Analysis {
-        let (_, metadata) = self.push_type_scope(&decl.name);
+        let (type_symbol, metadata) = self.push_type_scope(&decl.name);
 
-        self.push_scope_meta();
+        self.push_scope_meta(&metadata);
         for meta_method in &metadata.meta_methods {
             let method_metadata = self.lib.function_metadata(&meta_method).unwrap();
             self.current_scope()
@@ -324,6 +434,11 @@ impl StmtVisitor for TypeChecker {
         for field in &decl.fields {
             self.visit_variable_decl(field);
         }
+
+        let new_symbol = Symbol::new_str(Some(&type_symbol), "self");
+        self.current_scope()
+            .variable_types
+            .insert(new_symbol.clone(), metadata.unspecialized_type());
 
         for method in &metadata.methods {
             let method_metadata = self.lib.function_metadata(&method).unwrap();
@@ -527,7 +642,7 @@ impl StmtVisitor for TypeChecker {
 
         let expected_return = self
             .current_scope_immut()
-            .function_metadata
+            .function_metadata()
             .as_ref()
             .map(|m| &m.return_type);
         let expected_return = expected_return.unwrap_or(&NodeType::Void);
@@ -681,149 +796,33 @@ impl ExprVisitor for TypeChecker {
     ) -> Self::ExprResult {
         let function_name = function.token.lexeme();
 
-        let (func_symbol, object_specialization, function_specialization): (_, _, &[ExplicitType]) =
-            if let Some(target) = target {
-                let target_type = target.accept(self)?;
-                match &target_type {
-                    NodeType::Instance(type_symbol, specialization) => {
-                        let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
-                        if let Some(method_symbol) = type_metadata.method_named(function_name) {
-                            (
-                                method_symbol,
-                                Some(specialization.clone()),
-                                &function.specialization,
-                            )
-                        } else {
-                            return Err(Diagnostic::error(
-                                &Span::join(target, function.span()),
-                                &format!(
-                                    "Type '{}' does not have method '{}'",
-                                    target_type, function_name
-                                ),
-                            ));
-                        }
-                    }
-                    NodeType::Metatype(type_symbol, specialization) => {
-                        let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
-                        if let Some(meta_method_symbol) =
-                            type_metadata.meta_method_named(function_name)
-                        {
-                            (
-                                meta_method_symbol,
-                                Some(specialization.clone()),
-                                &function.specialization,
-                            )
-                        } else {
-                            return Err(Diagnostic::error(
-                                &Span::join(target, function.span()),
-                                &format!(
-                                    "Type '{}' does not have meta method '{}'",
-                                    target_type, function_name
-                                ),
-                            ));
-                        }
-                    }
-                    _ => {
-                        return Err(Diagnostic::error(
-                            expr,
-                            &format!("Cannot call method on a {}", target_type),
-                        ))
-                    }
-                }
-            } else {
-                if let Some((found_symbol, node_type)) = self.resolve_var(function_name) {
-                    match node_type {
-                        NodeType::Function(..) => {
-                            let func_metadata = self.lib.function_metadata(&found_symbol).unwrap();
-                            let object_spec = match &func_metadata.kind {
-                                FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
-                                    let implicit_self = self.lib.type_metadata(owner).unwrap();
-                                    let implicit_object_spec = GenericSpecialization::new(
-                                        &implicit_self.generics,
-                                        implicit_self
-                                            .generics
-                                            .iter()
-                                            .map(|g| {
-                                                NodeType::Instance(
-                                                    g.clone(),
-                                                    GenericSpecialization::empty(),
-                                                )
-                                            })
-                                            .collect(),
-                                    );
-                                    Some(implicit_object_spec)
-                                }
-                                _ => None,
-                            };
-                            (found_symbol, object_spec, &function.specialization)
-                        }
-                        _ => {
-                            return Err(Diagnostic::error(
-                                function.span(),
-                                &format!("Cannot call type {}", node_type),
-                            ))
-                        }
-                    }
-                } else {
-                    let explicit_type = NodeType::deduce_from_simple_explicit(
-                        function,
-                        &self.lib.symbols,
-                        &self.lib.dependencies,
-                        &self.symbolic_context(),
-                    );
-                    match &explicit_type {
-                        Some(NodeType::Instance(type_symbol, specs)) => {
-                            self.confirm_fully_specialized(
-                                function.span(),
-                                explicit_type.as_ref().unwrap(),
-                            )?;
-                            let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
-                            (
-                                Symbol::init_symbol(Some(&meta_symbol)),
-                                Some(specs.clone()),
-                                &[],
-                            )
-                        }
-                        _ => {
-                            return Err(Diagnostic::error(function.span(), "Undefined function"));
-                        }
-                    }
-                }
-            };
+        let (metadata, target_specialization, is_init) = if let Some(target) = target {
+            let target_type = target.accept(self)?;
+            let (method, target_specialization) =
+                self.retrieve_method(expr, &target_type, function_name)?;
 
-        function.set_symbol(func_symbol.clone());
+            let method_metadata = self.lib.function_metadata(&method).unwrap();
+            (method_metadata, target_specialization, false)
+        } else {
+            self.resolve_function(expr, function)?
+        };
 
-        let metadata = self.lib.function_metadata(&func_symbol).unwrap();
+        function.set_symbol(metadata.symbol.clone());
 
         trace!(target: "type_checker", "Callee metadata: {}", metadata);
-
-        let mut function_type = metadata.full_type();
-        if let Some(spec) = object_specialization.as_ref() {
-            function_type = function_type.specialize(self.lib.as_ref(), spec);
-        }
 
         let arg_types: DiagnosticResult<Vec<NodeType>> =
             args.iter().map(|a| a.accept(self)).collect();
         let arg_types = arg_types?;
 
         if metadata.parameter_types.len() != arg_types.len() {
-            return Err(Diagnostic::error(
-                expr,
-                &format!(
-                    "Expected {} argument(s), got {}",
-                    metadata.parameter_types.len(),
-                    arg_types.len()
-                ),
-            ));
+            let message = format!(
+                "Expected {} argument(s), got {}",
+                metadata.parameter_types.len(),
+                arg_types.len()
+            );
+            return Err(Diagnostic::error(expr, &message));
         }
-
-        /*
-        Problem: with implicit self calls, object specializations are not being passed long
-        If the function has parameters which involve the object specialization, it can be inferred
-        Return types can't be inferred because right now this fun can't tell what is expected to be returned
-        Eventualy should have some system for including what type is expected of each expr so better inference can happen
-        Implicit self should be handled better and type spec should be in object_specialization
-        */
 
         // let function_specialization = if function_specialization.is_empty() {
         //     match GenericSpecialization::infer(self.lib.as_ref(), &metadata, &arg_types) {
@@ -837,46 +836,46 @@ impl ExprVisitor for TypeChecker {
         //         }
         //     }
         // } else {
-        if function_specialization.len() != metadata.generics.len() {
-            let message = format!(
-                "Expected {} specializations, got {}",
-                metadata.generics.len(),
-                function_specialization.len()
-            );
-            return Err(Diagnostic::error(function.span(), &message));
-        }
-
-        let specialization: std::result::Result<Vec<NodeType>, _> = function_specialization
-            .iter()
-            .map(|s| self.resolve_explicit_type(s))
-            .collect();
-        // GenericSpecialization::new(&metadata.generics, specialization?)
-
-        let function_specialization =
-            GenericSpecialization::new(&metadata.generics, specialization?);
-        // };
-
-        let merged = if let Some(object_specialization) = object_specialization.as_ref() {
-            function_specialization.merge(self.lib.as_ref(), object_specialization)
+        let function_specialization = if is_init {
+            GenericSpecialization::empty()
         } else {
-            function_specialization
+            if function.specialization.len() != metadata.generics.len() {
+                let message = format!(
+                    "Expected {} specializations, got {}",
+                    metadata.generics.len(),
+                    function.specialization.len()
+                );
+                return Err(Diagnostic::error(function.span(), &message));
+            }
+            let specialization: std::result::Result<Vec<NodeType>, _> = function
+                .specialization
+                .iter()
+                .map(|s| self.resolve_explicit_type(s))
+                .collect();
+            GenericSpecialization::new(&metadata.generics, specialization?)
         };
+
+        let full_call_specialization =
+            function_specialization.merge(self.lib.as_ref(), &target_specialization);
+        // println!("target {} function {} merged {}", target_specialization, function_specialization, full_call_specialization);
 
         {
             let enclosing_func = self
                 .current_scope()
-                .function_metadata
+                .function_metadata()
                 .as_ref()
                 .map(|f| f.symbol.clone())
                 .unwrap_or(Symbol::main_symbol());
-            trace!(target: "type_checker", "Adding call from {} to {} with {}", enclosing_func, func_symbol, merged);
+            trace!(target: "type_checker", "Adding call from {} to {} with {}", enclosing_func, metadata.symbol, full_call_specialization);
             self.call_map
                 .entry(enclosing_func)
                 .or_insert(Vec::new())
-                .push((func_symbol.clone(), merged.clone()));
+                .push((metadata.symbol.clone(), full_call_specialization.clone()));
         }
 
-        function_type = function_type.specialize(self.lib.as_ref(), &merged);
+        let function_type = metadata
+            .full_type()
+            .specialize(self.lib.as_ref(), &full_call_specialization);
 
         for ((index, param), arg) in function_type
             .parameters
@@ -939,6 +938,15 @@ impl ExprVisitor for TypeChecker {
     }
 
     fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
+        if let TokenKind::SelfKeyword = name.token.kind {
+            if let Some(ScopeType::InsideType(t)) = &self.parent_scope().map(|s| &s.scope_type) {
+                name.set_symbol(Symbol::new_str(None, "self"));
+                return expr.set_type(t.unspecialized_type());
+            } else {
+                return Err(Diagnostic::error(expr, "Self illegal here"));
+            }
+        }
+
         if let Some((found_symbol, node_type)) = self.resolve_var(name.span().lexeme()) {
             if !name.specialization.is_empty() {
                 return Err(Diagnostic::error(expr, "Cannot specialize variable"));

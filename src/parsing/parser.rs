@@ -808,7 +808,7 @@ impl TokenKind {
             | TokenKind::Int
             | TokenKind::Double
             | TokenKind::StringLiteral => Some(Parser::literal),
-            TokenKind::Identifier => Some(Parser::variable),
+            TokenKind::Identifier | TokenKind::SelfKeyword => Some(Parser::variable),
             TokenKind::LeftBracket => Some(Parser::array),
             TokenKind::LeftParen => Some(Parser::grouping),
             TokenKind::Cast => Some(Parser::cast),
