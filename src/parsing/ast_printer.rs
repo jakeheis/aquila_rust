@@ -1,5 +1,5 @@
 use super::*;
-use crate::lexing::*;
+use crate::lexing::Token;
 use crate::source::*;
 
 enum ASTPrinterMode {

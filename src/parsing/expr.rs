@@ -1,7 +1,7 @@
-use super::*;
+use super::{ResolvedToken, ExplicitType};
 use crate::diagnostic::*;
 use crate::lexing::Token;
-use crate::type_checker::NodeType;
+use crate::library::NodeType;
 use std::cell::RefCell;
 
 pub enum ExprKind {

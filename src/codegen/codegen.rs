@@ -6,7 +6,6 @@ use crate::guard;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
-use crate::type_checker::NodeType;
 use log::trace;
 use std::collections::HashSet;
 use std::fs::{self, File};

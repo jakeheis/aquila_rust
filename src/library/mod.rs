@@ -10,9 +10,11 @@ use std::rc::Rc;
 
 mod metadata;
 mod symbol_table;
+mod node_type;
 
 pub use metadata::{FunctionKind, FunctionMetadata, GenericSpecialization, TypeMetadata};
 pub use symbol_table::{Symbol, SymbolTable};
+pub use node_type::{NodeType, FunctionType};
 
 pub struct Lib {
     pub name: String,
@@ -25,10 +27,6 @@ pub struct Lib {
     pub specialization_tracker: SpecializationTracker,
 }
 
-const LOG_PARSER: bool = false;
-const LOG_TYPE_CHECKER: bool = false;
-const LOG_STDLIB: bool = false;
-
 impl Lib {
     pub fn from_source(source: Source, reporter: Rc<dyn Reporter>) -> Result<Lib, &'static str> {
         let name = source.name().to_string();
@@ -40,9 +38,6 @@ impl Lib {
             source::file("/Users/jakeheiser/Desktop/Projects/Rust/aquila/src/library/stdlib.aq");
         let lib = Lib::build_lib(src, "stdlib", false, reporter).unwrap();
         core::add_builtin_symbols(&lib);
-        if LOG_STDLIB {
-            println!("std {}", lib.symbols);
-        }
         lib
     }
 
@@ -63,11 +58,6 @@ impl Lib {
 
         let parser = Parser::new(tokens, Rc::clone(&reporter));
         let stmts = parser.parse();
-
-        if LOG_PARSER {
-            let mut printer = ASTPrinter::new();
-            printer.print(&stmts);
-        }
 
         if reporter.has_errored() {
             return Err("Parsing failed");
@@ -96,17 +86,6 @@ impl Lib {
         trace!(target: "symbol_table", "{}", lib.symbols);
 
         let mut lib = TypeChecker::check(lib, Rc::clone(&reporter));
-
-        if LOG_TYPE_CHECKER {
-            let mut printer = ASTPrinter::new();
-            for decl in &lib.type_decls {
-                printer.visit_type_decl(decl);
-            }
-            for decl in &lib.function_decls {
-                printer.visit_function_decl(decl);
-            }
-            printer.print(&lib.other);
-        }
 
         if reporter.has_errored() {
             return Err("Type checker failed");

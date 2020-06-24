@@ -1,5 +1,5 @@
 use super::NodeType;
-use super::ContextTracker;
+use super::{ContextTracker, TypeResolution};
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::library::*;
@@ -81,7 +81,7 @@ impl ExprChecker {
         &self,
         function: &ResolvedToken,
     ) -> DiagnosticResult<(FunctionMetadata, GenericSpecialization, bool)> {
-        let explicit_type = NodeType::deduce_from_simple_explicit(
+        let explicit_type = TypeResolution::deduce_from_simple_explicit(
             function,
             &self.lib.symbols,
             &self.lib.dependencies,
@@ -357,7 +357,7 @@ impl ExprVisitor for ExprChecker {
             name.set_symbol(found_symbol);
             expr.set_type(node_type.clone())
         } else {
-            let explicit_type = NodeType::deduce_from_simple_explicit(
+            let explicit_type = TypeResolution::deduce_from_simple_explicit(
                 name,
                 &self.lib.symbols,
                 &self.lib.dependencies,

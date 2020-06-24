@@ -1,5 +1,4 @@
 use super::expr_checker::*;
-use super::node_type::*;
 use super::ContextTracker;
 use super::check;
 use crate::diagnostic::*;

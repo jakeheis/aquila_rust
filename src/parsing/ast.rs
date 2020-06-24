@@ -1,8 +1,7 @@
 use super::Expr;
-use crate::lexing::*;
+use crate::lexing::Token;
 use crate::library::*;
 use crate::source::*;
-use crate::type_checker::NodeType;
 use std::cell::RefCell;
 
 pub struct TypeDecl {
@@ -357,8 +356,8 @@ pub enum ExplicitTypeKind {
 #[derive(Debug)]
 pub struct ExplicitType {
     pub kind: ExplicitTypeKind,
-    span: Span,
-    cached_type: RefCell<Option<NodeType>>,
+    pub span: Span,
+    pub cached_type: RefCell<Option<NodeType>>,
 }
 
 impl ExplicitType {
@@ -369,21 +368,6 @@ impl ExplicitType {
             span,
             cached_type: RefCell::new(None),
         }
-    }
-
-    pub fn resolve_with_lib(&self, lib: &Lib, context: &[Symbol]) -> Option<NodeType> {
-        self.resolve(&lib.symbols, &lib.dependencies, context)
-    }
-
-    pub fn resolve(
-        &self,
-        table: &SymbolTable,
-        deps: &[Lib],
-        context: &[Symbol],
-    ) -> Option<NodeType> {
-        let result = NodeType::deduce_from(self, table, deps, context);
-        self.cached_type.replace(result.clone());
-        result
     }
 
     pub fn guarantee_resolved(&self) -> NodeType {

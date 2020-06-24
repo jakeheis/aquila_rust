@@ -3,9 +3,9 @@ mod node_type;
 mod symbol_table;
 mod type_checker;
 
-pub use node_type::{FunctionType, NodeType};
 pub use symbol_table::SymbolTableBuilder;
 pub use type_checker::TypeChecker;
+pub use node_type::TypeResolution;
 
 use crate::diagnostic::*;
 use crate::library::*;
@@ -14,14 +14,6 @@ use crate::source::ContainsSpan;
 use log::trace;
 use std::collections::HashMap;
 use std::rc::Rc;
-
-#[derive(Clone)]
-pub enum ScopeType {
-    TopLevel,
-    InsideType(TypeMetadata),
-    InsideMetatype(TypeMetadata),
-    InsideFunction(FunctionMetadata),
-}
 
 mod check {
     use crate::diagnostic::*;
@@ -89,6 +81,14 @@ mod check {
             _ => Ok(()),
         }
     }
+}
+
+#[derive(Clone)]
+pub enum ScopeType {
+    TopLevel,
+    InsideType(TypeMetadata),
+    InsideMetatype(TypeMetadata),
+    InsideFunction(FunctionMetadata),
 }
 
 pub struct Scope {
@@ -248,7 +248,7 @@ impl ContextTracker {
     ) -> DiagnosticResult<NodeType> {
         let context = self.symbolic_context();
 
-        if let Some(deduced) = explicit_type.resolve_with_lib(&self.lib, &context) {
+        if let Some(deduced) = TypeResolution::resolve_with_lib(explicit_type, &self.lib, &context) {
             if let NodeType::Any = deduced {
                 Err(Diagnostic::error(
                     explicit_type,
