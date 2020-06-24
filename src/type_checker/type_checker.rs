@@ -1,11 +1,11 @@
-use super::node_type::*;
 use super::expr_checker::*;
+use super::node_type::*;
+use super::ContextTracker;
 use crate::diagnostic::*;
 use crate::guard;
 use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
-use super::ContextTracker;
 use std::rc::Rc;
 
 pub struct TypeChecker {
@@ -67,11 +67,9 @@ impl TypeChecker {
     }
 
     fn check_expr(&mut self, expr: &Expr) -> Option<NodeType> {
-        let context = std::mem::replace(&mut self.context, ContextTracker::new(Rc::clone(&self.lib)));
-        let mut expr_checker = ExprChecker::new(
-            Rc::clone(&self.lib),
-            context,
-        );
+        let context =
+            std::mem::replace(&mut self.context, ContextTracker::new(Rc::clone(&self.lib)));
+        let mut expr_checker = ExprChecker::new(Rc::clone(&self.lib), context);
         let result = expr.accept(&mut expr_checker);
         std::mem::swap(&mut self.context, &mut expr_checker.context);
         match result {
@@ -149,7 +147,8 @@ impl StmtVisitor for TypeChecker {
         self.context.push_scope_meta(&metadata);
         for meta_method in &metadata.meta_methods {
             let method_metadata = self.lib.function_metadata(&meta_method).unwrap();
-            self.context.put_in_scope(meta_method, &method_metadata.node_type());
+            self.context
+                .put_in_scope(meta_method, &method_metadata.node_type());
         }
         for meta_method in &decl.meta_methods {
             self.visit_function_decl(meta_method);
@@ -160,11 +159,13 @@ impl StmtVisitor for TypeChecker {
             self.visit_variable_decl(field);
         }
 
-        self.context.put_in_scope(&Symbol::self_symbol(), &metadata.unspecialized_type());
+        self.context
+            .put_in_scope(&Symbol::self_symbol(), &metadata.unspecialized_type());
 
         for method in &metadata.methods {
             let method_metadata = self.lib.function_metadata(&method).unwrap();
-            self.context.put_in_scope(method, &method_metadata.node_type());
+            self.context
+                .put_in_scope(method, &method_metadata.node_type());
         }
         for method in &decl.methods {
             self.visit_function_decl(method);
@@ -183,7 +184,9 @@ impl StmtVisitor for TypeChecker {
 
         let explicit_return_type = decl.return_type.as_ref();
         if let Some(e) = explicit_return_type {
-            if let Err(diag) = TypeChecker::confirm_fully_specialized(self.lib.as_ref(), e, &metadata.return_type) {
+            if let Err(diag) =
+                TypeChecker::confirm_fully_specialized(self.lib.as_ref(), e, &metadata.return_type)
+            {
                 self.report_error(diag);
             }
         }
@@ -287,7 +290,8 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_if_stmt(&mut self, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
-            if let Err(diag) = TypeChecker::check_type_match(condition, &cond_type, &NodeType::Bool) {
+            if let Err(diag) = TypeChecker::check_type_match(condition, &cond_type, &NodeType::Bool)
+            {
                 self.report_error(diag);
             }
             let _ = condition.set_type(NodeType::Bool);
@@ -314,7 +318,8 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
-            if let Err(diag) = TypeChecker::check_type_match(condition, &cond_type, &NodeType::Bool) {
+            if let Err(diag) = TypeChecker::check_type_match(condition, &cond_type, &NodeType::Bool)
+            {
                 self.report_error(diag);
             }
             let _ = condition.set_type(NodeType::Bool);
@@ -346,7 +351,8 @@ impl StmtVisitor for TypeChecker {
 
         self.context.push_scope_named("for");
         let of: &NodeType = &of;
-        self.context.define_var(variable, &NodeType::pointer_to(of.clone()));
+        self.context
+            .define_var(variable, &NodeType::pointer_to(of.clone()));
         let body_analysis = self.check_list(body);
         self.context.pop_scope();
 

@@ -1,19 +1,19 @@
+mod expr_checker;
 mod node_type;
 mod symbol_table;
 mod type_checker;
-mod expr_checker;
 
 pub use node_type::{FunctionType, NodeType};
-pub use type_checker::TypeChecker;
 pub use symbol_table::SymbolTableBuilder;
+pub use type_checker::TypeChecker;
 
+use crate::diagnostic::*;
 use crate::library::*;
 use crate::parsing::*;
-use crate::diagnostic::*;
 use crate::source::ContainsSpan;
+use log::trace;
 use std::collections::HashMap;
 use std::rc::Rc;
-use log::trace;
 
 #[derive(Clone)]
 pub enum ScopeType {
@@ -120,8 +120,8 @@ impl ContextTracker {
                 } else {
                     None
                 }
-            },
-            _ => None
+            }
+            _ => None,
         }
     }
 
@@ -136,7 +136,9 @@ impl ContextTracker {
     // Variables
 
     pub fn put_in_scope(&mut self, symbol: &Symbol, var_type: &NodeType) {
-        self.current_scope().variable_types.insert(symbol.clone(), var_type.clone());
+        self.current_scope()
+            .variable_types
+            .insert(symbol.clone(), var_type.clone());
     }
 
     pub fn define_var(&mut self, name: &TypedToken, var_type: &NodeType) {
@@ -148,7 +150,8 @@ impl ContextTracker {
 
         trace!(target: "type_checker", "Defining {} (symbol = {}) as {}", name.span().lexeme(), new_symbol, var_type);
 
-        self.current_scope().variable_types
+        self.current_scope()
+            .variable_types
             .insert(new_symbol.clone(), var_type.clone());
 
         name.set_symbol(new_symbol);
@@ -171,7 +174,10 @@ impl ContextTracker {
         }
     }
 
-    pub fn resolve_explicit_type(&mut self, explicit_type: &ExplicitType) -> DiagnosticResult<NodeType> {
+    pub fn resolve_explicit_type(
+        &mut self,
+        explicit_type: &ExplicitType,
+    ) -> DiagnosticResult<NodeType> {
         let context = self.symbolic_context();
 
         if let Some(deduced) = explicit_type.resolve_with_lib(&self.lib, &context) {
@@ -183,7 +189,9 @@ impl ContextTracker {
             } else {
                 TypeChecker::confirm_fully_specialized(self.lib.as_ref(), explicit_type, &deduced)?;
                 if let NodeType::Instance(type_symbol, spec) = &deduced {
-                    self.lib.specialization_tracker.add_required_type_spec(type_symbol.clone(), spec.clone());
+                    self.lib
+                        .specialization_tracker
+                        .add_required_type_spec(type_symbol.clone(), spec.clone());
                 }
                 Ok(deduced)
             }

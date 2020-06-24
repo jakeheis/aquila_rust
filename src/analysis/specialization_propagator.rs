@@ -1,7 +1,7 @@
 use crate::library::*;
 use log::trace;
-use std::collections::{HashMap, HashSet};
 use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 
 pub struct SpecializationTracker {
     call_map: RefCell<HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>>,
@@ -17,11 +17,19 @@ impl SpecializationTracker {
     }
 
     pub fn add_call(&self, from: Symbol, to: Symbol, with: GenericSpecialization) {
-        self.call_map.borrow_mut().entry(from).or_insert(Vec::new()).push((to, with));
+        self.call_map
+            .borrow_mut()
+            .entry(from)
+            .or_insert(Vec::new())
+            .push((to, with));
     }
 
     pub fn add_required_type_spec(&self, type_symbol: Symbol, spec: GenericSpecialization) {
-        self.explicit_type_specializations.borrow_mut().entry(type_symbol).or_insert(HashSet::new()).insert(spec);
+        self.explicit_type_specializations
+            .borrow_mut()
+            .entry(type_symbol)
+            .or_insert(HashSet::new())
+            .insert(spec);
     }
 }
 
@@ -33,7 +41,10 @@ pub struct SpecializationPropagator<'a> {
 
 impl<'a> SpecializationPropagator<'a> {
     pub fn propogate(lib: &mut Lib) {
-        let explicit_list = lib.specialization_tracker.explicit_type_specializations.replace(HashMap::new());
+        let explicit_list = lib
+            .specialization_tracker
+            .explicit_type_specializations
+            .replace(HashMap::new());
         for (type_symbol, specs) in explicit_list.into_iter() {
             let type_metadata = lib.type_metadata_mut(&type_symbol).unwrap();
             for spec in specs {

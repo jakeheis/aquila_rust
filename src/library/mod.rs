@@ -1,11 +1,11 @@
 use crate::analysis::*;
-use crate::type_checker::*;
 use crate::codegen::core;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::parsing::*;
 use crate::source::*;
 use crate::source::{self, Source};
+use crate::type_checker::*;
 use log::trace;
 use std::rc::Rc;
 

@@ -3,4 +3,3 @@ mod specialization_propagator;
 
 pub use cycle_checker::CycleChecker;
 pub use specialization_propagator::{SpecializationPropagator, SpecializationTracker};
-

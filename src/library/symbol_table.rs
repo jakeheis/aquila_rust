@@ -1,7 +1,7 @@
-use crate::lexing::Token;
-use std::collections::HashMap;
-use crate::source::Span;
 use super::metadata::*;
+use crate::lexing::Token;
+use crate::source::Span;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct Symbol {

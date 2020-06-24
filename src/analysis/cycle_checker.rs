@@ -1,6 +1,6 @@
-use crate::type_checker::NodeType;
 use crate::diagnostic::*;
 use crate::library::*;
+use crate::type_checker::NodeType;
 use log::trace;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;

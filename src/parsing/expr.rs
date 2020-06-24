@@ -1,8 +1,8 @@
 use super::*;
-use crate::type_checker::NodeType;
 use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::source::*;
+use crate::type_checker::NodeType;
 use std::cell::RefCell;
 
 pub enum ExprKind {

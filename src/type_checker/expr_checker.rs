@@ -1,12 +1,12 @@
-use crate::diagnostic::*;
-use crate::source::*;
-use super::{TypeChecker, ContextTracker};
 use super::NodeType;
-use crate::parsing::*;
+use super::{ContextTracker, TypeChecker};
+use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::library::*;
-use std::rc::Rc;
+use crate::parsing::*;
+use crate::source::*;
 use log::trace;
+use std::rc::Rc;
 
 pub struct ExprChecker {
     pub lib: Rc<Lib>,
@@ -14,12 +14,8 @@ pub struct ExprChecker {
 }
 
 impl ExprChecker {
-
     pub fn new(lib: Rc<Lib>, context: ContextTracker) -> Self {
-        ExprChecker {
-            lib,
-            context,
-        }
+        ExprChecker { lib, context }
     }
 
     fn ensure_no_amibguity(&self, expr: &Expr, node_type: &NodeType) -> DiagnosticResult<()> {
@@ -101,7 +97,11 @@ impl ExprChecker {
         );
         match &explicit_type {
             Some(NodeType::Instance(type_symbol, specs)) => {
-                TypeChecker::confirm_fully_specialized(self.lib.as_ref(), function.span(), explicit_type.as_ref().unwrap())?;
+                TypeChecker::confirm_fully_specialized(
+                    self.lib.as_ref(),
+                    function.span(),
+                    explicit_type.as_ref().unwrap(),
+                )?;
                 let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
                 let init_metadata = self
                     .lib
@@ -274,9 +274,17 @@ impl ExprVisitor for ExprChecker {
         let full_call_specialization =
             function_specialization.merge(self.lib.as_ref(), &target_specialization);
 
-        let enclosing_func = self.context.enclosing_function().map(|e| e.symbol.clone()).unwrap_or(Symbol::main_symbol());
+        let enclosing_func = self
+            .context
+            .enclosing_function()
+            .map(|e| e.symbol.clone())
+            .unwrap_or(Symbol::main_symbol());
         trace!(target: "type_checker", "Adding call from {} to {} with {}", enclosing_func, metadata.symbol, full_call_specialization);
-        self.lib.specialization_tracker.add_call(enclosing_func, metadata.symbol.clone(), full_call_specialization.clone());
+        self.lib.specialization_tracker.add_call(
+            enclosing_func,
+            metadata.symbol.clone(),
+            full_call_specialization.clone(),
+        );
 
         let function_type = metadata
             .full_type()
@@ -365,7 +373,11 @@ impl ExprVisitor for ExprChecker {
             );
             match &explicit_type {
                 Some(NodeType::Instance(symbol, spec)) => {
-                    TypeChecker::confirm_fully_specialized(self.lib.as_ref(), name.span(), explicit_type.as_ref().unwrap())?;
+                    TypeChecker::confirm_fully_specialized(
+                        self.lib.as_ref(),
+                        name.span(),
+                        explicit_type.as_ref().unwrap(),
+                    )?;
                     trace!(target: "type_checker", "Treating variable as metatype of {}", symbol);
                     name.set_symbol(symbol.clone());
                     expr.set_type(NodeType::Metatype(symbol.clone(), spec.clone()))
@@ -395,7 +407,11 @@ impl ExprVisitor for ExprChecker {
 
         for (index, element_type) in element_types.iter().enumerate() {
             if !element_type.matches(&expected_type) {
-                return Err(TypeChecker::type_mismatch(&elements[index], &element_type, &expected_type));
+                return Err(TypeChecker::type_mismatch(
+                    &elements[index],
+                    &element_type,
+                    &expected_type,
+                ));
             }
         }
 
@@ -409,7 +425,9 @@ impl ExprVisitor for ExprChecker {
 
         match (target_type, arg_type) {
             (NodeType::Array(inside, _), NodeType::Int) => expr.set_type((*inside).clone()),
-            (NodeType::Array(..), other) => Err(TypeChecker::type_mismatch(arg, &other, &NodeType::Int)),
+            (NodeType::Array(..), other) => {
+                Err(TypeChecker::type_mismatch(arg, &other, &NodeType::Int))
+            }
             _ => Err(Diagnostic::error(expr, "Can't subscript into non-array")),
         }
     }

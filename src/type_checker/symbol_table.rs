@@ -4,7 +4,7 @@ use crate::library::*;
 use crate::parsing::*;
 use crate::source::*;
 use log::trace;
-use std::collections::{HashSet};
+use std::collections::HashSet;
 
 pub struct SymbolTableBuilder<'a> {
     symbols: SymbolTable,

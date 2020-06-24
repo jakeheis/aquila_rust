@@ -1,8 +1,8 @@
 use super::Expr;
-use crate::type_checker::NodeType;
 use crate::lexing::*;
 use crate::library::*;
 use crate::source::*;
+use crate::type_checker::NodeType;
 use std::cell::RefCell;
 
 pub struct TypeDecl {

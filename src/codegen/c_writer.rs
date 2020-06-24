@@ -1,6 +1,6 @@
-use crate::type_checker::NodeType;
 use crate::library::*;
 use crate::source::ContainsSpan;
+use crate::type_checker::NodeType;
 use std::fs::File;
 use std::io::Write;
 use std::rc::Rc;
