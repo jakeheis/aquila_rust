@@ -1,7 +1,5 @@
-use super::metadata::*;
 use super::node_type::*;
 use super::expr_checker::*;
-use super::symbol_table::*;
 use crate::diagnostic::*;
 use crate::guard;
 use crate::library::*;

@@ -1,6 +1,5 @@
-pub use crate::analysis::NodeType;
-use crate::analysis::{FunctionKind, FunctionMetadata, GenericSpecialization, TypeMetadata};
-use crate::library::Lib;
+use crate::type_checker::NodeType;
+use crate::library::*;
 use crate::source::ContainsSpan;
 use std::fs::File;
 use std::io::Write;

@@ -1,7 +1,7 @@
 use super::Expr;
-use crate::analysis::{NodeType, Symbol, SymbolTable};
+use crate::type_checker::NodeType;
 use crate::lexing::*;
-use crate::library::Lib;
+use crate::library::*;
 use crate::source::*;
 use std::cell::RefCell;
 

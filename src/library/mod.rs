@@ -1,4 +1,5 @@
 use crate::analysis::*;
+use crate::type_checker::*;
 use crate::codegen::core;
 use crate::diagnostic::*;
 use crate::lexing::*;
@@ -7,6 +8,12 @@ use crate::source::*;
 use crate::source::{self, Source};
 use log::trace;
 use std::rc::Rc;
+
+mod metadata;
+mod symbol_table;
+
+pub use metadata::{FunctionKind, FunctionMetadata, GenericSpecialization, TypeMetadata};
+pub use symbol_table::{Symbol, SymbolTable};
 
 pub struct Lib {
     pub name: String,

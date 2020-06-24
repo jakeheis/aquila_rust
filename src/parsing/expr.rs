@@ -1,5 +1,5 @@
 use super::*;
-use crate::analysis::NodeType;
+use crate::type_checker::NodeType;
 use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::source::*;

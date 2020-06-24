@@ -1,8 +1,6 @@
 use crate::diagnostic::*;
 use crate::source::*;
-use super::metadata::*;
 use super::{TypeChecker, ContextTracker};
-use super::Symbol;
 use super::NodeType;
 use crate::parsing::*;
 use crate::lexing::*;

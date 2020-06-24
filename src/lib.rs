@@ -5,6 +5,7 @@ pub mod lexing;
 pub mod library;
 pub mod parsing;
 pub mod source;
+pub mod type_checker;
 
 use codegen::Codegen;
 use diagnostic::{DefaultReporter, Reporter};

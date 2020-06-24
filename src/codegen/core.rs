@@ -1,6 +1,6 @@
 use super::c_writer::CWriter;
-use crate::analysis::*;
-use crate::library::Lib;
+use crate::library::*;
+use crate::type_checker::NodeType;
 
 pub fn should_write_builtin(symbol: &Symbol) -> bool {
     let id_ref: &str = &symbol.id;

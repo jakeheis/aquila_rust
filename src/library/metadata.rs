@@ -1,5 +1,5 @@
-use crate::analysis::{FunctionType, NodeType, Symbol};
-use crate::library::Lib;
+use crate::type_checker::{FunctionType, NodeType};
+use crate::library::{Lib, Symbol};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug)]

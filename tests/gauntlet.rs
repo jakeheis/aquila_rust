@@ -21,9 +21,15 @@ fn gauntlet() -> Result<(), &'static str> {
 fn test_file(file: PathBuf) -> Result<(), &'static str> {
     let (reporter, mut diagnostics) = TestReporter::new();
 
-    let lines = fs::read_to_string(file.clone()).unwrap();
+    let read = fs::read_to_string(file.clone()).unwrap();
+    let lines: Vec<_> = read.lines().collect();
+    if lines[0] == "// skip" {
+        println!("Skipping");
+        return Ok(());
+    }
+
     let mut expected_output: Vec<String> = Vec::new();
-    for line in lines.lines() {
+    for line in lines {
         if line.starts_with("/// ") {
             let output = &line[4..];
             expected_output.push(String::from(output));

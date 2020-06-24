@@ -1,4 +1,4 @@
-use super::*;
+use crate::type_checker::NodeType;
 use crate::diagnostic::*;
 use crate::library::*;
 use log::trace;

@@ -1,5 +1,3 @@
-use super::metadata::*;
-use super::symbol_table::*;
 use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::*;
