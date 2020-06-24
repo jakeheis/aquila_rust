@@ -23,6 +23,74 @@ pub enum ScopeType {
     InsideFunction(FunctionMetadata),
 }
 
+mod check {
+    use crate::diagnostic::*;
+    use crate::parsing::*;
+    use crate::source::ContainsSpan;
+    use super::NodeType;
+    use crate::library::Lib;
+
+    pub fn type_mismatch<T: ContainsSpan>(
+        span: &T,
+        given: &NodeType,
+        expected: &NodeType,
+    ) -> Diagnostic {
+        let message = format!("Expected {}, got {}", expected, given);
+        Diagnostic::error(span, &message)
+    }
+
+    pub fn ensure_no_amibguity(expr: &Expr, node_type: &NodeType) -> DiagnosticResult<()> {
+        if node_type.contains_ambiguity() {
+            Err(Diagnostic::error(expr, "Cannot infer type"))
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn check_type_match(
+        expr: &Expr,
+        given: &NodeType,
+        expected: &NodeType,
+    ) -> DiagnosticResult<()> {
+        if given.matches(expected) {
+            Ok(())
+        } else {
+            Err(type_mismatch(expr, given, expected))
+        }
+    }
+
+    pub fn confirm_fully_specialized<S: ContainsSpan>(
+        lib: &Lib,
+        span: &S,
+        node_type: &NodeType,
+    ) -> DiagnosticResult<()> {
+        match &node_type {
+            NodeType::Instance(type_symbol, specialization)
+            | NodeType::Metatype(type_symbol, specialization) => {
+                for spec in specialization.map.values() {
+                    confirm_fully_specialized(lib, span, spec)?;
+                }
+
+                let matching_type = lib.type_metadata(type_symbol).unwrap();
+                let spec_length = specialization.map.len();
+                if spec_length != matching_type.generics.len() {
+                    let message = format!(
+                        "Expected {} specializations, got {}",
+                        matching_type.generics.len(),
+                        spec_length
+                    );
+                    Err(Diagnostic::error(span, &message))
+                } else {
+                    Ok(())
+                }
+            }
+            NodeType::Pointer(to) => confirm_fully_specialized(lib, span, to),
+            NodeType::Array(of, _) => confirm_fully_specialized(lib, span, of),
+            _ => Ok(()),
+        }
+    }
+}
+
 pub struct Scope {
     id: Option<Symbol>,
     variable_types: HashMap<Symbol, NodeType>,
@@ -187,7 +255,7 @@ impl ContextTracker {
                     "Cannot have type any; must be ptr any",
                 ))
             } else {
-                TypeChecker::confirm_fully_specialized(self.lib.as_ref(), explicit_type, &deduced)?;
+                check::confirm_fully_specialized(self.lib.as_ref(), explicit_type, &deduced)?;
                 if let NodeType::Instance(type_symbol, spec) = &deduced {
                     self.lib
                         .specialization_tracker

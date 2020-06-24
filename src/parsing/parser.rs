@@ -2,7 +2,6 @@ use super::ast::*;
 use super::expr::*;
 use crate::diagnostic::*;
 use crate::lexing::*;
-use crate::source::*;
 use log::trace;
 use std::rc::Rc;
 

@@ -1,7 +1,6 @@
 use super::*;
 use crate::diagnostic::*;
 use crate::lexing::Token;
-use crate::source::*;
 use crate::type_checker::NodeType;
 use std::cell::RefCell;
 
@@ -138,6 +137,12 @@ impl Expr {
 
     pub fn lexeme(&self) -> &str {
         self.span.lexeme()
+    }
+}
+
+impl ContainsSpan for Expr {
+    fn span(&self) -> &Span {
+        &self.span
     }
 }
 

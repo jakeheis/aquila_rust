@@ -81,6 +81,12 @@ impl Token {
     }
 }
 
+impl ContainsSpan for Token {
+    fn span(&self) -> &Span {
+        &self.span
+    }
+}
+
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(

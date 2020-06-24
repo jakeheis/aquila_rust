@@ -1,5 +1,3 @@
-use crate::lexing::Token;
-use crate::parsing::{Expr, Stmt};
 use std::fs;
 use std::rc::Rc;
 
@@ -156,24 +154,6 @@ pub trait ContainsSpan {
 impl ContainsSpan for Span {
     fn span(&self) -> &Span {
         self
-    }
-}
-
-impl ContainsSpan for Token {
-    fn span(&self) -> &Span {
-        &self.span
-    }
-}
-
-impl ContainsSpan for Expr {
-    fn span(&self) -> &Span {
-        &self.span
-    }
-}
-
-impl ContainsSpan for Stmt {
-    fn span(&self) -> &Span {
-        &self.span
     }
 }
 

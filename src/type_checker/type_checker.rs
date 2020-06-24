@@ -1,11 +1,11 @@
 use super::expr_checker::*;
 use super::node_type::*;
 use super::ContextTracker;
+use super::check;
 use crate::diagnostic::*;
 use crate::guard;
 use crate::library::*;
 use crate::parsing::*;
-use crate::source::*;
 use std::rc::Rc;
 
 pub struct TypeChecker {
@@ -84,58 +84,6 @@ impl TypeChecker {
     fn report_error(&mut self, diag: Diagnostic) {
         self.reporter.report(diag);
     }
-
-    pub fn type_mismatch<T: ContainsSpan>(
-        span: &T,
-        given: &NodeType,
-        expected: &NodeType,
-    ) -> Diagnostic {
-        let message = format!("Expected {}, got {}", expected, given);
-        Diagnostic::error(span, &message)
-    }
-
-    pub fn check_type_match(
-        expr: &Expr,
-        given: &NodeType,
-        expected: &NodeType,
-    ) -> DiagnosticResult<()> {
-        if given.matches(expected) {
-            Ok(())
-        } else {
-            Err(TypeChecker::type_mismatch(expr, given, expected))
-        }
-    }
-
-    pub fn confirm_fully_specialized<S: ContainsSpan>(
-        lib: &Lib,
-        span: &S,
-        node_type: &NodeType,
-    ) -> DiagnosticResult<()> {
-        match &node_type {
-            NodeType::Instance(type_symbol, specialization)
-            | NodeType::Metatype(type_symbol, specialization) => {
-                for spec in specialization.map.values() {
-                    TypeChecker::confirm_fully_specialized(lib, span, spec)?;
-                }
-
-                let matching_type = lib.type_metadata(type_symbol).unwrap();
-                let spec_length = specialization.map.len();
-                if spec_length != matching_type.generics.len() {
-                    let message = format!(
-                        "Expected {} specializations, got {}",
-                        matching_type.generics.len(),
-                        spec_length
-                    );
-                    Err(Diagnostic::error(span, &message))
-                } else {
-                    Ok(())
-                }
-            }
-            NodeType::Pointer(to) => TypeChecker::confirm_fully_specialized(lib, span, to),
-            NodeType::Array(of, _) => TypeChecker::confirm_fully_specialized(lib, span, of),
-            _ => Ok(()),
-        }
-    }
 }
 
 impl StmtVisitor for TypeChecker {
@@ -185,7 +133,7 @@ impl StmtVisitor for TypeChecker {
         let explicit_return_type = decl.return_type.as_ref();
         if let Some(e) = explicit_return_type {
             if let Err(diag) =
-                TypeChecker::confirm_fully_specialized(self.lib.as_ref(), e, &metadata.return_type)
+            check::confirm_fully_specialized(self.lib.as_ref(), e, &metadata.return_type)
             {
                 self.report_error(diag);
             }
@@ -255,7 +203,7 @@ impl StmtVisitor for TypeChecker {
             (Some(explicit), Some(implicit)) => {
                 self.context.define_var(&decl.name, &explicit);
 
-                if let Err(diag) = TypeChecker::check_type_match(
+                if let Err(diag) = check::check_type_match(
                     decl.initial_value.as_ref().unwrap(),
                     &implicit,
                     &explicit,
@@ -290,7 +238,7 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_if_stmt(&mut self, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
-            if let Err(diag) = TypeChecker::check_type_match(condition, &cond_type, &NodeType::Bool)
+            if let Err(diag) = check::check_type_match(condition, &cond_type, &NodeType::Bool)
             {
                 self.report_error(diag);
             }
@@ -318,7 +266,7 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {
-            if let Err(diag) = TypeChecker::check_type_match(condition, &cond_type, &NodeType::Bool)
+            if let Err(diag) = check::check_type_match(condition, &cond_type, &NodeType::Bool)
             {
                 self.report_error(diag);
             }
@@ -374,7 +322,7 @@ impl StmtVisitor for TypeChecker {
 
         if let Some(expr) = expr.as_ref() {
             let _ = expr.set_type(expected_return.clone());
-            if let Err(diag) = TypeChecker::check_type_match(expr, &ret_type, &expected_return) {
+            if let Err(diag) = check::check_type_match(expr, &ret_type, &expected_return) {
                 self.report_error(diag);
             }
         } else {

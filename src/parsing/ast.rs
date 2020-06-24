@@ -217,6 +217,12 @@ impl Stmt {
     }
 }
 
+impl ContainsSpan for Stmt {
+    fn span(&self) -> &Span {
+        &self.span
+    }
+}
+
 pub trait StmtVisitor {
     type StmtResult;
 

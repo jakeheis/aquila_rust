@@ -184,59 +184,6 @@ pub mod test_token {
     }
 }
 
-/*
-#[allow(dead_code)]
-pub mod test_ast {
-
-    use super::test_token;
-    use aquila::lexing::*;
-    use aquila::parsing::*;
-
-    pub fn int_explicit_type() -> ExplicitType {
-        let int_token = ResolvedToken::new(test_token::int_type(), Vec::new());
-        let span = int_token.compute_span();
-        let kind = ExplicitTypeKind::Simple(int_token);
-        ExplicitType::new(span.clone(), kind, &span)
-    }
-
-    pub fn window_type() -> Stmt {
-        Stmt::type_decl(
-            test_token::type_keyword().span,
-            test_token::type_name(),
-            Vec::new(),
-            vec![Stmt::variable_decl(
-                test_token::property_name(),
-                Some(int_explicit_type()),
-                None,
-            )],
-            vec![Stmt::function_decl(
-                test_token::def_keyword().span,
-                test_token::func_name(),
-                vec![Stmt::variable_decl(
-                    test_token::test(TokenKind::Identifier, "rhs"),
-                    Some(int_explicit_type()),
-                    None,
-                )],
-                Some(test_token::int_type()),
-                vec![Stmt::return_stmt(
-                    test_token::return_keyword().span,
-                    Some(Expr::literal(&test_token::four())),
-                )],
-                test_token::right_brace().span,
-            )],
-            &test_token::right_brace(),
-        )
-    }
-
-    pub fn window_instance() -> Stmt {
-        Stmt::variable_decl(
-            test_token::window_instance(),
-            Some(test_token::type_name()),
-            None,
-        )
-    }
-}
-*/
 pub struct DiagnosticCapture {
     diagnostics: Rc<RefCell<Vec<Diagnostic>>>,
 }

@@ -1,6 +1,5 @@
 use super::token::*;
 use crate::diagnostic::*;
-use crate::source::*;
 use log::trace;
 use std::rc::Rc;
 

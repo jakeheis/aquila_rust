@@ -1,4 +1,4 @@
-use super::c_writer::*;
+use super::c_writer::CWriter;
 use super::core;
 use crate::analysis::*;
 use crate::diagnostic::*;
@@ -6,7 +6,6 @@ use crate::guard;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
-use crate::source::*;
 use crate::type_checker::NodeType;
 use log::trace;
 use std::collections::HashSet;

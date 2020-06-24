@@ -1,12 +1,12 @@
 use super::NodeType;
-use super::{ContextTracker, TypeChecker};
+use super::ContextTracker;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
-use crate::source::*;
 use log::trace;
 use std::rc::Rc;
+use super::check;
 
 pub struct ExprChecker {
     pub lib: Rc<Lib>,
@@ -16,14 +16,6 @@ pub struct ExprChecker {
 impl ExprChecker {
     pub fn new(lib: Rc<Lib>, context: ContextTracker) -> Self {
         ExprChecker { lib, context }
-    }
-
-    fn ensure_no_amibguity(&self, expr: &Expr, node_type: &NodeType) -> DiagnosticResult<()> {
-        if node_type.contains_ambiguity() {
-            Err(Diagnostic::error(expr, "Cannot infer type"))
-        } else {
-            Ok(())
-        }
     }
 
     fn retrieve_method<S: ContainsSpan>(
@@ -97,7 +89,7 @@ impl ExprChecker {
         );
         match &explicit_type {
             Some(NodeType::Instance(type_symbol, specs)) => {
-                TypeChecker::confirm_fully_specialized(
+                check::confirm_fully_specialized(
                     self.lib.as_ref(),
                     function.span(),
                     explicit_type.as_ref().unwrap(),
@@ -128,7 +120,7 @@ impl ExprVisitor for ExprChecker {
     ) -> Self::ExprResult {
         let target_type = target.accept(self)?;
         let value_type = value.accept(self)?;
-        TypeChecker::check_type_match(value, &value_type, &target_type)?;
+        check::check_type_match(value, &value_type, &target_type)?;
         let _ = value.set_type(target_type);
         expr.set_type(NodeType::Void)
     }
@@ -143,8 +135,8 @@ impl ExprVisitor for ExprChecker {
         let lhs_type = lhs.accept(self)?;
         let rhs_type = rhs.accept(self)?;
 
-        self.ensure_no_amibguity(lhs, &lhs_type)?;
-        self.ensure_no_amibguity(rhs, &rhs_type)?;
+        check::ensure_no_amibguity(lhs, &lhs_type)?;
+        check::ensure_no_amibguity(rhs, &rhs_type)?;
 
         let entries: &[BinaryEntry] = match op.kind {
             TokenKind::Plus => &ADDITION_ENTRIES,
@@ -172,7 +164,7 @@ impl ExprVisitor for ExprChecker {
     fn visit_unary_expr(&mut self, expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
         let operand_type = operand.accept(self)?;
 
-        self.ensure_no_amibguity(expr, &operand_type)?;
+        check::ensure_no_amibguity(expr, &operand_type)?;
 
         if let TokenKind::Ampersand = op.kind {
             let boxed_type = Box::new(operand_type.clone());
@@ -296,8 +288,8 @@ impl ExprVisitor for ExprChecker {
             .enumerate()
             .zip(arg_types)
         {
-            self.ensure_no_amibguity(&args[index], &arg)?;
-            TypeChecker::check_type_match(&args[index], &arg, &param)?;
+            check::ensure_no_amibguity(&args[index], &arg)?;
+            check::check_type_match(&args[index], &arg, &param)?;
         }
 
         expr.set_type(function_type.return_type)
@@ -373,7 +365,7 @@ impl ExprVisitor for ExprChecker {
             );
             match &explicit_type {
                 Some(NodeType::Instance(symbol, spec)) => {
-                    TypeChecker::confirm_fully_specialized(
+                    check::confirm_fully_specialized(
                         self.lib.as_ref(),
                         name.span(),
                         explicit_type.as_ref().unwrap(),
@@ -407,7 +399,7 @@ impl ExprVisitor for ExprChecker {
 
         for (index, element_type) in element_types.iter().enumerate() {
             if !element_type.matches(&expected_type) {
-                return Err(TypeChecker::type_mismatch(
+                return Err(check::type_mismatch(
                     &elements[index],
                     &element_type,
                     &expected_type,
@@ -426,7 +418,7 @@ impl ExprVisitor for ExprChecker {
         match (target_type, arg_type) {
             (NodeType::Array(inside, _), NodeType::Int) => expr.set_type((*inside).clone()),
             (NodeType::Array(..), other) => {
-                Err(TypeChecker::type_mismatch(arg, &other, &NodeType::Int))
+                Err(check::type_mismatch(arg, &other, &NodeType::Int))
             }
             _ => Err(Diagnostic::error(expr, "Can't subscript into non-array")),
         }
