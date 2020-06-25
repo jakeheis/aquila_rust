@@ -1,0 +1,17 @@
+let maybe_three = Optional[int].some(3);
+
+/// 3
+if maybe_three.is_some() {
+    print *maybe_three.object;
+} else {
+    print "Is not any";
+}
+
+let maybe_four = Optional[int].none();
+
+/// <none>
+if maybe_four.is_some() {
+    print *maybe_four.object;
+} else {
+    print "<none>";
+}

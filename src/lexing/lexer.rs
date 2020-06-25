@@ -174,6 +174,7 @@ impl Lexer {
             "cast" => self.make_token(TokenKind::Cast),
             "trait" => self.make_token(TokenKind::Trait),
             "self" => self.make_token(TokenKind::SelfKeyword),
+            "pub" => self.make_token(TokenKind::Pub),
             _ => self.make_token(TokenKind::Identifier),
         }
     }

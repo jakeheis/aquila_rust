@@ -56,6 +56,7 @@ pub enum TokenKind {
     In,
     Cast,
     SelfKeyword,
+    Pub,
 
     // Other
     Comma,

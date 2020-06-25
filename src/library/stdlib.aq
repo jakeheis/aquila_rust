@@ -135,6 +135,9 @@ type Vec[T] {
     }
 
     def pop(): T {
+        if count == 0 {
+            fatal_error("Can't pop from empty vector");
+        }
         count = count - 1;
         return *Memory.offset[T](storage, count);
     }
@@ -144,6 +147,29 @@ type Vec[T] {
         Memory.copy[T](object, location);
     }
 
+}
+
+type Optional[T] {
+    let _is_some: bool;
+    let object: ptr T;
+
+    meta def some(object: T): Optional[T] {
+        let location = Memory.allocate[T]();
+        Memory.copy[T](&object, location);
+        return Optional[T](true, location);
+    }
+
+    meta def none(): Optional[T] {
+        return Optional[T](false, cast[ptr T](&0));
+    }
+
+    def is_some(): bool {
+        return _is_some;
+    }
+
+    def is_none(): bool {
+        return !_is_some;
+    }
 }
 
 trait Indexable {
