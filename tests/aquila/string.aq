@@ -12,10 +12,3 @@ combo2.print_str();
 
 /// -> hello world again
 dyn.append_literal(" world").append_literal(" again").print_str();
-
-/// -> hello world again 2
-print dyn.append_literal(" world").append_literal(" again 2").storage;
-
-/// -> hello world again 3
-let here = dyn.append_literal(" world").append_literal(" again 3");
-print here.storage;

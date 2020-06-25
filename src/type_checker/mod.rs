@@ -20,6 +20,7 @@ mod check {
     use crate::diagnostic::*;
     use crate::parsing::*;
     use crate::source::ContainsSpan;
+    use crate::library::*;
 
     pub fn type_mismatch<T: ContainsSpan>(
         span: &T,
@@ -48,6 +49,26 @@ mod check {
         } else {
             Err(type_mismatch(expr, given, expected))
         }
+    }
+
+    pub fn type_accessible(lib: &Lib, metadata: &TypeMetadata) -> bool {
+        if metadata.is_public {
+            true
+        } else {
+            symbol_accessible(lib, &metadata.symbol)
+        }
+    }
+
+    pub fn func_accessible(lib: &Lib, metadata: &FunctionMetadata) -> bool {
+        if metadata.is_public {
+            true
+        } else {
+            symbol_accessible(lib, &metadata.symbol)
+        }
+    }
+
+    pub fn symbol_accessible(lib: &Lib, symbol: &Symbol) -> bool {
+        symbol.lib_component() == Symbol::lib_root(lib).lib_component()
     }
 }
 
@@ -218,7 +239,7 @@ impl ContextTracker {
             Ok(resolved_type) => Ok(resolved_type),
             Err(error) => {
                 Err(match error {
-                    TypeResolutionError::IncorrectlySpecialized(diag) => diag,
+                    TypeResolutionError::IncorrectlySpecialized(diag) | TypeResolutionError::Inaccessible(diag) => diag,
                     TypeResolutionError::NotFound => Diagnostic::error(explicit_type, "Type not found"),
                 })
             }

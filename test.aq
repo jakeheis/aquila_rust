@@ -18,6 +18,10 @@ type Gen[U] {
 
 let a: Gen[int];
 
+let vec = Vec[int].new();
+vec.insert(4);
+
+
 /*
 enum Hello {
     case one;

@@ -7,6 +7,7 @@ pub struct TypeMetadata {
     pub generics: Vec<Symbol>,
     pub field_symbols: Vec<Symbol>,
     pub field_types: Vec<NodeType>,
+    pub field_visibilities: Vec<bool>,
     pub methods: Vec<Symbol>,
     pub meta_methods: Vec<Symbol>,
     pub specializations: HashSet<GenericSpecialization>,
@@ -20,6 +21,7 @@ impl TypeMetadata {
             generics: Vec::new(),
             field_symbols: Vec::new(),
             field_types: Vec::new(),
+            field_visibilities: Vec::new(),
             methods: Vec::new(),
             meta_methods: Vec::new(),
             specializations: HashSet::new(),
@@ -33,6 +35,7 @@ impl TypeMetadata {
             generics: Vec::new(),
             field_symbols: Vec::new(),
             field_types: Vec::new(),
+            field_visibilities: Vec::new(),
             methods: Vec::new(),
             meta_methods: Vec::new(),
             specializations: HashSet::new(),
@@ -61,14 +64,14 @@ impl TypeMetadata {
         }
     }
 
-    pub fn field_named(&self, name: &str) -> Option<(Symbol, &NodeType)> {
+    pub fn field_named(&self, name: &str) -> Option<(Symbol, &NodeType, bool)> {
         let possible_symbol = Symbol::new_str(&self.symbol, name);
         if let Some(index) = self
             .field_symbols
             .iter()
             .position(|s| s == &possible_symbol)
         {
-            Some((possible_symbol, &self.field_types[index]))
+            Some((possible_symbol, &self.field_types[index], self.field_visibilities[index]))
         } else {
             None
         }

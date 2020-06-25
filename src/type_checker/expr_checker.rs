@@ -199,6 +199,14 @@ impl ExprVisitor for ExprChecker {
             self.resolve_function(expr, function)?
         };
 
+        if check::func_accessible(self.lib.as_ref(), &metadata) == false {
+            if is_init {
+                return Err(Diagnostic::error(expr, "Init is private"));
+            } else {
+                return Err(Diagnostic::error(function, "Function is private"));
+            }
+        }
+
         function.set_symbol(metadata.symbol.clone());
 
         trace!(target: "type_checker", "Callee metadata: {}", metadata);
@@ -291,7 +299,10 @@ impl ExprVisitor for ExprChecker {
         match target_type {
             NodeType::Instance(type_symbol, specialization) => {
                 let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
-                if let Some((field_symbol, field_type)) = type_metadata.field_named(field_name) {
+                if let Some((field_symbol, field_type, is_public)) = type_metadata.field_named(field_name) {
+                    if is_public == false && check::symbol_accessible(self.lib.as_ref(), &field_symbol) == false {
+                        return Err(Diagnostic::error(field, "Field is private"));
+                    }
                     field.set_symbol(field_symbol);
                     expr.set_type(field_type.specialize(self.lib.as_ref(), &specialization))
                 } else {

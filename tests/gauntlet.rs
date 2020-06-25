@@ -56,7 +56,7 @@ fn test_file(file: PathBuf) -> Result<(), &'static str> {
                 }
                 in_failable_zone = false;
             } else {
-                panic!()
+                panic!("Unknown control sequence: {}", chopped_line)
             }
         } else {
             let line = String::from(line);
@@ -88,8 +88,6 @@ fn test_file(file: PathBuf) -> Result<(), &'static str> {
         }
         expect_failure(Path::new(&file_path).to_path_buf(), index)?;
     }
-
-    println!("fail_zones {:#?}", fail_zones);
 
     Ok(())
 }

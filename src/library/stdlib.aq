@@ -44,11 +44,11 @@ type Memory {
 
 }
 
-def read_line(): String {
+pub def read_line(): String {
     return String.from(_read_line());
 }
 
-def fatal_error(message: ptr byte) {
+pub def fatal_error(message: ptr byte) {
     print String.from("Fatal error: ").append_literal(message).storage;
     exit(1);
 }
@@ -61,17 +61,17 @@ type SizedCollectionIterator {
 }
 */
 
-type String {
+pub type String {
     
     let storage: ptr byte;
     let size: int;
 
-    meta def from(lit: ptr byte): String {
+    pub meta def from(lit: ptr byte): String {
         let size = strlen(lit) + 1;
         return String(lit, size);
     }
 
-    def append_literal(lit: ptr byte): String {
+    pub def append_literal(lit: ptr byte): String {
         let new_size = size + strlen(lit);
 
         let new_storage = Memory.allocate_block[byte](new_size);
@@ -83,11 +83,11 @@ type String {
         return String(new_storage, new_size);
     }
 
-    def append(string: String): String {
+    pub def append(string: String): String {
         return append_literal(string.storage);
     }
 
-    def print_str() {
+    pub def print_str() {
         print storage;
     }
 
@@ -97,7 +97,7 @@ pub type Vec[T] {
 
     let storage: ptr T;
     pub let count: int;
-    let capacity: int;
+    pub let capacity: int;
     let element_size: int;
 
     pub meta def new(): Vec[T] {
@@ -136,7 +136,7 @@ pub type Vec[T] {
 
     pub def pop(): T {
         if count == 0 {
-            fatal_error("Can't pop from empty vector");
+            fatal_error("can't pop from empty vector");
         }
         count = count - 1;
         return *Memory.offset[T](storage, count);
@@ -169,6 +169,13 @@ pub type Optional[T] {
 
     pub def is_none(): bool {
         return !_is_some;
+    }
+
+    pub def unwrap(): ptr T {
+        if _is_some == false {
+            fatal_error("unwrapped a nil value");
+        }
+        return object;
     }
 }
 

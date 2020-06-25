@@ -88,12 +88,18 @@ impl SymbolTableBuilder {
             .unwrap()
             .clone();
 
+        let mut any_private_fields = false;
         for field in &decl.fields {
             let (token, field_type) = self.var_decl_type(field, None);
             type_metadata.field_types.push(field_type.clone());
 
             let field_symbol = Symbol::new(self.current_symbol(), token);
             type_metadata.field_symbols.push(field_symbol.clone());
+
+            type_metadata.field_visibilities.push(field.is_public);
+            if !field.is_public {
+                any_private_fields = true;
+            }
 
             trace!(target: "symbol_table", "Inserting field {} (symbol = {})", token.lexeme(), field_symbol);
         }
@@ -127,7 +133,7 @@ impl SymbolTableBuilder {
                     parameter_types: type_metadata.field_types.clone(),
                     return_type: instance_type,
                     specializations: HashSet::new(),
-                    is_public: false,
+                    is_public: !any_private_fields,
                 },
             )
         }
@@ -232,7 +238,7 @@ impl SymbolTableBuilder {
             Ok(resolved_type) => resolved_type,
             Err(error) => {
                 let diag = match error {
-                    TypeResolutionError::IncorrectlySpecialized(diag) => diag,
+                    TypeResolutionError::IncorrectlySpecialized(diag) | TypeResolutionError::Inaccessible(diag) => diag,
                     TypeResolutionError::NotFound => Diagnostic::error(explicit_type, "Type not found"),
                 };
                 self.reporter.report(diag);

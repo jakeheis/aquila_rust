@@ -2,11 +2,12 @@ use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::{ExplicitType, ExplicitTypeKind, ResolvedToken};
 use crate::diagnostic::*;
+use super::check;
 use log::trace;
 
 pub enum TypeResolutionError {
     IncorrectlySpecialized(Diagnostic),
-    // NotPublic(Diagnostic),
+    Inaccessible(Diagnostic),
     NotFound
 }
 
@@ -107,20 +108,24 @@ impl<'a> TypeResolution<'a> {
                 type_metadata.generics.len(),
                 specialization.len()
             );
-            Err(TypeResolutionError::IncorrectlySpecialized(Diagnostic::error(token, &message)))
-        } else {
-            let specialization = GenericSpecialization::new(&type_metadata.generics, specialization);
+            return Err(TypeResolutionError::IncorrectlySpecialized(Diagnostic::error(token, &message)));
+        } 
 
-            // if self.add_to_tracker {
-            if let Some(enclosing_func) = self.enclosing_function {
-                self.lib.specialization_tracker.add_required_type_spec(enclosing_func.clone(), type_metadata.symbol.clone(), specialization.clone());
-            }
-            
-            let instance_type = NodeType::Instance(
-                type_metadata.symbol.clone(),
-                specialization,
-            );
-            Ok(instance_type)
+        if check::type_accessible(self.lib, type_metadata) == false {
+            return Err(TypeResolutionError::Inaccessible(Diagnostic::error(token, "Type is private")));
         }
+        
+        let specialization = GenericSpecialization::new(&type_metadata.generics, specialization);
+
+        if let Some(enclosing_func) = self.enclosing_function {
+            self.lib.specialization_tracker.add_required_type_spec(enclosing_func.clone(), type_metadata.symbol.clone(), specialization.clone());
+        }
+
+        let instance_type = NodeType::Instance(
+            type_metadata.symbol.clone(),
+            specialization,
+        );
+
+        Ok(instance_type)
     }
 }
