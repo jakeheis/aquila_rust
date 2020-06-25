@@ -15,11 +15,11 @@ pub struct TypeResolution<'a> {
     lib: &'a Lib,
     symbols: &'a SymbolTable,
     context: &'a [Symbol],
-    enclosing_function: &'a Symbol,
+    enclosing_function: Option<&'a Symbol>,
 }
 
 impl<'a> TypeResolution<'a> {
-    pub fn new(lib: &'a Lib, symbols: &'a SymbolTable, context: &'a [Symbol], enclosing_function: &'a Symbol) -> Self {
+    pub fn new(lib: &'a Lib, symbols: &'a SymbolTable, context: &'a [Symbol], enclosing_function: Option<&'a Symbol>) -> Self {
         TypeResolution {
             lib,
             symbols,
@@ -109,9 +109,9 @@ impl<'a> TypeResolution<'a> {
             let specialization = GenericSpecialization::new(&type_metadata.generics, specialization);
 
             // if self.add_to_tracker {
-            // if let Some(fun)
-                self.lib.specialization_tracker.add_required_type_spec(self.enclosing_function.clone(), type_metadata.symbol.clone(), specialization.clone());
-            // }
+            if let Some(enclosing_func) = self.enclosing_function {
+                self.lib.specialization_tracker.add_required_type_spec(enclosing_func.clone(), type_metadata.symbol.clone(), specialization.clone());
+            }
             
             let instance_type = NodeType::Instance(
                 type_metadata.symbol.clone(),

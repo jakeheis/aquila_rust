@@ -4,7 +4,7 @@ set -e
 
 if [ $# -eq 0 ]
   then
-    RUST_BACKTRACE=1 RUST_LOG=trace cargo run > out.out 2>&1
+    RUST_BACKTRACE=1 RUST_LOG=trace cargo run > out.log 2>&1
 else
-    RUST_BACKTRACE=1 RUST_LOG=$1=trace cargo run > out.out 2>&1
+    RUST_BACKTRACE=1 RUST_LOG=$1=trace cargo run > out.log 2>&1
 fi

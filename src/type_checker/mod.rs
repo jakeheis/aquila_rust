@@ -1,10 +1,10 @@
 mod expr_checker;
-mod node_type;
-mod symbol_table;
+mod type_resolver;
+mod symbol_table_builder;
 mod type_checker;
 
-pub use node_type::{TypeResolution, TypeResolutionError};
-pub use symbol_table::SymbolTableBuilder;
+pub use type_resolver::{TypeResolution, TypeResolutionError};
+pub use symbol_table_builder::SymbolTableBuilder;
 pub use type_checker::TypeChecker;
 
 use crate::diagnostic::*;
@@ -212,8 +212,8 @@ impl ContextTracker {
 
     fn resolve_type(&self, explicit_type: &ExplicitType) -> DiagnosticResult<NodeType> {
         let context = self.symbolic_context();
-        let enclosing_func = self.enclosing_function().map(|f| f.symbol.clone()).unwrap_or(Symbol::main_symbol());
-        let resolver = TypeResolution::new(&self.lib, &self.lib.symbols, &context, &enclosing_func);
+        let enclosing_func = self.enclosing_function().map(|f| &f.symbol);
+        let resolver = TypeResolution::new(&self.lib, &self.lib.symbols, &context, enclosing_func);
         match resolver.resolve(explicit_type) {
             Ok(resolved_type) => Ok(resolved_type),
             Err(error) => {
@@ -227,12 +227,12 @@ impl ContextTracker {
 
     fn resolve_token_as_type(&self, token: &ResolvedToken) -> Result<NodeType, TypeResolutionError> {
         let context = self.symbolic_context();
-        let enclosing_func = self.enclosing_function().map(|f| f.symbol.clone()).unwrap_or(Symbol::main_symbol());
+        let enclosing_func = self.enclosing_function().map(|f| &f.symbol);
         let resolver = TypeResolution::new(
             &self.lib,
             &self.lib.symbols,
             &context,
-            &enclosing_func
+            enclosing_func
         );
         resolver.resolve_simple(token)
     }

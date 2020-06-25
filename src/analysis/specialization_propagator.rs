@@ -3,18 +3,18 @@ use log::trace;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
+type SpecializationTrackerMap = HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>;
+
 pub struct SpecializationTracker {
-    call_map: RefCell<HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>>,
-    // explicit_type_specializations: RefCell<HashMap<Symbol, HashSet<GenericSpecialization>>>,
-    new_explicit_type_specializations: RefCell<HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>>,
+    call_map: RefCell<SpecializationTrackerMap>,
+    explicit_type_map: RefCell<SpecializationTrackerMap>,
 }
 
 impl SpecializationTracker {
     pub fn new() -> Self {
         SpecializationTracker {
             call_map: RefCell::new(HashMap::new()),
-            // explicit_type_specializations: RefCell::new(HashMap::new()),
-            new_explicit_type_specializations: RefCell::new(HashMap::new()),
+            explicit_type_map: RefCell::new(HashMap::new()),
         }
     }
 
@@ -27,7 +27,7 @@ impl SpecializationTracker {
     }
 
     pub fn add_required_type_spec(&self, in_func: Symbol, type_symbol: Symbol, spec: GenericSpecialization) {
-        self.new_explicit_type_specializations
+        self.explicit_type_map
             .borrow_mut()
             .entry(in_func)
             .or_insert(Vec::new())
@@ -45,7 +45,7 @@ impl std::fmt::Display for SpecializationTracker {
             }
         }
 
-        let explicit_type_specializations = self.new_explicit_type_specializations.borrow();
+        let explicit_type_specializations = self.explicit_type_map.borrow();
         for (caller, explicit_types) in explicit_type_specializations.iter() {
             write!(f, "\nExplicit types for {}:", caller.id)?;
             for (et, spec) in explicit_types {
@@ -59,8 +59,8 @@ impl std::fmt::Display for SpecializationTracker {
 
 pub struct SpecializationPropagator<'a> {
     lib: &'a mut Lib,
-    call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
-    new_explicit_type_specializations: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
+    call_map: SpecializationTrackerMap,
+    explicit_type_map: SpecializationTrackerMap,
     visited: HashSet<String>,
 }
 
@@ -71,27 +71,16 @@ impl<'a> SpecializationPropagator<'a> {
             trace!(target: "spec_propagate", "{}", dep.specialization_tracker);
         }
 
-        let mut call_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>> = HashMap::new();
+        let mut call_map: SpecializationTrackerMap = HashMap::new();
         SpecializationPropagator::flattened_call_map(lib, &mut call_map);
 
-        for (caller, calls) in &call_map {
-            for (call, spec) in calls {
-                let suffix = if spec.map.is_empty() {
-                    String::new()
-                } else {
-                    format!(" {}", spec)
-                };
-                trace!(target: "spec_propagate", "Call entry: {} -> {}{}", caller, call, suffix);
-            }
-        }
-
-        let mut type_map: HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>> = HashMap::new();
-        let a = SpecializationPropagator::flattened_type_map(lib, &mut type_map);
+        let mut explicit_type_map: SpecializationTrackerMap = HashMap::new();
+        SpecializationPropagator::flattened_explicit_type_map(lib, &mut explicit_type_map);
 
         let mut prop = SpecializationPropagator {
             lib,
             call_map,
-            new_explicit_type_specializations: type_map,
+            explicit_type_map,
             visited: HashSet::new(),
         };
         prop.go();
@@ -114,17 +103,17 @@ impl<'a> SpecializationPropagator<'a> {
         }
     }
 
-    pub fn flattened_type_map(
+    pub fn flattened_explicit_type_map(
         lib: &Lib,
-        call_map: &mut HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
+        explicit_type_map: &mut HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
     ) {
-        let lib_map = lib.specialization_tracker.new_explicit_type_specializations.borrow();
-        for (caller, callees) in lib_map.iter() {
-            let all = call_map.entry(caller.clone()).or_insert(Vec::new());
-            all.append(&mut callees.clone());
+        let lib_map = lib.specialization_tracker.explicit_type_map.borrow();
+        for (enclosing_func, explicit_types) in lib_map.iter() {
+            let all = explicit_type_map.entry(enclosing_func.clone()).or_insert(Vec::new());
+            all.append(&mut explicit_types.clone());
         }
         for lib in &lib.dependencies {
-            SpecializationPropagator::flattened_type_map(lib, call_map);
+            SpecializationPropagator::flattened_explicit_type_map(lib, explicit_type_map);
         }
     }
 
@@ -170,7 +159,7 @@ impl<'a> SpecializationPropagator<'a> {
             }
         }
 
-        if let Some(explicit_types) = self.new_explicit_type_specializations.get(cur) {
+        if let Some(explicit_types) = self.explicit_type_map.get(cur) {
             let explicit_types = explicit_types.clone();
             for (explicit_type_symbol, explicit_type_spec) in explicit_types {
                 let explicit_type_spec = explicit_type_spec.resolve_generics_using(self.lib, current_spec);
@@ -186,7 +175,6 @@ impl<'a> SpecializationPropagator<'a> {
 
 
     fn propagate_through_type(&mut self, cur: &Symbol, current_spec: &GenericSpecialization) {
-        println!("called ons ybmol {}", cur);
         let metadata = self.lib.type_metadata(cur).unwrap();
         let type_id = metadata.type_name(current_spec);
         

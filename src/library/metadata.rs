@@ -167,17 +167,17 @@ pub struct FunctionMetadata {
 }
 
 impl FunctionMetadata {
-    // pub fn main() -> Self {
-    //     FunctionMetadata {
-    //         symbol: Symbol::main_symbol(),
-    //         kind: FunctionKind::TopLevel,
-    //         generics: Vec::new(),
-    //         parameter_symbols: Vec::new(),
-    //         parameter_types: Vec::new(),
-    //         return_type: NodeType::Int,
-    //         specializations: HashSet::new(),
-    //     }
-    // }
+    pub fn main() -> Self {
+        FunctionMetadata {
+            symbol: Symbol::main_symbol(),
+            kind: FunctionKind::TopLevel,
+            generics: Vec::new(),
+            parameter_symbols: Vec::new(),
+            parameter_types: Vec::new(),
+            return_type: NodeType::Int,
+            specializations: HashSet::new(),
+        }
+    }
 
     pub fn function_name(&self, lib: &Lib, specialization: &GenericSpecialization) -> String {
         let func_specialization = self

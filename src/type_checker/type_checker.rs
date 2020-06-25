@@ -1,6 +1,5 @@
-use super::check;
+use super::{check, ScopeType, ContextTracker};
 use super::expr_checker::*;
-use super::ContextTracker;
 use crate::diagnostic::*;
 use crate::library::*;
 use crate::parsing::*;
@@ -36,7 +35,7 @@ impl TypeChecker {
             decl.name.set_symbol(Symbol::new(None, &decl.name.token));
         }
 
-        checker.context.push_scope_named("main");
+        checker.context.push_scope(Symbol::main_symbol(), ScopeType::InsideFunction(FunctionMetadata::main()));
         checker.check_list(&lib.other);
         checker.context.pop_scope();
 
