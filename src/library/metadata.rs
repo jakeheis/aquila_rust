@@ -10,10 +10,11 @@ pub struct TypeMetadata {
     pub methods: Vec<Symbol>,
     pub meta_methods: Vec<Symbol>,
     pub specializations: HashSet<GenericSpecialization>,
+    pub is_public: bool,
 }
 
 impl TypeMetadata {
-    pub fn new(symbol: Symbol) -> Self {
+    pub fn new(symbol: Symbol, is_public: bool) -> Self {
         TypeMetadata {
             symbol: symbol,
             generics: Vec::new(),
@@ -22,18 +23,20 @@ impl TypeMetadata {
             methods: Vec::new(),
             meta_methods: Vec::new(),
             specializations: HashSet::new(),
+            is_public: is_public,
         }
     }
 
     pub fn generic(owner: &Symbol, name: &str) -> Self {
         TypeMetadata {
-            symbol: Symbol::new_str(Some(owner), name),
+            symbol: Symbol::new_str(owner, name),
             generics: Vec::new(),
             field_symbols: Vec::new(),
             field_types: Vec::new(),
             methods: Vec::new(),
             meta_methods: Vec::new(),
             specializations: HashSet::new(),
+            is_public: false,
         }
     }
 
@@ -59,7 +62,7 @@ impl TypeMetadata {
     }
 
     pub fn field_named(&self, name: &str) -> Option<(Symbol, &NodeType)> {
-        let possible_symbol = Symbol::new_str(Some(&self.symbol), name);
+        let possible_symbol = Symbol::new_str(&self.symbol, name);
         if let Some(index) = self
             .field_symbols
             .iter()
@@ -72,7 +75,7 @@ impl TypeMetadata {
     }
 
     pub fn method_named(&self, name: &str) -> Option<Symbol> {
-        let possible_symbol = Symbol::new_str(Some(&self.symbol), name);
+        let possible_symbol = Symbol::new_str(&self.symbol, name);
         if self.methods.contains(&possible_symbol) {
             Some(possible_symbol)
         } else {
@@ -81,7 +84,7 @@ impl TypeMetadata {
     }
 
     pub fn meta_method_named(&self, name: &str) -> Option<Symbol> {
-        let possible_symbol = Symbol::new_str(Some(&Symbol::meta_symbol(Some(&self.symbol))), name);
+        let possible_symbol = Symbol::new_str(&Symbol::meta_symbol(&self.symbol), name);
         if self.meta_methods.contains(&possible_symbol) {
             Some(possible_symbol)
         } else {
@@ -105,7 +108,7 @@ impl TypeMetadata {
 
 impl std::fmt::Display for TypeMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        writeln!(f, "Type {}", self.symbol.mangled())?;
+        writeln!(f, "Type({}, public: {})", self.symbol.mangled(), self.is_public)?;
         if !self.generics.is_empty() {
             let gens = self
                 .generics
@@ -164,18 +167,20 @@ pub struct FunctionMetadata {
     pub parameter_types: Vec<NodeType>,
     pub return_type: NodeType,
     pub specializations: HashSet<GenericSpecialization>,
+    pub is_public: bool,
 }
 
 impl FunctionMetadata {
-    pub fn main() -> Self {
+    pub fn main(lib: &Lib) -> Self {
         FunctionMetadata {
-            symbol: Symbol::main_symbol(),
+            symbol: Symbol::main_symbol(lib),
             kind: FunctionKind::TopLevel,
             generics: Vec::new(),
             parameter_symbols: Vec::new(),
             parameter_types: Vec::new(),
             return_type: NodeType::Int,
             specializations: HashSet::new(),
+            is_public: false,
         }
     }
 
@@ -197,7 +202,13 @@ impl FunctionMetadata {
                     func_specialization
                 )
             }
-            FunctionKind::TopLevel => self.symbol.mangled() + &func_specialization,
+            FunctionKind::TopLevel => {
+                if self.symbol.is_main() {
+                    String::from("main")
+                } else {
+                    self.symbol.mangled() + &func_specialization
+                }
+            },
         }
     }
 
@@ -212,21 +223,20 @@ impl FunctionMetadata {
 
 impl std::fmt::Display for FunctionMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match &self.kind {
-            FunctionKind::TopLevel => writeln!(f, "Function({})", self.symbol.mangled()),
-            FunctionKind::Method(owner) => writeln!(
-                f,
-                "Method(object: {}, method: {})",
+        let line = match &self.kind {
+            FunctionKind::TopLevel => format!("Function({}", self.symbol.mangled()),
+            FunctionKind::Method(owner) => format!(
+                "Method(object: {}, method: {}",
                 owner.mangled(),
                 self.symbol.last_component()
             ),
-            FunctionKind::MetaMethod(owner) => writeln!(
-                f,
-                "MetaMethod(object: {}, meta_method: {})",
+            FunctionKind::MetaMethod(owner) => format!(
+                "MetaMethod(object: {}, meta_method: {}",
                 owner.mangled(),
                 self.symbol.last_component()
             ),
-        }?;
+        };
+        writeln!(f, "{}, public: {})", line, self.is_public)?;
 
         let generics: Vec<String> = self
             .generics

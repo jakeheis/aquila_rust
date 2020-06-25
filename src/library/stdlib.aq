@@ -93,19 +93,19 @@ type String {
 
 }
 
-type Vec[T] {
+pub type Vec[T] {
 
     let storage: ptr T;
-    let count: int;
+    pub let count: int;
     let capacity: int;
     let element_size: int;
 
-    meta def new(): Vec[T] {
+    pub meta def new(): Vec[T] {
         let storage = Memory.allocate_block[T](10);
-        return Vec[T](storage, 0, 0, Memory.size[T]());
+        return Vec[T](storage, 0, 10, Memory.size[T]());
     }
 
-    def insert(object: T) {
+    pub def insert(object: T) {
         if count == capacity {
             capacity = capacity * 2;
             storage = Memory.reallocate[T](storage, capacity);
@@ -116,14 +116,14 @@ type Vec[T] {
         count = count + 1;
     }
 
-    def get(index: int): ptr T {
+    pub def get(index: int): ptr T {
         if index >= count {
             fatal_error("Index out of bounds");
         }
         return Memory.offset[T](storage, index);
     }
 
-    def replace(index: int, object: T) {
+    pub def replace(index: int, object: T) {
         if index > count {
             fatal_error("Index out of bounds");
         }
@@ -134,7 +134,7 @@ type Vec[T] {
         }
     }
 
-    def pop(): T {
+    pub def pop(): T {
         if count == 0 {
             fatal_error("Can't pop from empty vector");
         }
@@ -149,25 +149,25 @@ type Vec[T] {
 
 }
 
-type Optional[T] {
+pub type Optional[T] {
     let _is_some: bool;
     let object: ptr T;
 
-    meta def some(object: T): Optional[T] {
+    pub meta def some(object: T): Optional[T] {
         let location = Memory.allocate[T]();
         Memory.copy[T](&object, location);
         return Optional[T](true, location);
     }
 
-    meta def none(): Optional[T] {
+    pub meta def none(): Optional[T] {
         return Optional[T](false, cast[ptr T](&0));
     }
 
-    def is_some(): bool {
+    pub def is_some(): bool {
         return _is_some;
     }
 
-    def is_none(): bool {
+    pub def is_none(): bool {
         return !_is_some;
     }
 }

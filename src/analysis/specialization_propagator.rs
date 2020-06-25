@@ -118,7 +118,8 @@ impl<'a> SpecializationPropagator<'a> {
     }
 
     pub fn go(&mut self) {
-        self.propagate(&Symbol::main_symbol(), &GenericSpecialization::empty());
+        let main_symbol = Symbol::main_symbol(self.lib);
+        self.propagate(&main_symbol, &GenericSpecialization::empty());
     }
 
     fn propagate(&mut self, cur: &Symbol, current_spec: &GenericSpecialization) {

@@ -6,7 +6,6 @@ use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
 use log::trace;
-use std::collections::HashSet;
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
@@ -123,19 +122,9 @@ impl Codegen {
     }
 
     fn write_main(&mut self, stmts: &[Stmt]) {
-        let main_func = FunctionMetadata {
-            symbol: Symbol::main_symbol(),
-            kind: FunctionKind::TopLevel,
-            generics: Vec::new(),
-            parameter_symbols: Vec::new(),
-            parameter_types: Vec::new(),
-            return_type: NodeType::Int,
-            specializations: HashSet::new(),
-        };
-
         self.writer.start_decl_func(
             self.lib.as_ref(),
-            &main_func,
+            &FunctionMetadata::main(self.lib.as_ref()),
             &GenericSpecialization::empty(),
         );
         for stmt in stmts {
@@ -187,7 +176,7 @@ impl Codegen {
         body: &[Stmt],
         specialization: &GenericSpecialization,
     ) {
-        if !core::should_write_builtin(&func_symbol) {
+        if core::is_direct_c_binding(&func_symbol) {
             return;
         }
 
@@ -242,8 +231,8 @@ impl StmtVisitor for Codegen {
                     self.writer.write_struct(&type_metadata, spec);
                 }
                 CodegenStage::FuncPrototypes | CodegenStage::FuncBodies => {
-                    let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
-                    let init_symbol = Symbol::init_symbol(Some(&meta_symbol));
+                    let meta_symbol = Symbol::meta_symbol(&type_symbol);
+                    let init_symbol = Symbol::init_symbol(&meta_symbol);
                     let init_metadata = self.lib.function_metadata(&init_symbol).unwrap();
 
                     if let CodegenStage::FuncPrototypes = self.stage {
@@ -476,7 +465,11 @@ impl ExprVisitor for Codegen {
             specialization = specialization.merge(self.lib.as_ref(), caller_specs)
         }
 
-        let function_name = function_metadata.function_name(self.lib.as_ref(), &specialization);
+        let function_name = if core::is_direct_c_binding(&function_symbol) {
+            String::from(function_symbol.last_component())
+        }  else { 
+            function_metadata.function_name(self.lib.as_ref(), &specialization)
+        };
         let mut args: Vec<String> = args.iter().map(|a| a.accept(self)).collect();
 
         let rendered = if let Some(target) = target {
@@ -548,7 +541,9 @@ impl ExprVisitor for Codegen {
             }
         }
 
-        if self
+        if symbol.is_self() {
+            String::from("self")
+        } else if self
             .current_type
             .as_ref()
             .map(|t| t.symbol.owns(&symbol))

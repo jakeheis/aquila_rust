@@ -6,6 +6,7 @@ use log::trace;
 
 pub enum TypeResolutionError {
     IncorrectlySpecialized(Diagnostic),
+    // NotPublic(Diagnostic),
     NotFound
 }
 
@@ -76,24 +77,26 @@ impl<'a> TypeResolution<'a> {
         trace!(target: "symbol_table", "Trying to find symbol for {} -- ({})", token.lexeme(), token.span.entire_line().0);
 
         for parent in self.context.iter().rev() {
-            let non_top_level_symbol = Symbol::new(Some(parent), token);
+            let non_top_level_symbol = Symbol::new(parent, token);
             if let Some(type_metadata) = self.symbols.get_type_metadata(&non_top_level_symbol) {
                 trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), non_top_level_symbol);
                 return self.create_instance(token, type_metadata, specialization);
             }
         }
 
-        let top_level_symbol = Symbol::new(None, token);
-        if let Some(type_metadata) = self.symbols.get_type_metadata(&top_level_symbol) {
-            trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), top_level_symbol);
-            return self.create_instance(token, type_metadata, specialization);
-        } else {
-            if let Some(type_metadata) = self.lib.type_metadata(&top_level_symbol) {
-                trace!(target: "symbol_table", "Resolving {} as other lib {}", token.lexeme(), top_level_symbol);
-                return self.create_instance(token, &type_metadata, specialization);
+        let found_metadata = self.lib.deep_search(&|lib| {
+            let symbol = Symbol::new(&Symbol::lib_root(lib), token);
+            if let Some(type_metadata) = lib.symbols.get_type_metadata(&symbol) {
+                Some(type_metadata.clone())
             } else {
-                Err(TypeResolutionError::NotFound)
+                None
             }
+        });
+        if let Some(type_metadata) = found_metadata {
+            trace!(target: "symbol_table", "Resolving {} as other lib {}", token.lexeme(), type_metadata.symbol);
+            return self.create_instance(token, &type_metadata, specialization);
+        } else {
+            Err(TypeResolutionError::NotFound)
         }
     }
 

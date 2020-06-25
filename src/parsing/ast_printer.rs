@@ -1,9 +1,10 @@
 use super::*;
 use crate::lexing::Token;
 use crate::source::*;
+use log::trace;
 
 enum ASTPrinterMode {
-    Stdout,
+    Trace,
     Collect(Vec<String>),
 }
 
@@ -16,7 +17,7 @@ impl ASTPrinter {
     pub fn new() -> ASTPrinter {
         ASTPrinter {
             indent: 0,
-            mode: ASTPrinterMode::Stdout,
+            mode: ASTPrinterMode::Trace,
         }
     }
 
@@ -48,7 +49,7 @@ impl ASTPrinter {
         let line = format!("{}{}", indent, token);
 
         match &mut self.mode {
-            ASTPrinterMode::Stdout => println!("{}", line),
+            ASTPrinterMode::Trace => trace!(target: "parser", "{}", line),
             ASTPrinterMode::Collect(collection) => collection.push(line),
         }
     }
@@ -108,9 +109,10 @@ impl StmtVisitor for ASTPrinter {
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
-            "TypeDecl(name: {}, symbol: {})",
+            "TypeDecl(name: {}, symbol: {}, pub: {})",
             decl.name.span().lexeme(),
-            symbol
+            symbol,
+            decl.is_public
         ));
         self.indent(|visitor| {
             visitor.write_ln("Fields");
@@ -143,11 +145,12 @@ impl StmtVisitor for ASTPrinter {
         let generics: Vec<_> = decl.generics.iter().map(|g| g.span().lexeme()).collect();
         let generics = format!("<{}>", generics.join(","));
         self.write_ln(&format!(
-            "FunctionDecl(name: {}, generics: {}, symbol: {}, meta: {})",
+            "FunctionDecl(name: {}, generics: {}, symbol: {}, meta: {}, pub: {})",
             decl.name.span().lexeme(),
             generics,
             symbol,
             decl.is_meta,
+            decl.is_public,
         ));
         self.indent(|visitor| {
             if let Some(return_type) = decl.return_type.as_ref() {
@@ -174,9 +177,10 @@ impl StmtVisitor for ASTPrinter {
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
-            "VariableDecl(name: {}, symbol: {})",
+            "VariableDecl(name: {}, symbol: {}, pub: {})",
             decl.name.span().lexeme(),
             symbol,
+            decl.is_public,
         ));
         self.indent(|visitor| {
             if let Some(e) = decl.explicit_type.as_ref() {

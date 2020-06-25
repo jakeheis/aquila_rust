@@ -61,7 +61,29 @@ impl Parser {
     }
 
     fn statement(&mut self, context: Context) -> Result<Stmt> {
-        if self.matches(TokenKind::Type) {
+        if self.matches(TokenKind::Pub) {
+            let pub_span = self.previous().span().clone();
+            if context == Context::TopLevel || context == Context::InsideType {
+                let mut stmt = self.statement(context)?;
+                match &mut stmt.kind {
+                    StmtKind::TypeDecl(decl) => decl.is_public = true,
+                    StmtKind::FunctionDecl(decl) => decl.is_public = true,
+                    StmtKind::VariableDecl(decl) if context == Context::InsideType => decl.is_public = true,
+                    _ => {
+                        return Err(Diagnostic::error(
+                            &pub_span,
+                            "Pub can only modify types declarations, function declarations, or type fields",
+                        ));
+                    }
+                }
+                Ok(stmt)
+            } else {
+                Err(Diagnostic::error(
+                    self.previous(),
+                    "Pub not allowed inside functions",
+                ))
+            }
+        } else if self.matches(TokenKind::Type) {
             if context == Context::TopLevel {
                 self.type_decl()
             } else {

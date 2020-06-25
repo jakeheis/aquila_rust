@@ -78,10 +78,10 @@ impl ExprChecker {
 
         match self.context.resolve_token_as_type(function) {
             Ok(NodeType::Instance(type_symbol, specs)) => {
-                let meta_symbol = Symbol::meta_symbol(Some(&type_symbol));
+                let meta_symbol = Symbol::meta_symbol(&type_symbol);
                 let init_metadata = self
                     .lib
-                    .function_metadata(&Symbol::init_symbol(Some(&meta_symbol)));
+                    .function_metadata(&Symbol::init_symbol(&meta_symbol));
                 Ok((init_metadata.unwrap(), specs.clone(), true))
             }
             Ok(..) => Err(Diagnostic::error(
@@ -254,7 +254,7 @@ impl ExprVisitor for ExprChecker {
             .context
             .enclosing_function()
             .map(|e| e.symbol.clone())
-            .unwrap_or(Symbol::main_symbol());
+            .unwrap_or(Symbol::main_symbol(self.lib.as_ref()));
         trace!(target: "type_checker", "Adding call from {} to {} with {}", enclosing_func, metadata.symbol, full_call_specialization);
         self.lib.specialization_tracker.add_call(
             enclosing_func,
@@ -326,9 +326,9 @@ impl ExprVisitor for ExprChecker {
 
     fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
         if let TokenKind::SelfKeyword = name.token.kind {
-            if let Some(t) = self.context.enclosing_type() {
-                name.set_symbol(Symbol::new_str(None, "self"));
-                return expr.set_type(t.unspecialized_type());
+            if let Some(enclosing_type) = self.context.enclosing_type() {
+                name.set_symbol(Symbol::self_symbol(&enclosing_type.symbol));
+                return expr.set_type(enclosing_type.unspecialized_type());
             } else {
                 return Err(Diagnostic::error(expr, "Self illegal here"));
             }

@@ -1,4 +1,5 @@
 use super::metadata::*;
+use super::Lib;
 use crate::lexing::Token;
 use crate::source::Span;
 use std::collections::HashMap;
@@ -9,29 +10,33 @@ pub struct Symbol {
 }
 
 impl Symbol {
-    pub fn new(parent: Option<&Symbol>, name: &Token) -> Self {
+    pub fn lib_root(lib: &Lib) -> Self {
+        Symbol { id: lib.name.clone() }
+    }
+
+    pub fn new(parent: &Symbol, name: &Token) -> Self {
         Symbol::new_str(parent, name.lexeme())
     }
 
-    pub fn new_str(parent: Option<&Symbol>, name: &str) -> Self {
-        let id = parent.map(|p| p.id.clone() + "$").unwrap_or("".to_string()) + name;
+    pub fn new_str(parent: &Symbol, name: &str) -> Self {
+        let id = parent.id.clone() + "$" + name;
         Symbol { id }
     }
 
-    pub fn meta_symbol(parent: Option<&Symbol>) -> Self {
+    pub fn meta_symbol(parent: &Symbol) -> Self {
         Symbol::new_str(parent, "Meta")
     }
 
-    pub fn init_symbol(parent: Option<&Symbol>) -> Self {
+    pub fn init_symbol(parent: &Symbol) -> Self {
         Symbol::new_str(parent, "init")
     }
 
-    pub fn self_symbol() -> Self {
-        Symbol::new_str(None, "self")
+    pub fn self_symbol(parent: &Symbol) -> Self {
+        Symbol::new_str(parent, "self")
     }
 
-    pub fn main_symbol() -> Self {
-        Symbol::new_str(None, "main")
+    pub fn main_symbol(lib: &Lib) -> Self {
+        Symbol::new_str(&Symbol::lib_root(lib), "main")
     }
 
     pub fn mangled(&self) -> String {
@@ -42,6 +47,10 @@ impl Symbol {
         let name = other.id.rsplit("$").nth(0).unwrap();
         let expected = self.id.clone() + "$" + &name;
         other.id == expected
+    }
+
+    pub fn lib_component(&self) -> &str {
+        self.id.split("$").next().unwrap()
     }
 
     pub fn parent(&self) -> Option<Symbol> {
@@ -65,7 +74,11 @@ impl Symbol {
     }
 
     pub fn is_self(&self) -> bool {
-        self.id == "self"
+        self.last_component() == "self"
+    }
+
+    pub fn is_main(&self) -> bool {
+        self.last_component() == "main"
     }
 }
 

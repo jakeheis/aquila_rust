@@ -11,7 +11,8 @@ pub struct SymbolTableBuilder {
     lib: Rc<Lib>,
     symbols: SymbolTable,
     context: Vec<Symbol>,
-    reporter: Rc<dyn Reporter>
+    reporter: Rc<dyn Reporter>,
+    is_builtin: bool,
 }
 
 impl SymbolTableBuilder {
@@ -21,13 +22,16 @@ impl SymbolTableBuilder {
         let mut builder = SymbolTableBuilder {
             lib: Rc::clone(&lib),
             symbols: SymbolTable::new(),
-            context: Vec::new(),
+            context: vec![Symbol::lib_root(lib.as_ref())],
             reporter,
+            is_builtin: false,
         };
 
         builder.build_type_headers(&lib.type_decls);
         builder.build_type_internals(&lib.type_decls);
         builder.build_functions(&lib.function_decls);
+
+        builder.is_builtin = true;
         builder.build_functions(&lib.builtins);
 
         let symbols = std::mem::replace(&mut builder.symbols, SymbolTable::new());
@@ -49,14 +53,10 @@ impl SymbolTableBuilder {
         self.symbols.insert_func_metadata(symbol, metadata)
     }
 
-    // fn insert_type_metadata(&mut self, symbol: Symbol, metadata: TypeMetadata) {
-    //     self.symbols.insert_type_metadata(symbol, metadata)
-    // }
-
     fn build_type_header(&mut self, decl: &TypeDecl) {
-        let new_symbol = Symbol::new(self.context.last(), &decl.name.token);
+        let new_symbol = Symbol::new(self.current_symbol(), &decl.name.token);
 
-        let metadata = TypeMetadata::new(new_symbol.clone());
+        let metadata = TypeMetadata::new(new_symbol.clone(), decl.is_public);
         self.symbols
             .insert_type_metadata(new_symbol.clone(), metadata);
 
@@ -92,7 +92,7 @@ impl SymbolTableBuilder {
             let (token, field_type) = self.var_decl_type(field, None);
             type_metadata.field_types.push(field_type.clone());
 
-            let field_symbol = Symbol::new(self.context.last(), token);
+            let field_symbol = Symbol::new(self.current_symbol(), token);
             type_metadata.field_symbols.push(field_symbol.clone());
 
             trace!(target: "symbol_table", "Inserting field {} (symbol = {})", token.lexeme(), field_symbol);
@@ -100,10 +100,10 @@ impl SymbolTableBuilder {
 
         type_metadata.methods = self.build_functions(&decl.methods);
 
-        self.context.push(Symbol::meta_symbol(self.context.last()));
+        self.context.push(Symbol::meta_symbol(self.current_symbol()));
         type_metadata.meta_methods = self.build_functions(&decl.meta_methods);
 
-        let init_symbol = Symbol::init_symbol(self.context.last());
+        let init_symbol = Symbol::init_symbol(self.current_symbol());
         if self.symbols.get_func_metadata(&init_symbol).is_none() {
             let generic_types: Vec<_> = type_metadata
                 .generics
@@ -127,6 +127,7 @@ impl SymbolTableBuilder {
                     parameter_types: type_metadata.field_types.clone(),
                     return_type: instance_type,
                     specializations: HashSet::new(),
+                    is_public: false,
                 },
             )
         }
@@ -147,7 +148,7 @@ impl SymbolTableBuilder {
     }
 
     fn build_function(&mut self, decl: &FunctionDecl) -> Symbol {
-        let function_symbol = Symbol::new(self.context.last(), &decl.name.token);
+        let function_symbol = Symbol::new(self.current_symbol(), &decl.name.token);
 
         trace!(target: "symbol_table", "Building function {} (symbol = {})", decl.name.token.lexeme(), function_symbol);
 
@@ -160,7 +161,7 @@ impl SymbolTableBuilder {
         for param in &decl.parameters {
             let (token, node_type) = self.var_decl_type(param, Some(&function_symbol));
             param_types.push(node_type);
-            param_symbols.push(Symbol::new(Some(&function_symbol), token));
+            param_symbols.push(Symbol::new(&function_symbol, token));
         }
 
         let return_type = decl
@@ -192,6 +193,7 @@ impl SymbolTableBuilder {
             parameter_types: param_types,
             return_type: return_type,
             specializations: HashSet::new(),
+            is_public: decl.is_public,
         };
         self.insert_func_metadata(function_symbol.clone(), function_metadata);
 
@@ -200,10 +202,14 @@ impl SymbolTableBuilder {
         function_symbol
     }
 
+    fn current_symbol(&self) -> &Symbol {
+        self.context.last().unwrap()
+    }
+
     fn insert_generics(&mut self, owner: &Symbol, generics: &[ResolvedToken]) -> Vec<Symbol> {
         let mut generic_symbols = Vec::new();
         for generic in generics {
-            let generic_symbol = Symbol::new(self.context.last(), &generic.token);
+            let generic_symbol = Symbol::new(self.current_symbol(), &generic.token);
             let generic_type = TypeMetadata::generic(owner, generic.token.lexeme());
             self.symbols
                 .type_metadata

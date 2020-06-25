@@ -10,6 +10,7 @@ pub struct TypeDecl {
     pub fields: Vec<VariableDecl>,
     pub methods: Vec<FunctionDecl>,
     pub meta_methods: Vec<FunctionDecl>,
+    pub is_public: bool,
 }
 
 pub struct FunctionDecl {
@@ -19,6 +20,7 @@ pub struct FunctionDecl {
     pub return_type: Option<ExplicitType>,
     pub body: Vec<Stmt>,
     pub is_meta: bool,
+    pub is_public: bool,
 }
 
 pub struct VariableDecl {
@@ -26,6 +28,7 @@ pub struct VariableDecl {
     pub explicit_type: Option<ExplicitType>,
     pub initial_value: Option<Expr>,
     pub span: Span,
+    pub is_public: bool,
 }
 
 impl ContainsSpan for VariableDecl {
@@ -100,6 +103,7 @@ impl Stmt {
             fields,
             methods,
             meta_methods,
+            is_public: false,
         };
         Stmt::new(StmtKind::TypeDecl(decl), span)
     }
@@ -126,6 +130,7 @@ impl Stmt {
             return_type,
             body,
             is_meta,
+            is_public: false
         };
         Stmt::new(StmtKind::FunctionDecl(decl), span)
     }
@@ -148,6 +153,7 @@ impl Stmt {
             explicit_type,
             initial_value: value,
             span: span.clone(),
+            is_public: false,
         };
         Stmt::new(StmtKind::VariableDecl(decl), span)
     }

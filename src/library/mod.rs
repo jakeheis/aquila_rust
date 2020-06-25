@@ -58,6 +58,8 @@ impl Lib {
 
         let parser = Parser::new(tokens, Rc::clone(&reporter));
         let stmts = parser.parse();
+        
+        ASTPrinter::new().print(&stmts);
 
         if reporter.has_errored() {
             return Err("Parsing failed");
@@ -98,6 +100,21 @@ impl Lib {
         Ok(lib)
     }
 
+    pub fn deep_search<F, U>(&self, search: &F) -> Option<U> 
+    where F: Fn(&Lib) -> Option<U>
+    {
+        if let Some(found) = search(self) {
+            Some(found)
+        }else {
+            for dep in &self.dependencies {
+                if let Some(found) = dep.deep_search(search) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+    }
+
     pub fn type_metadata(&self, symbol: &Symbol) -> Option<TypeMetadata> {
         if let Some(found) = self.symbols.get_type_metadata(symbol) {
             Some(found.clone())
@@ -122,6 +139,20 @@ impl Lib {
             }
             None
         }
+    }
+
+    pub fn top_level_function_named(&self, name: &str) -> Option<&FunctionMetadata> {
+        let func_symbol = Symbol::new_str(&Symbol::lib_root(self), name);
+        if let Some(found) = self.symbols.get_func_metadata(&func_symbol) {
+            return Some(found);
+        }
+
+        for dep in &self.dependencies {
+            if let Some(found) = dep.top_level_function_named(name) {
+                return Some(found);
+            }
+        }
+        None
     }
 
     pub fn function_metadata(&self, symbol: &Symbol) -> Option<FunctionMetadata> {

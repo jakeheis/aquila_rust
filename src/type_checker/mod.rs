@@ -60,13 +60,13 @@ pub enum ScopeType {
 }
 
 pub struct Scope {
-    id: Option<Symbol>,
+    id: Symbol,
     variable_types: HashMap<Symbol, NodeType>,
     scope_type: ScopeType,
 }
 
 impl Scope {
-    fn new(id: Option<Symbol>, scope_type: ScopeType) -> Self {
+    fn new(id: Symbol, scope_type: ScopeType) -> Self {
         Scope {
             id,
             variable_types: HashMap::new(),
@@ -86,9 +86,10 @@ pub struct ContextTracker {
 
 impl ContextTracker {
     fn new(lib: Rc<Lib>) -> Self {
+        let root_symbol = Symbol::lib_root(lib.as_ref());
         ContextTracker {
             lib,
-            scopes: vec![Scope::new(None, ScopeType::TopLevel)],
+            scopes: vec![Scope::new(root_symbol, ScopeType::TopLevel)],
         }
     }
 
@@ -120,18 +121,18 @@ impl ContextTracker {
 
     fn push_scope(&mut self, id: Symbol, scope_type: ScopeType) {
         trace!(target: "type_checker", "Pushing scope -- {}", id);
-        self.scopes.push(Scope::new(Some(id), scope_type));
+        self.scopes.push(Scope::new(id, scope_type));
     }
 
     fn pop_scope(&mut self) {
         let popped = self.scopes.pop().unwrap();
-        trace!(target: "type_checker", "Popped scope {}", popped.id.unwrap());
+        trace!(target: "type_checker", "Popped scope {}", popped.id);
     }
 
     pub fn symbolic_context(&self) -> Vec<Symbol> {
         self.scopes
             .iter()
-            .flat_map(|s| s.id.as_ref().map(|id| id.clone()))
+            .map(|s| s.id.clone())
             .collect()
     }
 
@@ -143,8 +144,8 @@ impl ContextTracker {
         self.scopes.last().unwrap()
     }
 
-    pub fn current_symbol(&self) -> Option<&Symbol> {
-        self.scopes.last().unwrap().id.as_ref()
+    pub fn current_symbol(&self) -> &Symbol {
+        &self.scopes.last().unwrap().id
     }
 
     pub fn enclosing_type(&self) -> Option<&TypeMetadata> {
@@ -182,7 +183,7 @@ impl ContextTracker {
             panic!("Should never define var as ambiguous");
         }
 
-        let new_symbol = Symbol::new((&self.current_scope().id).as_ref(), &name.token);
+        let new_symbol = Symbol::new(&self.current_scope().id, &name.token);
 
         trace!(target: "type_checker", "Defining {} (symbol = {}) as {}", name.span().lexeme(), new_symbol, var_type);
 
@@ -196,15 +197,14 @@ impl ContextTracker {
 
     pub fn resolve_var(&self, name: &str) -> Option<(Symbol, NodeType)> {
         for scope in self.scopes.iter().rev() {
-            let possible_symbol = Symbol::new_str((&scope.id).as_ref(), name);
+            let possible_symbol = Symbol::new_str(&scope.id, name);
             if let Some(node_type) = scope.type_of(&possible_symbol) {
                 return Some((possible_symbol, node_type.clone()));
             }
         }
 
-        let lib_symbol = Symbol::new_str(None, name);
-        if let Some(metadata) = self.lib.function_metadata(&lib_symbol) {
-            Some((lib_symbol, metadata.node_type()))
+        if let Some(metadata) = self.lib.top_level_function_named(name) {
+            Some((metadata.symbol.clone(), metadata.node_type()))
         } else {
             None
         }

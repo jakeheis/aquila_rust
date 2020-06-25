@@ -32,10 +32,14 @@ impl TypeChecker {
             checker.visit_function_decl(decl);
         }
         for decl in &lib.builtins {
-            decl.name.set_symbol(Symbol::new(None, &decl.name.token));
+            decl.name.set_symbol(Symbol::new(&Symbol::lib_root(lib.as_ref()), &decl.name.token));
         }
 
-        checker.context.push_scope(Symbol::main_symbol(), ScopeType::InsideFunction(FunctionMetadata::main()));
+        let main_func = FunctionMetadata::main(lib.as_ref());
+        checker.context.push_scope(
+            main_func.symbol.clone(),
+            ScopeType::InsideFunction(main_func)
+        );
         checker.check_list(&lib.other);
         checker.context.pop_scope();
 
@@ -87,7 +91,7 @@ impl StmtVisitor for TypeChecker {
     type StmtResult = Analysis;
 
     fn visit_type_decl(&mut self, decl: &TypeDecl) -> Analysis {
-        let (_, metadata) = self.context.push_type_scope(&decl.name);
+        let (type_symbol, metadata) = self.context.push_type_scope(&decl.name);
 
         self.context.push_scope_meta(&metadata);
         for meta_method in &metadata.meta_methods {
@@ -104,8 +108,8 @@ impl StmtVisitor for TypeChecker {
             self.context.put_in_scope(symbol, field_type);
         }
 
-        self.context
-            .put_in_scope(&Symbol::self_symbol(), &metadata.unspecialized_type());
+        let self_symbol = Symbol::self_symbol(&type_symbol);
+        self.context.put_in_scope(&self_symbol, &metadata.unspecialized_type());
 
         for method in &metadata.methods {
             let method_metadata = self.lib.function_metadata(&method).unwrap();
