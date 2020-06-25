@@ -101,8 +101,8 @@ impl StmtVisitor for TypeChecker {
         }
         self.context.pop_scope();
 
-        for field in &decl.fields {
-            self.visit_variable_decl(field);
+        for (symbol, field_type) in metadata.field_symbols.iter().zip(&metadata.field_types) {
+            self.context.put_in_scope(symbol, field_type);
         }
 
         self.context
@@ -146,8 +146,8 @@ impl StmtVisitor for TypeChecker {
             value => value,
         };
 
-        for param in &decl.parameters {
-            self.visit_variable_decl(param);
+        for (symbol, param_type) in metadata.parameter_symbols.iter().zip(&metadata.parameter_types) {
+            self.context.put_in_scope(symbol, param_type);
         }
 
         for (index, param_type) in metadata.parameter_types.iter().enumerate() {

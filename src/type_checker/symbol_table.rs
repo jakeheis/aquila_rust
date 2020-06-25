@@ -89,7 +89,7 @@ impl SymbolTableBuilder {
             .clone();
 
         for field in &decl.fields {
-            let (token, field_type) = self.var_decl_type(field);
+            let (token, field_type) = self.var_decl_type(field, &type_symbol);
             type_metadata.field_types.push(field_type.clone());
 
             let field_symbol = Symbol::new(self.context.last(), token);
@@ -158,7 +158,7 @@ impl SymbolTableBuilder {
         let mut param_types: Vec<NodeType> = Vec::new();
         let mut param_symbols: Vec<Symbol> = Vec::new();
         for param in &decl.parameters {
-            let (token, node_type) = self.var_decl_type(param);
+            let (token, node_type) = self.var_decl_type(param, &function_symbol);
             param_types.push(node_type);
             param_symbols.push(Symbol::new(Some(&function_symbol), token));
         }
@@ -166,7 +166,7 @@ impl SymbolTableBuilder {
         let return_type = decl
             .return_type
             .as_ref()
-            .map(|r| self.resolve_type(r))
+            .map(|r| self.resolve_type(r, &function_symbol))
             .unwrap_or(NodeType::Void);
 
         self.context.pop();
@@ -215,13 +215,13 @@ impl SymbolTableBuilder {
         generic_symbols
     }
 
-    fn var_decl_type<'b>(&self, var_decl: &'b VariableDecl) -> (&'b Token, NodeType) {
-        let resolved_type = self.resolve_type(var_decl.explicit_type.as_ref().unwrap());
+    fn var_decl_type<'b>(&self, var_decl: &'b VariableDecl, enclosing_func: &Symbol) -> (&'b Token, NodeType) {
+        let resolved_type = self.resolve_type(var_decl.explicit_type.as_ref().unwrap(), enclosing_func);
         (&var_decl.name.token, resolved_type)
     }
 
-    fn resolve_type(&self, explicit_type: &ExplicitType) -> NodeType {
-        let resolver = TypeResolution::new(&self.lib, &self.symbols, &self.context);
+    fn resolve_type(&self, explicit_type: &ExplicitType, enclosing_func: &Symbol) -> NodeType {
+        let resolver = TypeResolution::new(&self.lib, &self.symbols, &self.context, enclosing_func);
         match resolver.resolve(explicit_type) {
             Ok(resolved_type) => resolved_type,
             Err(error) => {

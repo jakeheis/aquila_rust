@@ -212,7 +212,8 @@ impl ContextTracker {
 
     fn resolve_type(&self, explicit_type: &ExplicitType) -> DiagnosticResult<NodeType> {
         let context = self.symbolic_context();
-        let resolver = TypeResolution::new(&self.lib, &self.lib.symbols, &context);
+        let enclosing_func = self.enclosing_function().map(|f| f.symbol.clone()).unwrap_or(Symbol::main_symbol());
+        let resolver = TypeResolution::new(&self.lib, &self.lib.symbols, &context, &enclosing_func);
         match resolver.resolve(explicit_type) {
             Ok(resolved_type) => Ok(resolved_type),
             Err(error) => {
@@ -226,10 +227,12 @@ impl ContextTracker {
 
     fn resolve_token_as_type(&self, token: &ResolvedToken) -> Result<NodeType, TypeResolutionError> {
         let context = self.symbolic_context();
+        let enclosing_func = self.enclosing_function().map(|f| f.symbol.clone()).unwrap_or(Symbol::main_symbol());
         let resolver = TypeResolution::new(
             &self.lib,
             &self.lib.symbols,
-            &context
+            &context,
+            &enclosing_func
         );
         resolver.resolve_simple(token)
     }

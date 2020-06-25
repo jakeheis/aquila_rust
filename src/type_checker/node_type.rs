@@ -15,14 +15,16 @@ pub struct TypeResolution<'a> {
     lib: &'a Lib,
     symbols: &'a SymbolTable,
     context: &'a [Symbol],
+    enclosing_function: &'a Symbol,
 }
 
 impl<'a> TypeResolution<'a> {
-    pub fn new(lib: &'a Lib, symbols: &'a SymbolTable, context: &'a [Symbol]) -> Self {
+    pub fn new(lib: &'a Lib, symbols: &'a SymbolTable, context: &'a [Symbol], enclosing_function: &'a Symbol) -> Self {
         TypeResolution {
             lib,
             symbols,
-            context
+            context,
+            enclosing_function,
         }
     }
 
@@ -105,7 +107,11 @@ impl<'a> TypeResolution<'a> {
             Err(TypeResolutionError::IncorrectlySpecialized(Diagnostic::error(token, &message)))
         } else {
             let specialization = GenericSpecialization::new(&type_metadata.generics, specialization);
-            self.lib.specialization_tracker.add_required_type_spec(type_metadata.symbol.clone(), specialization.clone());
+
+            // if self.add_to_tracker {
+            // if let Some(fun)
+                self.lib.specialization_tracker.add_required_type_spec(self.enclosing_function.clone(), type_metadata.symbol.clone(), specialization.clone());
+            // }
             
             let instance_type = NodeType::Instance(
                 type_metadata.symbol.clone(),
