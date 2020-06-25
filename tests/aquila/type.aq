@@ -27,10 +27,10 @@ type TestType {
 
 let instance: TestType = TestType.create();
 
-/// 20
+/// -> 20
 print instance.add();
 
 let second_instance: TestType = TestType.create_again();
 
-/// 6
+/// -> 6
 print second_instance.add();
