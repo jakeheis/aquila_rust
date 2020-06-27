@@ -192,10 +192,10 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
-    fn visit_trait_decl(&mut self, name: &TypedToken, requirements: &[Stmt]) {
-        self.write_ln(&format!("TraitDecl(name: {})", name.span().lexeme(),));
+    fn visit_trait_decl(&mut self, decl: &TraitDecl) {
+        self.write_ln(&format!("TraitDecl(name: {})", decl.name.span().lexeme(),));
         self.indent(|visitor| {
-            requirements.iter().for_each(|p| p.accept(visitor));
+            decl.requirements.iter().for_each(|p| visitor.visit_function_decl(p));
         });
     }
 

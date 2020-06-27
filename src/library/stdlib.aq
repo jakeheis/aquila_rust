@@ -179,6 +179,11 @@ pub type Optional[T] {
     }
 }
 
-trait Indexable {
-    def at_index[T](): ptr T;
+trait Writable {
+    def write();
 }
+
+// trait Indexable {
+//     type T; 
+//     def at_index(): ptr T;
+// }

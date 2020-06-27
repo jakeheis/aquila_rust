@@ -4,13 +4,11 @@ type Adder {
     let lhs: int;
     let rhs: int;
 
-    def sum(): int {
+    def sum(hi: bool, yo: int, third: int): int {
         return self.lhs + rhs;
     }
 
 }
-
-print Adder(3, 5).sum();
 
 type Gen[U] {
 

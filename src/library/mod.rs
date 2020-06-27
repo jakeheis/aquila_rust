@@ -12,7 +12,7 @@ mod metadata;
 mod node_type;
 mod symbol_table;
 
-pub use metadata::{FunctionKind, FunctionMetadata, GenericSpecialization, TypeMetadata};
+pub use metadata::{FunctionKind, FunctionMetadata, TraitMetadata, GenericSpecialization, TypeMetadata};
 pub use node_type::{FunctionType, NodeType};
 pub use symbol_table::{Symbol, SymbolTable};
 
@@ -20,6 +20,7 @@ pub struct Lib {
     pub name: String,
     pub type_decls: Vec<TypeDecl>,
     pub function_decls: Vec<FunctionDecl>,
+    pub trait_decls: Vec<TraitDecl>,
     pub builtins: Vec<FunctionDecl>,
     pub other: Vec<Stmt>,
     pub symbols: SymbolTable,
@@ -65,12 +66,13 @@ impl Lib {
             return Err("Parsing failed");
         }
 
-        let (type_decls, function_decls, builtins, other) = Lib::organize_stms(stmts);
+        let (type_decls, function_decls, trait_decls, builtins, other) = Lib::organize_stms(stmts);
 
         let mut lib = Lib {
             name: String::from(name),
             type_decls,
             function_decls,
+            trait_decls,
             builtins,
             symbols: SymbolTable::new(),
             other,
@@ -199,11 +201,13 @@ impl Lib {
     ) -> (
         Vec<TypeDecl>,
         Vec<FunctionDecl>,
+        Vec<TraitDecl>,
         Vec<FunctionDecl>,
         Vec<Stmt>,
     ) {
         let mut type_decls: Vec<TypeDecl> = Vec::new();
         let mut function_decls: Vec<FunctionDecl> = Vec::new();
+        let mut trait_decls: Vec<TraitDecl> = Vec::new();
         let mut builtins: Vec<FunctionDecl> = Vec::new();
         let mut other: Vec<Stmt> = Vec::new();
 
@@ -219,6 +223,11 @@ impl Lib {
                         function_decls.push(decl);
                     }
                 }
+                StmtKind::TraitDecl(..) => {
+                    if let StmtKind::TraitDecl(decl) = stmt.kind {
+                        trait_decls.push(decl);
+                    }
+                }
                 StmtKind::Builtin(..) => {
                     if let StmtKind::Builtin(inner) = stmt.kind {
                         match inner.kind {
@@ -230,6 +239,6 @@ impl Lib {
                 _ => other.push(stmt),
             }
         }
-        (type_decls, function_decls, builtins, other)
+        (type_decls, function_decls, trait_decls, builtins, other)
     }
 }

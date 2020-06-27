@@ -37,11 +37,16 @@ impl ContainsSpan for VariableDecl {
     }
 }
 
+pub struct TraitDecl {
+    pub name: ResolvedToken,
+    pub requirements: Vec<FunctionDecl>
+}
+
 pub enum StmtKind {
     TypeDecl(TypeDecl),
     FunctionDecl(FunctionDecl),
     VariableDecl(VariableDecl),
-    TraitDecl(TypedToken, Vec<Stmt>),
+    TraitDecl(TraitDecl),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     WhileStmt(Expr, Vec<Stmt>),
     ForStmt(TypedToken, Expr, Vec<Stmt>),
@@ -66,9 +71,7 @@ impl Stmt {
             StmtKind::TypeDecl(decl) => visitor.visit_type_decl(decl),
             StmtKind::FunctionDecl(decl) => visitor.visit_function_decl(decl),
             StmtKind::VariableDecl(decl) => visitor.visit_variable_decl(decl),
-            StmtKind::TraitDecl(name, requirements) => {
-                visitor.visit_trait_decl(name, &requirements)
-            }
+            StmtKind::TraitDecl(decl) => visitor.visit_trait_decl(decl),
             StmtKind::IfStmt(condition, body, else_body) => {
                 visitor.visit_if_stmt(&condition, &body, &else_body)
             }
@@ -158,10 +161,14 @@ impl Stmt {
         Stmt::new(StmtKind::VariableDecl(decl), span)
     }
 
-    pub fn trait_decl(trait_span: Span, name: Token, requirements: Vec<Stmt>, end: &Span) -> Self {
+    pub fn trait_decl(trait_span: Span, name: Token, requirements: Vec<FunctionDecl>, end: &Span) -> Self {
         let span = Span::join(&trait_span, end);
+        let decl = TraitDecl {
+            name: ResolvedToken::new(name, Vec::new()),
+            requirements
+        };
         Stmt::new(
-            StmtKind::TraitDecl(TypedToken::new(name), requirements),
+            StmtKind::TraitDecl(decl),
             span,
         )
     }
@@ -237,7 +244,7 @@ pub trait StmtVisitor {
 
     fn visit_variable_decl(&mut self, decl: &VariableDecl) -> Self::StmtResult;
 
-    fn visit_trait_decl(&mut self, name: &TypedToken, requirements: &[Stmt]) -> Self::StmtResult;
+    fn visit_trait_decl(&mut self, decl: &TraitDecl) -> Self::StmtResult;
 
     fn visit_if_stmt(
         &mut self,

@@ -92,6 +92,7 @@ impl std::fmt::Display for Symbol {
 pub struct SymbolTable {
     pub type_metadata: HashMap<Symbol, TypeMetadata>,
     pub function_metadata: HashMap<Symbol, FunctionMetadata>,
+    pub trait_metadata: HashMap<Symbol, TraitMetadata>,
     pub span_map: HashMap<Symbol, Span>,
 }
 
@@ -100,6 +101,7 @@ impl SymbolTable {
         SymbolTable {
             type_metadata: HashMap::new(),
             function_metadata: HashMap::new(),
+            trait_metadata: HashMap::new(),
             span_map: HashMap::new(),
         }
     }
@@ -127,6 +129,10 @@ impl SymbolTable {
     pub fn get_func_metadata_mut(&mut self, symbol: &Symbol) -> Option<&mut FunctionMetadata> {
         self.function_metadata.get_mut(symbol)
     }
+
+    pub fn insert_trait_metadata(&mut self, symbol: Symbol, metadata: TraitMetadata) {
+        self.trait_metadata.insert(symbol, metadata);
+    }
 }
 
 impl std::fmt::Display for SymbolTable {
@@ -138,6 +144,10 @@ impl std::fmt::Display for SymbolTable {
         }
         writeln!(f, "Function metadata:")?;
         for (_, meta) in self.function_metadata.iter() {
+            writeln!(f, "{}", meta)?;
+        }
+        writeln!(f, "Trait metadata:")?;
+        for (_, meta) in self.trait_metadata.iter() {
             writeln!(f, "{}", meta)?;
         }
         Ok(())

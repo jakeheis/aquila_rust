@@ -1,5 +1,6 @@
 use super::{FunctionType, Lib, NodeType, Symbol};
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 
 #[derive(Clone, Debug)]
 pub struct TypeMetadata {
@@ -224,8 +225,8 @@ impl FunctionMetadata {
     }
 }
 
-impl std::fmt::Display for FunctionMetadata {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for FunctionMetadata {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let line = match &self.kind {
             FunctionKind::TopLevel => format!("Function({}", self.symbol.mangled()),
             FunctionKind::Method(owner) => format!(
@@ -274,6 +275,22 @@ impl std::fmt::Display for FunctionMetadata {
             }
         }
 
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TraitMetadata {
+    pub symbol: Symbol,
+    pub function_requirements: Vec<Symbol>,
+}
+
+impl fmt::Display for TraitMetadata {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "Trait({})", self.symbol.mangled())?;
+        for req in &self.function_requirements {
+            writeln!(f, "  {}", req.mangled())?;
+        }
         Ok(())
     }
 }

@@ -369,7 +369,11 @@ impl Parser {
                     "Traits can only require functions",
                 ));
             };
-            requirements.push(self.function_decl(meta, false)?);
+            if let StmtKind::FunctionDecl(decl) = self.function_decl(meta, false)?.kind {
+                requirements.push(decl);
+            } else {
+                unreachable!()
+            }
         }
 
         let brace = self.consume(TokenKind::RightBrace, "Expect '}' after trait body")?;

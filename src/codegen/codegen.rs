@@ -303,7 +303,7 @@ impl StmtVisitor for Codegen {
             .decl_var(&var_type, &var_symbol.mangled(), value);
     }
 
-    fn visit_trait_decl(&mut self, _name: &TypedToken, _requirements: &[Stmt]) {
+    fn visit_trait_decl(&mut self, _decl: &TraitDecl) {
         // TODO
     }
 

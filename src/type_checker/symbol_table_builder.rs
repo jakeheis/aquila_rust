@@ -31,6 +31,10 @@ impl SymbolTableBuilder {
         builder.build_type_internals(&lib.type_decls);
         builder.build_functions(&lib.function_decls);
 
+        for decl in &lib.trait_decls {
+            builder.build_trait(decl);
+        }
+
         builder.is_builtin = true;
         builder.build_functions(&lib.builtins);
 
@@ -206,6 +210,16 @@ impl SymbolTableBuilder {
         trace!(target: "symbol_table", "Finished building function {} -- {}", decl.name.token.lexeme(), new_type);
 
         function_symbol
+    }
+
+    fn build_trait(&mut self, decl: &TraitDecl) {
+        let trait_symbol = Symbol::new(self.current_symbol(), &decl.name.token);
+        let requirements = self.build_functions(&decl.requirements);
+        let metadata = TraitMetadata {
+            symbol: trait_symbol.clone(),
+            function_requirements: requirements
+        };
+        self.symbols.insert_trait_metadata(trait_symbol, metadata);
     }
 
     fn current_symbol(&self) -> &Symbol {

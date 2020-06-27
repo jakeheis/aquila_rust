@@ -223,7 +223,7 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
-    fn visit_trait_decl(&mut self, _name: &TypedToken, _requirements: &[Stmt]) -> Analysis {
+    fn visit_trait_decl(&mut self, _decl: &TraitDecl) -> Analysis {
         Analysis {
             guarantees_return: false,
         }
