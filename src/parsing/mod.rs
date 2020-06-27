@@ -4,7 +4,7 @@ mod expr;
 mod parser;
 
 pub use ast::{
-    ExplicitType, ExplicitTypeKind, FunctionDecl, TraitDecl, ResolvedToken, Stmt, StmtKind, StmtVisitor,
+    ExplicitType, ExplicitTypeKind, FunctionDecl, ConformanceDecl, TraitDecl, ResolvedToken, Stmt, StmtKind, StmtVisitor,
     TypeDecl, TypedToken, VariableDecl,
 };
 pub use ast_printer::ASTPrinter;

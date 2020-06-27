@@ -307,6 +307,10 @@ impl StmtVisitor for Codegen {
         // TODO
     }
 
+    fn visit_conformance_decl(&mut self, _decl: &ConformanceDecl)  {
+
+    }
+
     fn visit_if_stmt(
         &mut self,
         condition: &Expr,

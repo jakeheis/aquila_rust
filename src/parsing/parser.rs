@@ -128,6 +128,15 @@ impl Parser {
                     "Trait declaration not allowed",
                 ))
             }
+        } else if self.matches(TokenKind::Impl) {
+            if context == Context::TopLevel {
+                self.trait_conformance()
+            } else {
+                Err(Diagnostic::error(
+                    self.previous(),
+                    "Trait conformance not allowed",
+                ))
+            }
         } else if self.matches(TokenKind::If) {
             if context == Context::TopLevel || context == Context::InsideFunction {
                 self.if_stmt()
@@ -384,6 +393,38 @@ impl Parser {
             requirements,
             &brace.span,
         ))
+    }
+
+    fn trait_conformance(&mut self) -> Result<Stmt> {
+        let impl_span = self.previous().span().clone();
+        let target = self.consume(TokenKind::Identifier, "Expect type name")?.clone();
+        self.consume(TokenKind::Colon, "Expect ':' after type name")?;
+        let trait_name = self.consume(TokenKind::Identifier, "Expect trait name")?.clone();
+
+        self.consume(TokenKind::LeftBrace, "Expect '{' after trait name")?;
+
+        let mut impls = Vec::new();
+        while !self.is_at_end() && self.peek() != TokenKind::RightBrace {
+            let meta = if self.matches(TokenKind::Meta) {
+                true
+            } else if self.matches(TokenKind::Def) {
+                false
+            } else {
+                return Err(Diagnostic::error(
+                    self.current(),
+                    "Trait conformances can only implement functions",
+                ));
+            };
+            if let StmtKind::FunctionDecl(decl) = self.function_decl(meta, true)?.kind {
+                impls.push(decl);
+            } else {
+                unreachable!()
+            }
+        }
+
+        let brace = self.consume(TokenKind::RightBrace, "Expect '}' after impl body")?;
+
+        Ok(Stmt::conformance_decl(impl_span, target, trait_name, impls, brace.span()))
     }
 
     fn if_stmt(&mut self) -> Result<Stmt> {

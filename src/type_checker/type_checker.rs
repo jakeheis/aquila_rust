@@ -228,6 +228,12 @@ impl StmtVisitor for TypeChecker {
             guarantees_return: false,
         }
     }
+    
+    fn visit_conformance_decl(&mut self, _decl: &ConformanceDecl) -> Analysis {
+        Analysis {
+            guarantees_return: false,
+        }
+    }
 
     fn visit_if_stmt(&mut self, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) -> Analysis {
         if let Some(cond_type) = self.check_expr(condition) {

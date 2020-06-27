@@ -199,6 +199,13 @@ impl StmtVisitor for ASTPrinter {
         });
     }
 
+    fn visit_conformance_decl(&mut self, decl: &ConformanceDecl) {
+        self.write_ln(&format!("Conformance(name: {}, trait: {})", decl.target.span().lexeme(), decl.trait_name.span().lexeme()));
+        self.indent(|visitor| {
+            decl.implementations.iter().for_each(|p| visitor.visit_function_decl(p));
+        });
+    }
+
     fn visit_if_stmt(&mut self, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) {
         self.write_ln("If");
         self.indent(|visitor| {

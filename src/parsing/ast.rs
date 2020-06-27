@@ -42,11 +42,18 @@ pub struct TraitDecl {
     pub requirements: Vec<FunctionDecl>
 }
 
+pub struct ConformanceDecl {
+    pub target: ResolvedToken,
+    pub trait_name: ResolvedToken,
+    pub implementations: Vec<FunctionDecl>
+}
+
 pub enum StmtKind {
     TypeDecl(TypeDecl),
     FunctionDecl(FunctionDecl),
     VariableDecl(VariableDecl),
     TraitDecl(TraitDecl),
+    ConformanceDecl(ConformanceDecl),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     WhileStmt(Expr, Vec<Stmt>),
     ForStmt(TypedToken, Expr, Vec<Stmt>),
@@ -72,6 +79,7 @@ impl Stmt {
             StmtKind::FunctionDecl(decl) => visitor.visit_function_decl(decl),
             StmtKind::VariableDecl(decl) => visitor.visit_variable_decl(decl),
             StmtKind::TraitDecl(decl) => visitor.visit_trait_decl(decl),
+            StmtKind::ConformanceDecl(decl) => visitor.visit_conformance_decl(decl),
             StmtKind::IfStmt(condition, body, else_body) => {
                 visitor.visit_if_stmt(&condition, &body, &else_body)
             }
@@ -173,6 +181,16 @@ impl Stmt {
         )
     }
 
+    pub fn conformance_decl(impl_span: Span, target: Token, trait_name: Token, impls: Vec<FunctionDecl>, end: &Span) -> Self {
+        let span = Span::join(&impl_span, end);
+        let decl = ConformanceDecl {
+            target: ResolvedToken::new_non_specialized(target),
+            trait_name: ResolvedToken::new_non_specialized(trait_name),
+            implementations: impls,
+        };
+        Stmt::new(StmtKind::ConformanceDecl(decl), span)
+    }
+
     pub fn if_stmt(
         if_span: Span,
         condition: Expr,
@@ -245,6 +263,8 @@ pub trait StmtVisitor {
     fn visit_variable_decl(&mut self, decl: &VariableDecl) -> Self::StmtResult;
 
     fn visit_trait_decl(&mut self, decl: &TraitDecl) -> Self::StmtResult;
+
+    fn visit_conformance_decl(&mut self, decl: &ConformanceDecl) -> Self::StmtResult;
 
     fn visit_if_stmt(
         &mut self,

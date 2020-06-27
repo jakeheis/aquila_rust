@@ -183,6 +183,12 @@ trait Writable {
     def write();
 }
 
+impl String: Writable {
+    def write() {
+        print storage;
+    }
+}
+
 // trait Indexable {
 //     type T; 
 //     def at_index(): ptr T;
