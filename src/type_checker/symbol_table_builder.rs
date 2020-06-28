@@ -35,6 +35,10 @@ impl SymbolTableBuilder {
             builder.build_trait(decl);
         }
 
+        for decl in &lib.conformance_decls {
+            builder.build_conformance(decl);
+        }
+
         builder.is_builtin = true;
         builder.build_functions(&lib.builtins);
 
@@ -220,6 +224,13 @@ impl SymbolTableBuilder {
             function_requirements: requirements
         };
         self.symbols.insert_trait_metadata(trait_symbol, metadata);
+    }
+
+    fn build_conformance(&mut self, decl: &ConformanceDecl) {
+        let type_symbol = Symbol::new(self.current_symbol(), &decl.target.token);
+        self.context.push(type_symbol);
+        self.build_functions(&decl.implementations);
+        self.context.pop();
     }
 
     fn current_symbol(&self) -> &Symbol {

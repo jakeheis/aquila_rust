@@ -133,6 +133,10 @@ impl SymbolTable {
     pub fn insert_trait_metadata(&mut self, symbol: Symbol, metadata: TraitMetadata) {
         self.trait_metadata.insert(symbol, metadata);
     }
+
+    pub fn get_trait_metadata(&self, symbol: &Symbol) -> Option<&TraitMetadata> {
+        self.trait_metadata.get(symbol)
+    }
 }
 
 impl std::fmt::Display for SymbolTable {

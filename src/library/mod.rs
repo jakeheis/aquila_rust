@@ -21,6 +21,7 @@ pub struct Lib {
     pub type_decls: Vec<TypeDecl>,
     pub function_decls: Vec<FunctionDecl>,
     pub trait_decls: Vec<TraitDecl>,
+    pub conformance_decls: Vec<ConformanceDecl>,
     pub builtins: Vec<FunctionDecl>,
     pub other: Vec<Stmt>,
     pub symbols: SymbolTable,
@@ -37,7 +38,7 @@ impl Lib {
     pub fn stdlib(reporter: Rc<dyn Reporter>) -> Lib {
         let src =
             source::file("/Users/jakeheiser/Desktop/Projects/Rust/aquila/src/library/stdlib.aq");
-        let lib = Lib::build_lib(src, "stdlib", false, reporter).unwrap();
+        let lib = Lib::build_lib(src, "stdlib", false, reporter).expect("Standard library build should succeed");
         core::add_builtin_symbols(&lib);
         lib
     }
@@ -66,13 +67,14 @@ impl Lib {
             return Err("Parsing failed");
         }
 
-        let (type_decls, function_decls, trait_decls, builtins, other) = Lib::organize_stms(stmts);
+        let (type_decls, function_decls, trait_decls, conformance_decls, builtins, other) = Lib::organize_stms(stmts);
 
         let mut lib = Lib {
             name: String::from(name),
             type_decls,
             function_decls,
             trait_decls,
+            conformance_decls,
             builtins,
             symbols: SymbolTable::new(),
             other,
@@ -123,6 +125,19 @@ impl Lib {
         } else {
             for dep in &self.dependencies {
                 if let Some(found) = dep.type_metadata(symbol) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+    }
+
+    pub fn type_metadata_ref(&self, symbol: &Symbol) -> Option<&TypeMetadata> {
+        if let Some(found) = self.symbols.get_type_metadata(symbol) {
+            Some(found)
+        } else {
+            for dep in &self.dependencies {
+                if let Some(found) = dep.type_metadata_ref(symbol) {
                     return Some(found);
                 }
             }
@@ -183,6 +198,33 @@ impl Lib {
         }
     }
 
+    pub fn trait_metadata(&self, name: &str) -> Option<TraitMetadata> {
+        let my_symbol = Symbol::new_str(&Symbol::lib_root(self), name);
+        if let Some(found) = self.symbols.get_trait_metadata(&my_symbol) {
+            Some(found.clone())
+        } else {
+            for dep in &self.dependencies {
+                if let Some(found) = dep.trait_metadata(name) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+    }
+
+    pub fn trait_metadata_symbol(&self, name: &Symbol) -> Option<TraitMetadata> {
+        if let Some(found) = self.symbols.get_trait_metadata(name) {
+            Some(found.clone())
+        } else {
+            for dep in &self.dependencies {
+                if let Some(found) = dep.trait_metadata_symbol(name) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+    }
+
     pub fn symbol_span(&self, symbol: &Symbol) -> Option<Span> {
         if let Some(found) = self.symbols.span_map.get(symbol) {
             Some(found.clone())
@@ -202,12 +244,14 @@ impl Lib {
         Vec<TypeDecl>,
         Vec<FunctionDecl>,
         Vec<TraitDecl>,
+        Vec<ConformanceDecl>,
         Vec<FunctionDecl>,
         Vec<Stmt>,
     ) {
         let mut type_decls: Vec<TypeDecl> = Vec::new();
         let mut function_decls: Vec<FunctionDecl> = Vec::new();
         let mut trait_decls: Vec<TraitDecl> = Vec::new();
+        let mut conformance_decls: Vec<ConformanceDecl> = Vec::new();
         let mut builtins: Vec<FunctionDecl> = Vec::new();
         let mut other: Vec<Stmt> = Vec::new();
 
@@ -228,6 +272,11 @@ impl Lib {
                         trait_decls.push(decl);
                     }
                 }
+                StmtKind::ConformanceDecl(..) => {
+                    if let StmtKind::ConformanceDecl(decl) = stmt.kind {
+                        conformance_decls.push(decl);
+                    }
+                }
                 StmtKind::Builtin(..) => {
                     if let StmtKind::Builtin(inner) = stmt.kind {
                         match inner.kind {
@@ -239,6 +288,6 @@ impl Lib {
                 _ => other.push(stmt),
             }
         }
-        (type_decls, function_decls, trait_decls, builtins, other)
+        (type_decls, function_decls, trait_decls, conformance_decls, builtins, other)
     }
 }

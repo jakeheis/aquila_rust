@@ -77,6 +77,7 @@ pub enum ScopeType {
     TopLevel,
     InsideType(TypeMetadata),
     InsideMetatype(TypeMetadata),
+    InsideTraitImpl(TypeMetadata, TraitMetadata),
     InsideFunction(FunctionMetadata),
 }
 
@@ -135,10 +136,20 @@ impl ContextTracker {
 
     fn push_function_scope(&mut self, name: &ResolvedToken) -> (Symbol, FunctionMetadata) {
         let symbol = Symbol::new(self.current_symbol(), &name.token);
+        // println!("getting metadatat for {}", symbo)
         let metadata = self.lib.function_metadata(&symbol).unwrap();
         self.push_scope(symbol.clone(), ScopeType::InsideFunction(metadata.clone()));
         (symbol, metadata)
     }
+
+    // fn push_trait_impl_scope(&mut self, type_name: &ResolvedToken, trait_name: &Symbol) -> Symbol {
+    //     let type_symbol = Symbol::new(self.current_symbol(), &type_name.token);
+    //     let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
+    //     let trait_metadata = self.lib.trait_metadata_symbol(trait_name).unwrap();
+
+    //     self.push_scope(type_symbol.clone(), ScopeType::InsideTraitImpl(type_metadata, trait_metadata));
+    //     type_symbol
+    // }
 
     fn push_scope(&mut self, id: Symbol, scope_type: ScopeType) {
         trace!(target: "type_checker", "Pushing scope -- {}", id);
@@ -171,9 +182,10 @@ impl ContextTracker {
 
     pub fn enclosing_type(&self) -> Option<&TypeMetadata> {
         match &self.current_scope_immut().scope_type {
-            ScopeType::InsideType(t) => Some(t),
+            ScopeType::InsideType(t) | ScopeType::InsideTraitImpl(t, _) => Some(t),
             ScopeType::InsideFunction(_) if self.scopes.len() > 1 => {
-                if let ScopeType::InsideType(t) = &self.scopes[self.scopes.len() - 2].scope_type {
+                let grandparent = &self.scopes[self.scopes.len() - 2].scope_type;
+                if let ScopeType::InsideType(t) | ScopeType::InsideTraitImpl(t, _) = grandparent {
                     Some(t)
                 } else {
                     None
@@ -186,6 +198,14 @@ impl ContextTracker {
     pub fn enclosing_function(&self) -> Option<&FunctionMetadata> {
         if let ScopeType::InsideFunction(f) = &self.current_scope_immut().scope_type {
             Some(f)
+        } else {
+            None
+        }
+    }
+
+    pub fn enclosing_trait_impl(&self) -> Option<&TraitMetadata> {
+        if let ScopeType::InsideTraitImpl(_, trait_met) = &self.current_scope_immut().scope_type {
+            Some(trait_met)
         } else {
             None
         }

@@ -1,6 +1,7 @@
 use super::{FunctionType, Lib, NodeType, Symbol};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::cell::RefCell;
 
 #[derive(Clone, Debug)]
 pub struct TypeMetadata {
@@ -11,6 +12,7 @@ pub struct TypeMetadata {
     pub field_visibilities: Vec<bool>,
     pub methods: Vec<Symbol>,
     pub meta_methods: Vec<Symbol>,
+    pub trait_impls: RefCell<Vec<Symbol>>,
     pub specializations: HashSet<GenericSpecialization>,
     pub is_public: bool,
 }
@@ -25,6 +27,7 @@ impl TypeMetadata {
             field_visibilities: Vec::new(),
             methods: Vec::new(),
             meta_methods: Vec::new(),
+            trait_impls: RefCell::new(Vec::new()),
             specializations: HashSet::new(),
             is_public: is_public,
         }
@@ -39,6 +42,7 @@ impl TypeMetadata {
             field_visibilities: Vec::new(),
             methods: Vec::new(),
             meta_methods: Vec::new(),
+            trait_impls: RefCell::new(Vec::new()),
             specializations: HashSet::new(),
             is_public: false,
         }
@@ -96,6 +100,10 @@ impl TypeMetadata {
         }
     }
 
+    pub fn add_trait_impl(&self, trait_symbol: &Symbol) {
+        self.trait_impls.borrow_mut().push(trait_symbol.clone());
+    }
+
     pub fn dummy_specialization(&self) -> GenericSpecialization {
         let dummy_generics = self
             .generics
@@ -143,7 +151,15 @@ impl std::fmt::Display for TypeMetadata {
             .map(|m| m.mangled())
             .collect::<Vec<_>>()
             .join(",");
-        write!(f, "  meta methods: {}", meta_methods)?;
+        writeln!(f, "  meta methods: {}", meta_methods)?;
+        let trait_impls = self
+        .trait_impls
+        .borrow()
+        .iter()
+        .map(|t| t.mangled())
+        .collect::<Vec<_>>()
+        .join(",");
+        write!(f, "  trait impls: {}", trait_impls)?;
 
         if !self.specializations.is_empty() {
             for spec in &self.specializations {

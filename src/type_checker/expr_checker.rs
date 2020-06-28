@@ -327,8 +327,7 @@ impl ExprVisitor for ExprChecker {
         let node_type = match token.kind {
             TokenKind::Int => NodeType::Int,
             TokenKind::Double => NodeType::Double,
-            TokenKind::True => NodeType::Bool,
-            TokenKind::False => NodeType::Bool,
+            TokenKind::True | TokenKind::False => NodeType::Bool,
             TokenKind::StringLiteral => NodeType::pointer_to(NodeType::Byte),
             _ => panic!(),
         };
