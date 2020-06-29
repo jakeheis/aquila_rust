@@ -5,6 +5,7 @@ use log::trace;
 
 enum ASTPrinterMode {
     Trace,
+    Stdout,
     Collect(Vec<String>),
 }
 
@@ -14,10 +15,17 @@ pub struct ASTPrinter {
 }
 
 impl ASTPrinter {
-    pub fn new() -> ASTPrinter {
+    pub fn trace() -> ASTPrinter {
         ASTPrinter {
             indent: 0,
             mode: ASTPrinterMode::Trace,
+        }
+    }
+
+    pub fn stdout() -> ASTPrinter {
+        ASTPrinter {
+            indent: 0,
+            mode: ASTPrinterMode::Stdout,
         }
     }
 
@@ -50,6 +58,7 @@ impl ASTPrinter {
 
         match &mut self.mode {
             ASTPrinterMode::Trace => trace!(target: "parser", "{}", line),
+            ASTPrinterMode::Stdout => println!("{}", line),
             ASTPrinterMode::Collect(collection) => collection.push(line),
         }
     }

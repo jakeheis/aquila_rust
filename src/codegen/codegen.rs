@@ -92,6 +92,14 @@ impl Codegen {
         codegen.write_chunk(lib, &mut |codegen, lib| {
             codegen.gen_type_decls(&lib.type_decls);
             codegen.gen_function_decls(&lib.function_decls);
+
+            for conf in &lib.conformance_decls {
+                let type_metadata = lib.type_metadata(&conf.target.get_symbol().unwrap()).unwrap();
+                codegen.current_type = Some(type_metadata);
+                codegen.gen_function_decls(&conf.implementations);
+                codegen.current_type = None;
+            }
+
             codegen.is_builtin = true;
             codegen.gen_function_decls(&lib.builtins);
             codegen.is_builtin = false;
@@ -101,6 +109,14 @@ impl Codegen {
         codegen.write_chunk(lib, &mut |codegen, lib| {
             codegen.gen_type_decls(&lib.type_decls);
             codegen.gen_function_decls(&lib.function_decls);
+
+            for conf in &lib.conformance_decls {
+                let type_metadata = lib.type_metadata(&conf.target.get_symbol().unwrap()).unwrap();
+                codegen.current_type = Some(type_metadata);
+                codegen.gen_function_decls(&conf.implementations);
+                codegen.current_type = None;
+            }
+
             codegen.is_builtin = true;
             codegen.gen_function_decls(&lib.builtins);
             codegen.is_builtin = false;

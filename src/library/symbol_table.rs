@@ -39,6 +39,13 @@ impl Symbol {
         Symbol::new_str(&Symbol::lib_root(lib), "main")
     }
 
+    pub fn writable_symbol() -> Self {
+        // Temporarily hard coded
+        Symbol {
+            id: String::from("stdlib$Writable")
+        }
+    }
+
     pub fn mangled(&self) -> String {
         self.id.replace("$", "__")
     }

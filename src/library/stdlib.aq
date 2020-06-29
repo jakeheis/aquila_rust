@@ -185,7 +185,7 @@ trait Writable {
 
 impl String: Writable {
     def write() {
-        
+        print storage;
     }
 }
 

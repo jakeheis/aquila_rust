@@ -4,6 +4,7 @@ use crate::lexing::Token;
 use crate::library::NodeType;
 use std::cell::RefCell;
 
+#[derive(Debug)]
 pub enum ExprKind {
     Assignment(Box<Expr>, Box<Expr>),
     Binary(Box<Expr>, Token, Box<Expr>),
@@ -17,6 +18,7 @@ pub enum ExprKind {
     Cast(Box<ExplicitType>, Box<Expr>),
 }
 
+#[derive(Debug)]
 pub struct Expr {
     pub kind: ExprKind,
     pub span: Span,

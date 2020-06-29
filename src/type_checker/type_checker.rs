@@ -253,6 +253,9 @@ impl StmtVisitor for TypeChecker {
                 };
             }
         };
+
+        decl.target.set_symbol(type_symbol.clone());
+
         let trait_metadata = self.lib.trait_metadata(decl.trait_name.token.lexeme());
         if trait_metadata.is_none() {
             self.report_error(Diagnostic::error(&decl.trait_name, "Trait not found"));
@@ -403,6 +406,13 @@ impl StmtVisitor for TypeChecker {
                     }
                     node_type if node_type.is_pointer_to(NodeType::Byte) => {
                         let _ = expr.set_type(node_type);
+                    }
+                    NodeType::Instance(sym, _) => {
+                        let metadata = self.lib.type_metadata(&sym).unwrap();
+                        if !metadata.conforms_to(&Symbol::writable_symbol()) {
+                            let message = format!("Can't print object of type {}", sym.mangled());
+                            self.report_error(Diagnostic::error(expr, &message));
+                        }
                     }
                     _ => {
                         let message = format!("Can't print object of type {}", node_type);

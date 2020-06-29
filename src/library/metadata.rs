@@ -104,6 +104,10 @@ impl TypeMetadata {
         self.trait_impls.borrow_mut().push(trait_symbol.clone());
     }
 
+    pub fn conforms_to(&self, trait_symbol: &Symbol) -> bool {
+        self.trait_impls.borrow().contains(trait_symbol)
+    }
+
     pub fn dummy_specialization(&self) -> GenericSpecialization {
         let dummy_generics = self
             .generics

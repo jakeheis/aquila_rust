@@ -4,6 +4,7 @@ use crate::library::*;
 use crate::source::*;
 use std::cell::RefCell;
 
+#[derive(Debug)]
 pub struct TypeDecl {
     pub name: ResolvedToken,
     pub generics: Vec<ResolvedToken>,
@@ -13,6 +14,7 @@ pub struct TypeDecl {
     pub is_public: bool,
 }
 
+#[derive(Debug)]
 pub struct FunctionDecl {
     pub name: ResolvedToken,
     pub generics: Vec<ResolvedToken>,
@@ -23,6 +25,7 @@ pub struct FunctionDecl {
     pub is_public: bool,
 }
 
+#[derive(Debug)]
 pub struct VariableDecl {
     pub name: TypedToken,
     pub explicit_type: Option<ExplicitType>,
@@ -37,17 +40,20 @@ impl ContainsSpan for VariableDecl {
     }
 }
 
+#[derive(Debug)]
 pub struct TraitDecl {
     pub name: ResolvedToken,
     pub requirements: Vec<FunctionDecl>
 }
 
+#[derive(Debug)]
 pub struct ConformanceDecl {
     pub target: ResolvedToken,
     pub trait_name: ResolvedToken,
     pub implementations: Vec<FunctionDecl>
 }
 
+#[derive(Debug)]
 pub enum StmtKind {
     TypeDecl(TypeDecl),
     FunctionDecl(FunctionDecl),
@@ -63,6 +69,7 @@ pub enum StmtKind {
     Builtin(Box<Stmt>),
 }
 
+#[derive(Debug)]
 pub struct Stmt {
     pub kind: StmtKind,
     pub span: Span,
@@ -293,6 +300,7 @@ pub trait StmtVisitor {
 
 // Tokens
 
+#[derive(Debug)]
 pub struct TypedToken {
     pub token: Token,
     symbol: RefCell<Option<Symbol>>,

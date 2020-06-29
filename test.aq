@@ -14,7 +14,12 @@ type Gen[U] {
 
 }
 
+
+
 let a: Gen[int];
+
+let str = String.from("hello");
+print str;
 
 let vec = Vec[int].new();
 vec.insert(4);

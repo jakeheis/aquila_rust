@@ -61,7 +61,7 @@ impl Lib {
         let parser = Parser::new(tokens, Rc::clone(&reporter));
         let stmts = parser.parse();
         
-        ASTPrinter::new().print(&stmts);
+        ASTPrinter::trace().print(&stmts);
 
         if reporter.has_errored() {
             return Err("Parsing failed");
@@ -100,6 +100,8 @@ impl Lib {
         if reporter.has_errored() {
             return Err("Cycle checker failed");
         }
+
+        let lib = Rewriter::rewrite(lib);
 
         Ok(lib)
     }
