@@ -568,10 +568,13 @@ impl ExprVisitor for IRGen {
     fn visit_cast_expr(
         &mut self,
         expr: &Expr,
-        explicit_type: &ExplicitType,
+        _explicit_type: &ExplicitType,
         value: &Expr,
     ) -> Self::ExprResult {
-        unimplemented!()
+        IRExpr {
+            kind: IRExprKind::Cast(Box::new(value.accept(self))),
+            expr_type: expr.get_type().unwrap(),
+        }
     }
 }
 
@@ -696,15 +699,11 @@ impl IRWriter {
     }
 
     pub fn assign_field(&mut self, var: IRExpr, field: &str, value: IRExpr) {
-
-    }
-
-    pub fn call(&mut self, symbol: Symbol, arguments: Vec<Symbol>) {
-        // self.add_stmt(IRStatement::)
+        self.add_stmt(IRStatement::AssignField(var, String::from(field), value));
     }
 
     pub fn return_value(&mut self, expr: Option<IRExpr>) {
-
+        self.add_stmt(IRStatement::Return(expr));
     }
 
     pub fn expr(&mut self, expr: IRExpr) {
@@ -712,7 +711,7 @@ impl IRWriter {
     }
 
     pub fn break_loop(&mut self) {
-        // self.body().statements.push(Stmt)
+        self.add_stmt(IRStatement::Break);
     }
 
     pub fn add_stmt(&mut self, stmt: IRStatement) {

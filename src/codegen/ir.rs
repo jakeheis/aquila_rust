@@ -43,7 +43,7 @@ pub enum IRStatement {
     Loop(Vec<IRStatement>),
     Condition(IRExpr, Vec<IRStatement>, Vec<IRStatement>),
     Execute(IRExpr),
-    Return(IRExpr),
+    Return(Option<IRExpr>),
     Break,
 }
 
@@ -64,4 +64,5 @@ pub enum IRExprKind {
     Literal(String),
     Variable(String),
     ExplicitType,
+    Cast(Box<IRExpr>)
 }

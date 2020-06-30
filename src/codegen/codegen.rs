@@ -10,6 +10,7 @@ use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
 use super::irgen::IRGen;
+use super::codewriter::CodeWriter;
 
 #[derive(PartialEq)]
 enum CodegenStage {
@@ -36,7 +37,11 @@ impl Codegen {
         let lib = Rc::new(lib);
         let ir_gen = IRGen::new(lib);
         let ir = ir_gen.generate();
-        println!("{:#?}", ir);
+
+        fs::create_dir_all("build").unwrap();
+        let file = File::create("build/main.c").unwrap();
+        let code_writer = CodeWriter::new(ir, file);
+        code_writer.write();
 
         return Ok(());
 
