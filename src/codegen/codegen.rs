@@ -9,6 +9,7 @@ use log::trace;
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
+use super::irgen::IRGen;
 
 #[derive(PartialEq)]
 enum CodegenStage {
@@ -25,13 +26,21 @@ pub struct Codegen {
     stage: CodegenStage,
     is_builtin: bool,
     temp_count: u32,
-    type_specialization: Option<GenericSpecialization>,
     func_specialization: Option<GenericSpecialization>,
 }
 
 impl Codegen {
-    pub fn generate(lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {
-        Codegen::write(lib);
+    pub fn generate(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {
+        SpecializationPropagator::propogate(&mut lib);
+
+        let lib = Rc::new(lib);
+        let ir_gen = IRGen::new(lib);
+        let ir = ir_gen.generate();
+        println!("{:#?}", ir);
+
+        return Ok(());
+
+        // Codegen::write(lib);
 
         let status = Command::new("/usr/local/opt/llvm/bin/clang")
             .args(&[
@@ -72,7 +81,6 @@ impl Codegen {
             stage: CodegenStage::ForwardStructDecls,
             is_builtin: false,
             temp_count: 0,
-            type_specialization: None,
             func_specialization: None,
         };
 
@@ -171,7 +179,6 @@ impl Codegen {
     fn specialize_type(&self, node_type: &NodeType) -> NodeType {
         node_type
             .specialize_opt(self.lib.as_ref(), self.func_specialization.as_ref())
-            .specialize_opt(self.lib.as_ref(), self.type_specialization.as_ref())
     }
 
     fn write_temp(&mut self, temp_type: &NodeType, value: String) -> String {
@@ -209,7 +216,7 @@ impl Codegen {
             self.writer
                 .start_decl_func(self.lib.as_ref(), &func_metadata, specialization);
             if self.is_builtin {
-                core::write(&func_symbol, &mut self.writer);
+                // core::write(&func_symbol, &mut self.writer);
             } else {
                 self.gen_stmts(body);
             }

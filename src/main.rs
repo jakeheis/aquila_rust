@@ -10,6 +10,7 @@ fn main() -> Result<(), &'static str> {
     } else {
         "/Users/jakeheiser/Desktop/Projects/Rust/aquila/test.aq"
     };
+    let link_stdlib = args.len() <= 2;
     let source = aquila::file(file_name);
-    aquila::run(source)
+    aquila::run(source, link_stdlib)
 }

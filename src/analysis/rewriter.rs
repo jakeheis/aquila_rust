@@ -56,9 +56,8 @@ impl Rewriter {
     }
 
     fn fake_identifier(&self, lexeme: &str) -> ResolvedToken {
-        let length = lexeme.chars().count();
         let source = source::text(lexeme);
-        let span = Span::new(&source, 0, length, 1);
+        let span = Span::new(&source, 0, source.length(), 1);
         let token = Token::new(TokenKind::Identifier, span);
         ResolvedToken::new_non_specialized(token)
     }

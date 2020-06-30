@@ -1,5 +1,6 @@
-use super::c_writer::CWriter;
 use crate::library::*;
+use super::irgen::IRWriter;
+use super::ir::*;
 
 pub fn is_direct_c_binding(symbol: &Symbol) -> bool {
     if symbol.lib_component() != "stdlib" {
@@ -11,7 +12,7 @@ pub fn is_direct_c_binding(symbol: &Symbol) -> bool {
     }
 }
 
-pub fn write(symbol: &Symbol, writer: &mut CWriter) {
+pub fn write(symbol: &Symbol, writer: &mut IRWriter) {
     match symbol.last_component() {
         "ptr_offset" => write_ptr_offset(writer),
         "_read_line" => write_read_line(writer),
@@ -33,18 +34,29 @@ pub fn add_builtin_symbols(_lib: &Lib) {
 //     false
 // }
 
-fn write_ptr_offset(writer: &mut CWriter) {
-    let line = String::from("(char*)stdlib__ptr_offset__pointer + stdlib__ptr_offset__distance");
-    writer.write_return(Some(line));
+fn write_ptr_offset(writer: &mut IRWriter) {
+    // let line = String::from("(char*)stdlib__ptr_offset__pointer + stdlib__ptr_offset__distance");
+    // writer.write_return(Some(line));
 }
 
-fn write_read_line(writer: &mut CWriter) {
-    writer.decl_var(
-        &NodeType::pointer_to(NodeType::Byte),
-        "line",
-        Some(String::from("NULL")),
-    );
-    writer.decl_var(&NodeType::Int, "size", None);
-    writer.writeln("getline(&line, &size, stdin);");
-    writer.write_return(Some(String::from("line")));
+fn write_read_line(writer: &mut IRWriter) {
+    // writer.add_stmt(IRStatement::DeclLocal(IRVariable {
+    //     name: String::from("line"),
+    //     var_type: NodeType::pointer_to(NodeType::Byte)
+    // }));
+    // writer.assign("line", IRExpr::Literal(String::from("NULL")));
+    
+    // writer.add_stmt(IRStatement::DeclLocal(IRVariable {
+    //     name: String::from("size"),
+    //     var_type: NodeType::Int
+    // }));
+
+    // let expr = IRExpr::Call(
+    //     String::from("getline"), 
+    //     vec![]
+    // )
+
+    // writer.add_stmt(IRStatement::Execute
+    // writer.writeln("getline(&line, &size, stdin);");
+    // writer.write_return(Some(String::from("line")));
 }

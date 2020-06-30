@@ -87,6 +87,10 @@ impl Symbol {
     pub fn is_main(&self) -> bool {
         self.last_component() == "main"
     }
+
+    pub fn is_init(&self) -> bool {
+        self.last_component() == "init"
+    }
 }
 
 impl std::fmt::Display for Symbol {

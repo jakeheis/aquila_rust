@@ -30,9 +30,9 @@ pub struct Lib {
 }
 
 impl Lib {
-    pub fn from_source(source: Source, reporter: Rc<dyn Reporter>) -> Result<Lib, &'static str> {
+    pub fn from_source(source: Source, reporter: Rc<dyn Reporter>, link_stdlib: bool) -> Result<Lib, &'static str> {
         let name = source.name().to_string();
-        Lib::build_lib(source, &name, true, reporter)
+        Lib::build_lib(source, &name, link_stdlib, reporter)
     }
 
     pub fn stdlib(reporter: Rc<dyn Reporter>) -> Lib {

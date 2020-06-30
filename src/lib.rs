@@ -12,15 +12,16 @@ use diagnostic::{DefaultReporter, Reporter};
 use library::Lib;
 pub use source::*;
 
-pub fn run(source: Source) -> Result<(), &'static str> {
-    run_with_reporter(source, DefaultReporter::new())
+pub fn run(source: Source, link_stdlib: bool) -> Result<(), &'static str> {
+    run_with_reporter(source, DefaultReporter::new(), link_stdlib)
 }
 
 pub fn run_with_reporter(
     source: Source,
     reporter: std::rc::Rc<dyn Reporter>,
+    link_stdlib: bool
 ) -> Result<(), &'static str> {
-    let lib = Lib::from_source(source, std::rc::Rc::clone(&reporter))?;
+    let lib = Lib::from_source(source, std::rc::Rc::clone(&reporter), link_stdlib)?;
     Codegen::generate(lib, reporter)?;
     Ok(())
 }
