@@ -44,14 +44,14 @@ impl ContainsSpan for VariableDecl {
 #[derive(Debug)]
 pub struct TraitDecl {
     pub name: ResolvedToken,
-    pub requirements: Vec<FunctionDecl>
+    pub requirements: Vec<FunctionDecl>,
 }
 
 #[derive(Debug)]
 pub struct ConformanceDecl {
     pub target: ResolvedToken,
     pub trait_name: ResolvedToken,
-    pub implementations: Vec<FunctionDecl>
+    pub implementations: Vec<FunctionDecl>,
 }
 
 #[derive(Debug)]
@@ -149,7 +149,7 @@ impl Stmt {
             body,
             is_meta,
             is_public: false,
-            is_builtin
+            is_builtin,
         };
         Stmt::new(StmtKind::FunctionDecl(decl), span)
     }
@@ -177,19 +177,27 @@ impl Stmt {
         Stmt::new(StmtKind::VariableDecl(decl), span)
     }
 
-    pub fn trait_decl(trait_span: Span, name: Token, requirements: Vec<FunctionDecl>, end: &Span) -> Self {
+    pub fn trait_decl(
+        trait_span: Span,
+        name: Token,
+        requirements: Vec<FunctionDecl>,
+        end: &Span,
+    ) -> Self {
         let span = Span::join(&trait_span, end);
         let decl = TraitDecl {
             name: ResolvedToken::new(name, Vec::new()),
-            requirements
+            requirements,
         };
-        Stmt::new(
-            StmtKind::TraitDecl(decl),
-            span,
-        )
+        Stmt::new(StmtKind::TraitDecl(decl), span)
     }
 
-    pub fn conformance_decl(impl_span: Span, target: Token, trait_name: Token, impls: Vec<FunctionDecl>, end: &Span) -> Self {
+    pub fn conformance_decl(
+        impl_span: Span,
+        target: Token,
+        trait_name: Token,
+        impls: Vec<FunctionDecl>,
+        end: &Span,
+    ) -> Self {
         let span = Span::join(&impl_span, end);
         let decl = ConformanceDecl {
             target: ResolvedToken::new_non_specialized(target),

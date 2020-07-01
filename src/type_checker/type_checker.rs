@@ -1,6 +1,6 @@
-use super::{check, ScopeType, ContextTracker};
 use super::expr_checker::*;
 use super::TypeResolutionError;
+use super::{check, ContextTracker, ScopeType};
 use crate::diagnostic::*;
 use crate::library::*;
 use crate::parsing::*;
@@ -33,7 +33,10 @@ impl TypeChecker {
             checker.visit_function_decl(decl);
         }
         for decl in &lib.builtins {
-            decl.name.set_symbol(Symbol::new(&Symbol::lib_root(lib.as_ref()), &decl.name.token));
+            decl.name.set_symbol(Symbol::new(
+                &Symbol::lib_root(lib.as_ref()),
+                &decl.name.token,
+            ));
         }
         for decl in &lib.conformance_decls {
             checker.visit_conformance_decl(decl);
@@ -42,7 +45,7 @@ impl TypeChecker {
         let main_func = FunctionMetadata::main(lib.as_ref());
         checker.context.push_scope(
             main_func.symbol.clone(),
-            ScopeType::InsideFunction(main_func)
+            ScopeType::InsideFunction(main_func),
         );
         checker.check_list(&lib.other);
         checker.context.pop_scope();
@@ -113,7 +116,8 @@ impl StmtVisitor for TypeChecker {
         }
 
         let self_symbol = Symbol::self_symbol(&type_symbol);
-        self.context.put_in_scope(&self_symbol, &metadata.unspecialized_type());
+        self.context
+            .put_in_scope(&self_symbol, &metadata.unspecialized_type());
 
         for method in &metadata.methods {
             let method_metadata = self.lib.function_metadata(&method).unwrap();
@@ -153,7 +157,11 @@ impl StmtVisitor for TypeChecker {
             value => value,
         };
 
-        for (symbol, param_type) in metadata.parameter_symbols.iter().zip(&metadata.parameter_types) {
+        for (symbol, param_type) in metadata
+            .parameter_symbols
+            .iter()
+            .zip(&metadata.parameter_types)
+        {
             self.context.put_in_scope(symbol, param_type);
         }
 
@@ -232,20 +240,26 @@ impl StmtVisitor for TypeChecker {
             guarantees_return: false,
         }
     }
-    
+
     fn visit_conformance_decl(&mut self, decl: &ConformanceDecl) -> Analysis {
         let type_symbol = match self.context.resolve_token_as_type(&decl.target) {
             Ok(NodeType::Instance(type_symbol, _)) => type_symbol,
             Ok(_) => {
-                self.report_error(Diagnostic::error(&decl.target, "Can only implement traits on types"));
+                self.report_error(Diagnostic::error(
+                    &decl.target,
+                    "Can only implement traits on types",
+                ));
                 return Analysis {
                     guarantees_return: false,
                 };
-            },
+            }
             Err(err) => {
                 let diag = match err {
-                    TypeResolutionError::Inaccessible(diag) | TypeResolutionError::IncorrectlySpecialized(diag) => diag,
-                    TypeResolutionError::NotFound => Diagnostic::error(&decl.target, "Type not found"),
+                    TypeResolutionError::Inaccessible(diag)
+                    | TypeResolutionError::IncorrectlySpecialized(diag) => diag,
+                    TypeResolutionError::NotFound => {
+                        Diagnostic::error(&decl.target, "Type not found")
+                    }
                 };
                 self.report_error(diag);
                 return Analysis {
@@ -269,9 +283,16 @@ impl StmtVisitor for TypeChecker {
         type_metadata.add_trait_impl(&trait_metadata.symbol);
         let type_metadata = type_metadata.clone();
 
-        self.context.push_scope(type_metadata.symbol.clone(), ScopeType::InsideType(type_metadata.clone()));
+        self.context.push_scope(
+            type_metadata.symbol.clone(),
+            ScopeType::InsideType(type_metadata.clone()),
+        );
 
-        for (symbol, field_type) in type_metadata.field_symbols.iter().zip(&type_metadata.field_types) {
+        for (symbol, field_type) in type_metadata
+            .field_symbols
+            .iter()
+            .zip(&type_metadata.field_types)
+        {
             self.context.put_in_scope(symbol, field_type);
         }
 
@@ -286,12 +307,21 @@ impl StmtVisitor for TypeChecker {
             let impl_symbol = Symbol::new_str(&type_metadata.symbol, requirement.last_component());
             let impl_metadata = self.lib.function_metadata(&impl_symbol);
             if let Some(impl_metadata) = impl_metadata {
-                if !impl_metadata.node_type().matches(&requirement_metadata.node_type()) {
-                    let message = format!("Type implements requirement '{}' but with wrong signature", requirement.last_component());
+                if !impl_metadata
+                    .node_type()
+                    .matches(&requirement_metadata.node_type())
+                {
+                    let message = format!(
+                        "Type implements requirement '{}' but with wrong signature",
+                        requirement.last_component()
+                    );
                     self.report_error(Diagnostic::error(&decl.target, &message));
                 }
             } else {
-                let message = format!("Type doesn't implement requirement '{}'", requirement.last_component());
+                let message = format!(
+                    "Type doesn't implement requirement '{}'",
+                    requirement.last_component()
+                );
                 self.report_error(Diagnostic::error(&decl.target, &message));
             }
         }

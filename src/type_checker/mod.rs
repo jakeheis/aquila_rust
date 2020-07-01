@@ -1,11 +1,11 @@
 mod expr_checker;
-mod type_resolver;
 mod symbol_table_builder;
 mod type_checker;
+mod type_resolver;
 
-pub use type_resolver::{TypeResolution, TypeResolutionError};
 pub use symbol_table_builder::SymbolTableBuilder;
 pub use type_checker::TypeChecker;
+pub use type_resolver::{TypeResolution, TypeResolutionError};
 
 use crate::diagnostic::*;
 use crate::library::*;
@@ -18,9 +18,9 @@ use std::rc::Rc;
 mod check {
     use super::NodeType;
     use crate::diagnostic::*;
+    use crate::library::*;
     use crate::parsing::*;
     use crate::source::ContainsSpan;
-    use crate::library::*;
 
     pub fn type_mismatch<T: ContainsSpan>(
         span: &T,
@@ -162,10 +162,7 @@ impl ContextTracker {
     }
 
     pub fn symbolic_context(&self) -> Vec<Symbol> {
-        self.scopes
-            .iter()
-            .map(|s| s.id.clone())
-            .collect()
+        self.scopes.iter().map(|s| s.id.clone()).collect()
     }
 
     pub fn current_scope(&mut self) -> &mut Scope {
@@ -257,24 +254,21 @@ impl ContextTracker {
         let resolver = TypeResolution::new(&self.lib, &self.lib.symbols, &context, enclosing_func);
         match resolver.resolve(explicit_type) {
             Ok(resolved_type) => Ok(resolved_type),
-            Err(error) => {
-                Err(match error {
-                    TypeResolutionError::IncorrectlySpecialized(diag) | TypeResolutionError::Inaccessible(diag) => diag,
-                    TypeResolutionError::NotFound => Diagnostic::error(explicit_type, "Type not found"),
-                })
-            }
+            Err(error) => Err(match error {
+                TypeResolutionError::IncorrectlySpecialized(diag)
+                | TypeResolutionError::Inaccessible(diag) => diag,
+                TypeResolutionError::NotFound => Diagnostic::error(explicit_type, "Type not found"),
+            }),
         }
     }
 
-    fn resolve_token_as_type(&self, token: &ResolvedToken) -> Result<NodeType, TypeResolutionError> {
+    fn resolve_token_as_type(
+        &self,
+        token: &ResolvedToken,
+    ) -> Result<NodeType, TypeResolutionError> {
         let context = self.symbolic_context();
         let enclosing_func = self.enclosing_function().map(|f| &f.symbol);
-        let resolver = TypeResolution::new(
-            &self.lib,
-            &self.lib.symbols,
-            &context,
-            enclosing_func
-        );
+        let resolver = TypeResolution::new(&self.lib, &self.lib.symbols, &context, enclosing_func);
         resolver.resolve_simple(token)
     }
 }

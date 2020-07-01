@@ -6,7 +6,14 @@ pub type Source = Rc<SourceImpl>;
 pub fn file(file: &str) -> Source {
     let content = fs::read_to_string(file).unwrap();
     Rc::new(SourceImpl {
-        name: String::from(fs::canonicalize(file).unwrap().file_stem().unwrap().to_str().unwrap()),
+        name: String::from(
+            fs::canonicalize(file)
+                .unwrap()
+                .file_stem()
+                .unwrap()
+                .to_str()
+                .unwrap(),
+        ),
         content,
     })
 }

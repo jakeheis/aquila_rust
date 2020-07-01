@@ -1,7 +1,7 @@
 use super::{FunctionType, Lib, NodeType, Symbol};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::cell::RefCell;
 
 #[derive(Clone, Debug)]
 pub struct TypeMetadata {
@@ -76,7 +76,11 @@ impl TypeMetadata {
             .iter()
             .position(|s| s == &possible_symbol)
         {
-            Some((possible_symbol, &self.field_types[index], self.field_visibilities[index]))
+            Some((
+                possible_symbol,
+                &self.field_types[index],
+                self.field_visibilities[index],
+            ))
         } else {
             None
         }
@@ -124,7 +128,12 @@ impl TypeMetadata {
 
 impl std::fmt::Display for TypeMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        writeln!(f, "Type({}, public: {})", self.symbol.mangled(), self.is_public)?;
+        writeln!(
+            f,
+            "Type({}, public: {})",
+            self.symbol.mangled(),
+            self.is_public
+        )?;
         if !self.generics.is_empty() {
             let gens = self
                 .generics
@@ -157,12 +166,12 @@ impl std::fmt::Display for TypeMetadata {
             .join(",");
         writeln!(f, "  meta methods: {}", meta_methods)?;
         let trait_impls = self
-        .trait_impls
-        .borrow()
-        .iter()
-        .map(|t| t.mangled())
-        .collect::<Vec<_>>()
-        .join(",");
+            .trait_impls
+            .borrow()
+            .iter()
+            .map(|t| t.mangled())
+            .collect::<Vec<_>>()
+            .join(",");
         write!(f, "  trait impls: {}", trait_impls)?;
 
         if !self.specializations.is_empty() {
@@ -232,7 +241,7 @@ impl FunctionMetadata {
                 } else {
                     self.symbol.mangled() + &func_specialization
                 }
-            },
+            }
         }
     }
 

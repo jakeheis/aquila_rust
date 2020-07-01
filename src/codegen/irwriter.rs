@@ -1,7 +1,7 @@
 use super::ir::*;
 use crate::library::*;
-use std::rc::Rc;
 use crate::source::Span;
+use std::rc::Rc;
 
 pub struct IRWriter {
     lib: Rc<Lib>,
@@ -31,21 +31,17 @@ impl IRWriter {
             .field_types
             .iter()
             .zip(&type_metadata.field_symbols)
-            .map(|(node_type, symbol)| {
-                IRVariable {
-                    name: symbol.mangled(),
-                    var_type: node_type.specialize(self.lib.as_ref(), specialization)
-                }
-            }).collect();
+            .map(|(node_type, symbol)| IRVariable {
+                name: symbol.mangled(),
+                var_type: node_type.specialize(self.lib.as_ref(), specialization),
+            })
+            .collect();
 
-        let structure = IRStructure {
-            name,
-            fields
-        };
+        let structure = IRStructure { name, fields };
         self.program.structures.push(structure);
     }
 
-    pub fn start_block(&mut self,) {
+    pub fn start_block(&mut self) {
         self.blocks.push(Vec::new());
     }
 
@@ -59,33 +55,40 @@ impl IRWriter {
         self.program.functions.push(main);
     }
 
-    pub fn end_decl_func(&mut self, function: &FunctionMetadata, specialization: &GenericSpecialization) {
+    pub fn end_decl_func(
+        &mut self,
+        function: &FunctionMetadata,
+        specialization: &GenericSpecialization,
+    ) {
         let mut parameters: Vec<_> = function
             .parameter_types
             .iter()
             .zip(&function.parameter_symbols)
-            .map(|(param_type, symbol)| {
-                IRVariable {
-                    name: symbol.mangled(),
-                    var_type: param_type.specialize(self.lib.as_ref(), specialization),
-                }
+            .map(|(param_type, symbol)| IRVariable {
+                name: symbol.mangled(),
+                var_type: param_type.specialize(self.lib.as_ref(), specialization),
             })
             .collect();
 
         if let FunctionKind::Method(owner) = &function.kind {
             let self_instance = NodeType::Instance(owner.clone(), specialization.subset(owner));
             let self_type = NodeType::pointer_to(self_instance);
-            parameters.insert(0, IRVariable {
-                name: String::from("self"),
-                var_type: self_type
-            });
+            parameters.insert(
+                0,
+                IRVariable {
+                    name: String::from("self"),
+                    var_type: self_type,
+                },
+            );
         }
 
         let function = IRFunction {
             name: function.function_name(self.lib.as_ref(), specialization),
             parameters,
-            return_type: function.return_type.specialize(self.lib.as_ref(), specialization),
-            statements: self.blocks.pop().unwrap()
+            return_type: function
+                .return_type
+                .specialize(self.lib.as_ref(), specialization),
+            statements: self.blocks.pop().unwrap(),
         };
 
         self.program.functions.push(function);
@@ -127,7 +130,7 @@ impl IRWriter {
     pub fn declare_temp(&mut self, expr: IRExpr) -> IRVariable {
         let var = IRVariable {
             name: format!("ir_tmp_{}", self.temp_count),
-            var_type: expr.expr_type.clone()
+            var_type: expr.expr_type.clone(),
         };
         self.temp_count = self.temp_count + 1;
 
@@ -180,16 +183,16 @@ impl IRWriter {
 
         let arg = IRExpr {
             kind: IRExprKind::Literal(message),
-            expr_type: NodeType::pointer_to(NodeType::Byte)
+            expr_type: NodeType::pointer_to(NodeType::Byte),
         };
         self.expr(IRExpr {
             kind: IRExprKind::Call(String::from("printf"), vec![arg]),
-            expr_type: NodeType::Void
+            expr_type: NodeType::Void,
         });
 
         self.expr(IRExpr {
             kind: IRExprKind::Call(String::from("exit"), vec![IRExpr::int_literal("1")]),
-            expr_type: NodeType::Void
+            expr_type: NodeType::Void,
         });
 
         self.end_if_block(guard);

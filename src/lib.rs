@@ -18,7 +18,7 @@ pub fn run(source: Source, link_stdlib: bool) -> Result<(), &'static str> {
 pub fn run_with_reporter(
     source: Source,
     reporter: std::rc::Rc<dyn Reporter>,
-    link_stdlib: bool
+    link_stdlib: bool,
 ) -> Result<(), &'static str> {
     let lib = Lib::from_source(source, std::rc::Rc::clone(&reporter), link_stdlib)?;
     codegen::generate(lib, reporter)?;

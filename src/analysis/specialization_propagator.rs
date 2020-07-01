@@ -26,7 +26,12 @@ impl SpecializationTracker {
             .push((to, with));
     }
 
-    pub fn add_required_type_spec(&self, in_func: Symbol, type_symbol: Symbol, spec: GenericSpecialization) {
+    pub fn add_required_type_spec(
+        &self,
+        in_func: Symbol,
+        type_symbol: Symbol,
+        spec: GenericSpecialization,
+    ) {
         self.explicit_type_map
             .borrow_mut()
             .entry(in_func)
@@ -109,7 +114,9 @@ impl<'a> SpecializationPropagator<'a> {
     ) {
         let lib_map = lib.specialization_tracker.explicit_type_map.borrow();
         for (enclosing_func, explicit_types) in lib_map.iter() {
-            let all = explicit_type_map.entry(enclosing_func.clone()).or_insert(Vec::new());
+            let all = explicit_type_map
+                .entry(enclosing_func.clone())
+                .or_insert(Vec::new());
             all.append(&mut explicit_types.clone());
         }
         for lib in &lib.dependencies {
@@ -163,10 +170,11 @@ impl<'a> SpecializationPropagator<'a> {
         if let Some(explicit_types) = self.explicit_type_map.get(cur) {
             let explicit_types = explicit_types.clone();
             for (explicit_type_symbol, explicit_type_spec) in explicit_types {
-                let explicit_type_spec = explicit_type_spec.resolve_generics_using(self.lib, current_spec);
-                
+                let explicit_type_spec =
+                    explicit_type_spec.resolve_generics_using(self.lib, current_spec);
+
                 trace!(target: "spec_propagate", "in func {} Propping from type spec {} to {}", cur, explicit_type_spec, explicit_type_symbol);
-                
+
                 self.propagate_through_type(&explicit_type_symbol, &explicit_type_spec);
             }
         }
@@ -174,11 +182,10 @@ impl<'a> SpecializationPropagator<'a> {
         trace!(target: "spec_propagate", "Finished function {}", cur);
     }
 
-
     fn propagate_through_type(&mut self, cur: &Symbol, current_spec: &GenericSpecialization) {
         let metadata = self.lib.type_metadata(cur).unwrap();
         let type_id = metadata.type_name(current_spec);
-        
+
         if self.visited.insert(type_id) == false {
             return;
         }

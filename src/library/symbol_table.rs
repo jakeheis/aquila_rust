@@ -11,7 +11,9 @@ pub struct Symbol {
 
 impl Symbol {
     pub fn lib_root(lib: &Lib) -> Self {
-        Symbol { id: lib.name.clone() }
+        Symbol {
+            id: lib.name.clone(),
+        }
     }
 
     pub fn new(parent: &Symbol, name: &Token) -> Self {
@@ -42,7 +44,7 @@ impl Symbol {
     pub fn writable_symbol() -> Self {
         // Temporarily hard coded
         Symbol {
-            id: String::from("stdlib$Writable")
+            id: String::from("stdlib$Writable"),
         }
     }
 

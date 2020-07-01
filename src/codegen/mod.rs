@@ -1,18 +1,18 @@
+mod codewriter;
 mod core;
 mod ir;
 mod irgen;
 mod irwriter;
-mod codewriter;
 
-pub use ir::{IRProgram, IRStructure, IRFunction, IRStatement, IRExpr, IRExprKind};
+pub use ir::{IRExpr, IRExprKind, IRFunction, IRProgram, IRStatement, IRStructure};
 pub use irgen::IRGen;
 
 use crate::analysis::SpecializationPropagator;
 use crate::diagnostic::*;
 use crate::library::Lib;
-use std::rc::Rc;
 use std::fs::{self, File};
 use std::process::Command;
+use std::rc::Rc;
 
 pub fn generate(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {
     SpecializationPropagator::propogate(&mut lib);

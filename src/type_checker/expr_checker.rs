@@ -1,6 +1,6 @@
 use super::check;
-use super::NodeType;
 use super::ContextTracker;
+use super::NodeType;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::library::*;
@@ -64,15 +64,17 @@ impl ExprChecker {
                     FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
                         let implicit_self = self.lib.type_metadata(owner).unwrap();
                         let implicit_spec = implicit_self.dummy_specialization();
-                        return Ok((func_metadata, implicit_spec, false))
+                        return Ok((func_metadata, implicit_spec, false));
                     }
                     _ => return Ok((func_metadata, GenericSpecialization::empty(), false)),
                 }
             }
-            Some((_, node_type)) => return Err(Diagnostic::error(
-                span,
-                &format!("Cannot call object of type {}", node_type),
-            )),
+            Some((_, node_type)) => {
+                return Err(Diagnostic::error(
+                    span,
+                    &format!("Cannot call object of type {}", node_type),
+                ))
+            }
             _ => (),
         }
 
@@ -299,8 +301,12 @@ impl ExprVisitor for ExprChecker {
         match target_type {
             NodeType::Instance(type_symbol, specialization) => {
                 let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
-                if let Some((field_symbol, field_type, is_public)) = type_metadata.field_named(field_name) {
-                    if is_public == false && check::symbol_accessible(self.lib.as_ref(), &field_symbol) == false {
+                if let Some((field_symbol, field_type, is_public)) =
+                    type_metadata.field_named(field_name)
+                {
+                    if is_public == false
+                        && check::symbol_accessible(self.lib.as_ref(), &field_symbol) == false
+                    {
                         return Err(Diagnostic::error(field, "Field is private"));
                     }
                     field.set_symbol(field_symbol);

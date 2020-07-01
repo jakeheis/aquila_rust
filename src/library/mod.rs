@@ -11,7 +11,9 @@ mod metadata;
 mod node_type;
 mod symbol_table;
 
-pub use metadata::{FunctionKind, FunctionMetadata, TraitMetadata, GenericSpecialization, TypeMetadata};
+pub use metadata::{
+    FunctionKind, FunctionMetadata, GenericSpecialization, TraitMetadata, TypeMetadata,
+};
 pub use node_type::{FunctionType, NodeType};
 pub use symbol_table::{Symbol, SymbolTable};
 
@@ -29,7 +31,11 @@ pub struct Lib {
 }
 
 impl Lib {
-    pub fn from_source(source: Source, reporter: Rc<dyn Reporter>, link_stdlib: bool) -> Result<Lib, &'static str> {
+    pub fn from_source(
+        source: Source,
+        reporter: Rc<dyn Reporter>,
+        link_stdlib: bool,
+    ) -> Result<Lib, &'static str> {
         let name = source.name().to_string();
         Lib::build_lib(source, &name, link_stdlib, reporter)
     }
@@ -37,7 +43,8 @@ impl Lib {
     pub fn stdlib(reporter: Rc<dyn Reporter>) -> Lib {
         let src =
             source::file("/Users/jakeheiser/Desktop/Projects/Rust/aquila/src/library/stdlib.aq");
-        let lib = Lib::build_lib(src, "stdlib", false, reporter).expect("Standard library build should succeed");
+        let lib = Lib::build_lib(src, "stdlib", false, reporter)
+            .expect("Standard library build should succeed");
         lib
     }
 
@@ -58,14 +65,15 @@ impl Lib {
 
         let parser = Parser::new(tokens, Rc::clone(&reporter));
         let stmts = parser.parse();
-        
+
         ASTPrinter::trace().print(&stmts);
 
         if reporter.has_errored() {
             return Err("Parsing failed");
         }
 
-        let (type_decls, function_decls, trait_decls, conformance_decls, builtins, other) = Lib::organize_stms(stmts);
+        let (type_decls, function_decls, trait_decls, conformance_decls, builtins, other) =
+            Lib::organize_stms(stmts);
 
         let mut lib = Lib {
             name: String::from(name),
@@ -80,10 +88,7 @@ impl Lib {
             specialization_tracker: SpecializationTracker::new(),
         };
 
-        lib = SymbolTableBuilder::build_symbols(
-            lib,
-            Rc::clone(&reporter),
-        );
+        lib = SymbolTableBuilder::build_symbols(lib, Rc::clone(&reporter));
 
         trace!(target: "symbol_table", "{}", lib.symbols);
 
@@ -102,12 +107,13 @@ impl Lib {
         Ok(lib)
     }
 
-    pub fn deep_search<F, U>(&self, search: &F) -> Option<U> 
-    where F: Fn(&Lib) -> Option<U>
+    pub fn deep_search<F, U>(&self, search: &F) -> Option<U>
+    where
+        F: Fn(&Lib) -> Option<U>,
     {
         if let Some(found) = search(self) {
             Some(found)
-        }else {
+        } else {
             for dep in &self.dependencies {
                 if let Some(found) = dep.deep_search(search) {
                     return Some(found);
@@ -282,6 +288,13 @@ impl Lib {
                 _ => other.push(stmt),
             }
         }
-        (type_decls, function_decls, trait_decls, conformance_decls, builtins, other)
+        (
+            type_decls,
+            function_decls,
+            trait_decls,
+            conformance_decls,
+            builtins,
+            other,
+        )
     }
 }

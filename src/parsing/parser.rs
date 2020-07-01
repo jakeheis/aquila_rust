@@ -71,7 +71,9 @@ impl Parser {
                 match &mut stmt.kind {
                     StmtKind::TypeDecl(decl) => decl.is_public = true,
                     StmtKind::FunctionDecl(decl) => decl.is_public = true,
-                    StmtKind::VariableDecl(decl) if context == Context::InsideType => decl.is_public = true,
+                    StmtKind::VariableDecl(decl) if context == Context::InsideType => {
+                        decl.is_public = true
+                    }
                     _ => {
                         return Err(Diagnostic::error(
                             &pub_span,
@@ -401,9 +403,13 @@ impl Parser {
 
     fn trait_conformance(&mut self) -> Result<Stmt> {
         let impl_span = self.previous().span().clone();
-        let target = self.consume(TokenKind::Identifier, "Expect type name")?.clone();
+        let target = self
+            .consume(TokenKind::Identifier, "Expect type name")?
+            .clone();
         self.consume(TokenKind::Colon, "Expect ':' after type name")?;
-        let trait_name = self.consume(TokenKind::Identifier, "Expect trait name")?.clone();
+        let trait_name = self
+            .consume(TokenKind::Identifier, "Expect trait name")?
+            .clone();
 
         self.consume(TokenKind::LeftBrace, "Expect '{' after trait name")?;
 
@@ -428,7 +434,13 @@ impl Parser {
 
         let brace = self.consume(TokenKind::RightBrace, "Expect '}' after impl body")?;
 
-        Ok(Stmt::conformance_decl(impl_span, target, trait_name, impls, brace.span()))
+        Ok(Stmt::conformance_decl(
+            impl_span,
+            target,
+            trait_name,
+            impls,
+            brace.span(),
+        ))
     }
 
     fn if_stmt(&mut self) -> Result<Stmt> {

@@ -1,9 +1,9 @@
+use aquila::diagnostic::*;
 use std::fs::{self, File};
-use std::path::PathBuf;
-use std::process::Command;
 use std::io::Write;
 use std::path::Path;
-use aquila::diagnostic::*;
+use std::path::PathBuf;
+use std::process::Command;
 
 mod common;
 use common::*;
@@ -57,7 +57,10 @@ fn vector() -> Result<(), &'static str> {
 // }
 
 fn test_file(file_root: &str) -> Result<(), &'static str> {
-    let path = format!("/Users/jakeheiser/Desktop/Projects/Rust/aquila/tests/aquila/{}.aq", file_root);
+    let path = format!(
+        "/Users/jakeheiser/Desktop/Projects/Rust/aquila/tests/aquila/{}.aq",
+        file_root
+    );
     let path = PathBuf::from(&path);
 
     let read = fs::read_to_string(path).unwrap();
@@ -149,7 +152,12 @@ fn expect_success(file: PathBuf, expected_output: Vec<String>) -> Result<(), &'s
 
     for (index, (got, expected)) in output.lines().zip(expected_output).enumerate() {
         if got != expected {
-            println!("Expected line {}: expected '{}', got '{}'", index + 1, expected, got);
+            println!(
+                "Expected line {}: expected '{}', got '{}'",
+                index + 1,
+                expected,
+                got
+            );
             return Err("Invalid output");
         }
     }
@@ -176,9 +184,10 @@ fn run_file(file: PathBuf) -> (String, Vec<Diagnostic>) {
         Ok(_) => {
             assert_eq!(diagnostics.unwrap().len(), 0);
 
-            let output = Command::new("/Users/jakeheiser/Desktop/Projects/Rust/aquila/build/program")
-            .output()
-            .unwrap();
+            let output =
+                Command::new("/Users/jakeheiser/Desktop/Projects/Rust/aquila/build/program")
+                    .output()
+                    .unwrap();
 
             let got_lines = String::from_utf8(output.stdout).unwrap();
 
@@ -188,9 +197,7 @@ fn run_file(file: PathBuf) -> (String, Vec<Diagnostic>) {
             }
 
             (got_lines, Vec::new())
-        },
-        Err(_) => {
-            (String::new(), diagnostics.unwrap())
         }
+        Err(_) => (String::new(), diagnostics.unwrap()),
     }
 }

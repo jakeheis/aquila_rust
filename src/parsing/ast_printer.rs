@@ -204,14 +204,22 @@ impl StmtVisitor for ASTPrinter {
     fn visit_trait_decl(&mut self, decl: &TraitDecl) {
         self.write_ln(&format!("TraitDecl(name: {})", decl.name.span().lexeme(),));
         self.indent(|visitor| {
-            decl.requirements.iter().for_each(|p| visitor.visit_function_decl(p));
+            decl.requirements
+                .iter()
+                .for_each(|p| visitor.visit_function_decl(p));
         });
     }
 
     fn visit_conformance_decl(&mut self, decl: &ConformanceDecl) {
-        self.write_ln(&format!("Conformance(name: {}, trait: {})", decl.target.span().lexeme(), decl.trait_name.span().lexeme()));
+        self.write_ln(&format!(
+            "Conformance(name: {}, trait: {})",
+            decl.target.span().lexeme(),
+            decl.trait_name.span().lexeme()
+        ));
         self.indent(|visitor| {
-            decl.implementations.iter().for_each(|p| visitor.visit_function_decl(p));
+            decl.implementations
+                .iter()
+                .for_each(|p| visitor.visit_function_decl(p));
         });
     }
 

@@ -1,14 +1,14 @@
+use super::check;
+use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::{ExplicitType, ExplicitTypeKind, ResolvedToken};
-use crate::diagnostic::*;
-use super::check;
 use log::trace;
 
 pub enum TypeResolutionError {
     IncorrectlySpecialized(Diagnostic),
     Inaccessible(Diagnostic),
-    NotFound
+    NotFound,
 }
 
 pub type TypeResolutionResult = Result<NodeType, TypeResolutionError>;
@@ -21,7 +21,12 @@ pub struct TypeResolution<'a> {
 }
 
 impl<'a> TypeResolution<'a> {
-    pub fn new(lib: &'a Lib, symbols: &'a SymbolTable, context: &'a [Symbol], enclosing_function: Option<&'a Symbol>) -> Self {
+    pub fn new(
+        lib: &'a Lib,
+        symbols: &'a SymbolTable,
+        context: &'a [Symbol],
+        enclosing_function: Option<&'a Symbol>,
+    ) -> Self {
         TypeResolution {
             lib,
             symbols,
@@ -32,9 +37,7 @@ impl<'a> TypeResolution<'a> {
 
     pub fn resolve(&self, explicit_type: &ExplicitType) -> TypeResolutionResult {
         let node_type = match &explicit_type.kind {
-            ExplicitTypeKind::Simple(token) => {
-                self.resolve_simple(token)?
-            }
+            ExplicitTypeKind::Simple(token) => self.resolve_simple(token)?,
             ExplicitTypeKind::Pointer(to) => {
                 let inner = self.resolve(to.as_ref())?;
                 NodeType::Pointer(Box::new(inner))
@@ -53,9 +56,7 @@ impl<'a> TypeResolution<'a> {
     pub fn resolve_simple(&self, token: &ResolvedToken) -> TypeResolutionResult {
         let mut resolved_spec = Vec::new();
         for explicit_spec in &token.specialization {
-            resolved_spec.push(self.resolve(
-                explicit_spec
-            )?);
+            resolved_spec.push(self.resolve(explicit_spec)?);
         }
 
         if let Some(primitive) = NodeType::primitive(token.token.lexeme()) {
@@ -101,30 +102,41 @@ impl<'a> TypeResolution<'a> {
         }
     }
 
-    fn create_instance(&self, token: &Token, type_metadata: &TypeMetadata, specialization: Vec<NodeType>) -> TypeResolutionResult {
+    fn create_instance(
+        &self,
+        token: &Token,
+        type_metadata: &TypeMetadata,
+        specialization: Vec<NodeType>,
+    ) -> TypeResolutionResult {
         if specialization.len() != type_metadata.generics.len() {
             let message = format!(
                 "Expected {} specializations, got {}",
                 type_metadata.generics.len(),
                 specialization.len()
             );
-            return Err(TypeResolutionError::IncorrectlySpecialized(Diagnostic::error(token, &message)));
-        } 
+            return Err(TypeResolutionError::IncorrectlySpecialized(
+                Diagnostic::error(token, &message),
+            ));
+        }
 
         if check::type_accessible(self.lib, type_metadata) == false {
-            return Err(TypeResolutionError::Inaccessible(Diagnostic::error(token, "Type is private")));
+            return Err(TypeResolutionError::Inaccessible(Diagnostic::error(
+                token,
+                "Type is private",
+            )));
         }
-        
+
         let specialization = GenericSpecialization::new(&type_metadata.generics, specialization);
 
         if let Some(enclosing_func) = self.enclosing_function {
-            self.lib.specialization_tracker.add_required_type_spec(enclosing_func.clone(), type_metadata.symbol.clone(), specialization.clone());
+            self.lib.specialization_tracker.add_required_type_spec(
+                enclosing_func.clone(),
+                type_metadata.symbol.clone(),
+                specialization.clone(),
+            );
         }
 
-        let instance_type = NodeType::Instance(
-            type_metadata.symbol.clone(),
-            specialization,
-        );
+        let instance_type = NodeType::Instance(type_metadata.symbol.clone(), specialization);
 
         Ok(instance_type)
     }

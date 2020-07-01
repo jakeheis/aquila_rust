@@ -1,8 +1,8 @@
 use super::ir::*;
+use crate::library::NodeType;
+use std::cell::{Cell, RefCell};
 use std::fs::File;
 use std::io::Write;
-use std::cell::{RefCell, Cell};
-use crate::library::NodeType;
 
 pub struct CodeWriter {
     program: IRProgram,
@@ -17,16 +17,16 @@ impl CodeWriter {
             program,
             file: RefCell::new(file),
             indent: Cell::new(0),
-            temp_count: Cell::new(0)
+            temp_count: Cell::new(0),
         }
     }
 
     pub fn write(&self) {
         self.write_includes();
-        
+
         self.write_struct_prototypes();
         self.write_struct_bodies();
-        
+
         self.write_function_prototypes();
         self.write_function_bodies();
     }
@@ -41,10 +41,7 @@ impl CodeWriter {
     fn write_struct_prototypes(&self) {
         for struct_def in &self.program.structures {
             self.writeln("");
-            self.writeln(&format!(
-                "struct {};",
-                struct_def.name
-            ));
+            self.writeln(&format!("struct {};", struct_def.name));
         }
     }
 
@@ -111,7 +108,7 @@ impl CodeWriter {
                 self.increase_indent();
                 self.write_block(if_block);
                 self.decrease_indent();
-                
+
                 if !else_block.is_empty() {
                     self.writeln("} else {");
                     self.increase_indent();
@@ -148,7 +145,7 @@ impl CodeWriter {
                 } else {
                     target_str
                 };
-                
+
                 format!("{}.{}", target, field)
             }
             IRExprKind::DerefFieldAccess(target, field) => {
@@ -161,11 +158,9 @@ impl CodeWriter {
                 format!("{}({})", function, args)
             }
             IRExprKind::Array(elements) => {
-                let elements: Vec<String> = elements.iter().map(|e| self.form_expression(e)).collect();
-                self.write_temp(
-                    &expr.expr_type,
-                    format!("{{ {} }}", elements.join(",")),
-                )
+                let elements: Vec<String> =
+                    elements.iter().map(|e| self.form_expression(e)).collect();
+                self.write_temp(&expr.expr_type, format!("{{ {} }}", elements.join(",")))
             }
             IRExprKind::Subscript(target, value) => {
                 let target = self.form_expression(target);
@@ -184,10 +179,8 @@ impl CodeWriter {
                         IRExprKind::Unary(inner_op, inner) if inner_op == "*" => {
                             return self.form_expression(inner);
                         }
-                        IRExprKind::Variable(..) | IRExprKind::FieldAccess(..) => {
-                            operand_str
-                        },
-                        _ => self.write_temp(&operand.expr_type, operand_str)
+                        IRExprKind::Variable(..) | IRExprKind::FieldAccess(..) => operand_str,
+                        _ => self.write_temp(&operand.expr_type, operand_str),
                     }
                 } else {
                     operand_str
@@ -208,11 +201,7 @@ impl CodeWriter {
         }
     }
 
-    fn write_function_header(
-        &self,
-        function: &IRFunction,
-        terminator: &str,
-    ) {
+    fn write_function_header(&self, function: &IRFunction, terminator: &str) {
         let param_str: Vec<String> = function
             .parameters
             .iter()
@@ -224,10 +213,7 @@ impl CodeWriter {
         self.writeln("");
         self.writeln(&format!(
             "{}({}){}",
-            self.type_and_name(
-                &function.return_type,
-                &function.name
-            ),
+            self.type_and_name(&function.return_type, &function.name),
             param_str,
             terminator
         ));

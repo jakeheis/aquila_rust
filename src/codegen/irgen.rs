@@ -1,11 +1,11 @@
-use super::ir::*;
-use crate::library::*;
-use std::rc::Rc;
-use crate::parsing::*;
-use crate::lexing::*;
 use super::core;
-use log::trace;
+use super::ir::*;
 use super::irwriter::IRWriter;
+use crate::lexing::*;
+use crate::library::*;
+use crate::parsing::*;
+use log::trace;
+use std::rc::Rc;
 
 pub struct IRGen {
     lib: Rc<Lib>,
@@ -66,7 +66,7 @@ impl IRGen {
     fn self_type(&self) -> Option<NodeType> {
         let ct = self.current_type.as_ref();
         let fs = self.func_specialization.as_ref();
-        if let (Some(current_type), Some(func_spec)) = (ct, fs)  {
+        if let (Some(current_type), Some(func_spec)) = (ct, fs) {
             let spec = func_spec.subset(&current_type.symbol);
             Some(NodeType::Instance(current_type.symbol.clone(), spec))
         } else {
@@ -83,7 +83,9 @@ impl IRGen {
     }
 
     fn specialize_expr(&self, expr: &Expr) -> NodeType {
-        expr.get_type().unwrap().specialize_opt(self.lib.as_ref(), self.func_specialization.as_ref())
+        expr.get_type()
+            .unwrap()
+            .specialize_opt(self.lib.as_ref(), self.func_specialization.as_ref())
     }
 }
 
@@ -104,24 +106,31 @@ impl StmtVisitor for IRGen {
             let init_metadata = self.lib.function_metadata(&init_symbol).unwrap();
 
             let instance_type = init_metadata
-            .return_type
-            .specialize(self.lib.as_ref(), &spec);
+                .return_type
+                .specialize(self.lib.as_ref(), &spec);
 
             let new_item = IRVariable::new("new_item", instance_type.clone());
 
             self.writer.start_block();
             self.writer.declare_var(&new_item);
-            
-            for (field, field_type) in type_metadata.field_symbols.iter().zip(&type_metadata.field_types) {
+
+            for (field, field_type) in type_metadata
+                .field_symbols
+                .iter()
+                .zip(&type_metadata.field_types)
+            {
                 let field_expr = IRExpr::field(&new_item, &field.mangled(), field_type.clone());
-                self.writer.assign(field_expr, IRExpr {
-                    kind: IRExprKind::Variable(field.mangled()),
-                    expr_type: field_type.clone()
-                });
+                self.writer.assign(
+                    field_expr,
+                    IRExpr {
+                        kind: IRExprKind::Variable(field.mangled()),
+                        expr_type: field_type.clone(),
+                    },
+                );
             }
             self.writer.return_value(Some(IRExpr {
                 kind: IRExprKind::Variable(String::from("new_item")),
-                expr_type: instance_type
+                expr_type: instance_type,
             }));
             self.writer.end_decl_func(&init_metadata, &spec);
 
@@ -147,11 +156,15 @@ impl StmtVisitor for IRGen {
 
         let func_metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
-        for specialization in &func_metadata.specializations {        
-            trace!("Writing function {} with specialization {}", func_symbol, specialization);
-    
+        for specialization in &func_metadata.specializations {
+            trace!(
+                "Writing function {} with specialization {}",
+                func_symbol,
+                specialization
+            );
+
             self.func_specialization = Some(specialization.clone());
-    
+
             self.writer.start_block();
             if decl.is_builtin {
                 core::write(&func_symbol, &mut self.writer);
@@ -161,7 +174,7 @@ impl StmtVisitor for IRGen {
             self.writer.end_decl_func(&func_metadata, specialization);
 
             trace!(target: "codegen", "Finished function {} with specialization {}", func_symbol, specialization);
-    
+
             self.func_specialization = None;
         }
     }
@@ -174,7 +187,8 @@ impl StmtVisitor for IRGen {
             var_type = NodeType::Pointer(of.clone());
         }
 
-        let var_type = var_type.specialize_opt(self.lib.as_ref(), self.func_specialization.as_ref());
+        let var_type =
+            var_type.specialize_opt(self.lib.as_ref(), self.func_specialization.as_ref());
 
         let local = self.writer.declare_local(var_symbol, var_type);
 
@@ -186,9 +200,7 @@ impl StmtVisitor for IRGen {
 
     fn visit_trait_decl(&mut self, _decl: &TraitDecl) {}
 
-    fn visit_conformance_decl(&mut self, _decl: &ConformanceDecl)  {
-
-    }
+    fn visit_conformance_decl(&mut self, _decl: &ConformanceDecl) {}
 
     fn visit_if_stmt(
         &mut self,
@@ -216,7 +228,7 @@ impl StmtVisitor for IRGen {
         self.writer.break_loop();
         self.writer.end_if_block(IRExpr {
             kind: IRExprKind::Unary(String::from("!"), Box::new(condition)),
-            expr_type: NodeType::Bool
+            expr_type: NodeType::Bool,
         });
 
         self.gen_stmts(body);
@@ -229,7 +241,7 @@ impl StmtVisitor for IRGen {
         let limit = self.array_count(array_expr);
 
         let counter = self.writer.declare_local_str("i", NodeType::Int);
-        
+
         self.writer.start_block();
 
         self.writer.start_block();
@@ -238,32 +250,40 @@ impl StmtVisitor for IRGen {
             kind: IRExprKind::Binary(
                 Box::new(IRExpr::variable(&counter)),
                 String::from(">="),
-                Box::new(IRExpr::int_literal(&limit.to_string()))
+                Box::new(IRExpr::int_literal(&limit.to_string())),
             ),
-            expr_type: NodeType::Bool
+            expr_type: NodeType::Bool,
         });
 
         let var_type = variable.get_type().unwrap();
-        let local = self.writer.declare_local(variable.get_symbol().unwrap(), var_type.clone());
+        let local = self
+            .writer
+            .declare_local(variable.get_symbol().unwrap(), var_type.clone());
 
-        self.writer.assign(IRExpr::variable(&local), IRExpr {
-            kind: IRExprKind::Binary(
-                Box::new(array),
-                String::from("+"),
-                Box::new(IRExpr::variable(&counter))
-            ),
-            expr_type: var_type
-        });
+        self.writer.assign(
+            IRExpr::variable(&local),
+            IRExpr {
+                kind: IRExprKind::Binary(
+                    Box::new(array),
+                    String::from("+"),
+                    Box::new(IRExpr::variable(&counter)),
+                ),
+                expr_type: var_type,
+            },
+        );
 
         self.gen_stmts(body);
-        self.writer.assign(IRExpr::variable(&counter), IRExpr {
-            kind: IRExprKind::Binary(
-                Box::new(IRExpr::variable(&counter)),
-                String::from("+"),
-                Box::new(IRExpr::int_literal("1"))
-            ),
-            expr_type: NodeType::Int
-        });
+        self.writer.assign(
+            IRExpr::variable(&counter),
+            IRExpr {
+                kind: IRExprKind::Binary(
+                    Box::new(IRExpr::variable(&counter)),
+                    String::from("+"),
+                    Box::new(IRExpr::int_literal("1")),
+                ),
+                expr_type: NodeType::Int,
+            },
+        );
         self.writer.end_loop();
     }
 
@@ -272,7 +292,7 @@ impl StmtVisitor for IRGen {
         self.writer.return_value(ret);
     }
 
-    fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Self::StmtResult {        
+    fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Self::StmtResult {
         let function = String::from("printf");
 
         if let Some(expr) = expr.as_ref() {
@@ -297,7 +317,7 @@ impl StmtVisitor for IRGen {
                 let format_line = format!("\"{}\\n\"", format_specificer);
                 let format_expr = IRExpr {
                     kind: IRExprKind::Literal(format_line),
-                    expr_type: NodeType::pointer_to(NodeType::Byte)
+                    expr_type: NodeType::pointer_to(NodeType::Byte),
                 };
                 let expr = expr.accept(self);
                 self.writer.expr(IRExpr {
@@ -308,7 +328,7 @@ impl StmtVisitor for IRGen {
         } else {
             let empty_line = IRExpr {
                 kind: IRExprKind::Literal(String::from("\"\\n\"")),
-                expr_type: NodeType::pointer_to(NodeType::Byte)
+                expr_type: NodeType::pointer_to(NodeType::Byte),
             };
             self.writer.expr(IRExpr {
                 kind: IRExprKind::Call(function, vec![empty_line]),
@@ -352,7 +372,7 @@ impl ExprVisitor for IRGen {
         let rhs = rhs.accept(self);
         IRExpr {
             kind: IRExprKind::Binary(Box::new(lhs), op.lexeme().to_string(), Box::new(rhs)),
-            expr_type: self.specialize_expr(expr)
+            expr_type: self.specialize_expr(expr),
         }
     }
 
@@ -360,7 +380,7 @@ impl ExprVisitor for IRGen {
         let operand = operand.accept(self);
         IRExpr {
             kind: IRExprKind::Unary(op.lexeme().to_string(), Box::new(operand)),
-            expr_type: self.specialize_expr(expr)
+            expr_type: self.specialize_expr(expr),
         }
     }
 
@@ -370,7 +390,7 @@ impl ExprVisitor for IRGen {
         target: Option<&Expr>,
         function: &ResolvedToken,
         args: &[Expr],
-    ) -> Self::ExprResult {        
+    ) -> Self::ExprResult {
         let function_symbol = function.get_symbol().unwrap();
         let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
 
@@ -392,8 +412,8 @@ impl ExprVisitor for IRGen {
                 FunctionKind::MetaMethod(owner) if function_symbol.is_init() => {
                     let type_init = self.lib.type_metadata(&owner).unwrap();
                     GenericSpecialization::new(&type_init.generics, explicit_types)
-                },
-                _ => GenericSpecialization::new(&function_metadata.generics, explicit_types)
+                }
+                _ => GenericSpecialization::new(&function_metadata.generics, explicit_types),
             }
         };
 
@@ -412,7 +432,7 @@ impl ExprVisitor for IRGen {
 
         let function_name = if core::is_direct_c_binding(&function_symbol) {
             String::from(function_symbol.last_component())
-        }  else { 
+        } else {
             function_metadata.function_name(self.lib.as_ref(), &specialization)
         };
         let mut args: Vec<_> = args.iter().map(|a| a.accept(self)).collect();
@@ -426,24 +446,27 @@ impl ExprVisitor for IRGen {
                         let expr_type = NodeType::pointer_to(target_expr.expr_type.clone());
                         IRExpr {
                             kind: IRExprKind::Unary(String::from("&"), Box::new(target_expr)),
-                            expr_type
+                            expr_type,
                         }
-                    },
+                    }
                 };
                 args.insert(0, target_expr);
             }
         } else {
             if let FunctionKind::Method(..) = function_metadata.kind {
-                args.insert(0, IRExpr {
-                    kind: IRExprKind::Variable(String::from("self")),
-                    expr_type: self.self_type().unwrap()
-                });
+                args.insert(
+                    0,
+                    IRExpr {
+                        kind: IRExprKind::Variable(String::from("self")),
+                        expr_type: self.self_type().unwrap(),
+                    },
+                );
             }
         }
 
         IRExpr {
             kind: IRExprKind::Call(function_name, args),
-            expr_type: self.specialize_expr(expr)
+            expr_type: self.specialize_expr(expr),
         }
     }
 
@@ -460,19 +483,19 @@ impl ExprVisitor for IRGen {
             ExprKind::Variable(t) if t.get_symbol().unwrap().is_self() => {
                 IRExprKind::DerefFieldAccess(Box::new(target_expr), field_symbol.mangled())
             }
-            _ => IRExprKind::FieldAccess(Box::new(target_expr), field_symbol.mangled())
+            _ => IRExprKind::FieldAccess(Box::new(target_expr), field_symbol.mangled()),
         };
 
         IRExpr {
             kind,
-            expr_type: self.specialize_expr(expr)
+            expr_type: self.specialize_expr(expr),
         }
     }
 
     fn visit_literal_expr(&mut self, expr: &Expr, token: &Token) -> Self::ExprResult {
         IRExpr {
             kind: IRExprKind::Literal(token.lexeme().to_string()),
-            expr_type: self.specialize_expr(expr)
+            expr_type: self.specialize_expr(expr),
         }
     }
 
@@ -485,7 +508,7 @@ impl ExprVisitor for IRGen {
                     let spec_type = nonspec_expr_type.specialize(self.lib.as_ref(), spec);
                     return IRExpr {
                         kind: IRExprKind::ExplicitType,
-                        expr_type: spec_type
+                        expr_type: spec_type,
                     };
                 }
             }
@@ -495,10 +518,14 @@ impl ExprVisitor for IRGen {
         let symbol = name.get_symbol().unwrap();
 
         if let Some(current_type) = self.current_type.as_ref() {
-            let spec = self.func_specialization.as_ref().unwrap().subset(&current_type.symbol);
+            let spec = self
+                .func_specialization
+                .as_ref()
+                .unwrap()
+                .subset(&current_type.symbol);
             let self_expr = IRExpr {
                 kind: IRExprKind::Variable(String::from("self")),
-                expr_type: NodeType::Instance(current_type.symbol.clone(), spec)
+                expr_type: NodeType::Instance(current_type.symbol.clone(), spec),
             };
             if symbol.is_self() {
                 return self_expr;
@@ -506,20 +533,20 @@ impl ExprVisitor for IRGen {
                 let kind = IRExprKind::DerefFieldAccess(
                     Box::new(IRExpr {
                         kind: self_expr.kind,
-                        expr_type: NodeType::pointer_to(self_expr.expr_type)
+                        expr_type: NodeType::pointer_to(self_expr.expr_type),
                     }),
-                    symbol.mangled()
+                    symbol.mangled(),
                 );
                 return IRExpr {
                     kind: kind,
-                    expr_type: expr_type
+                    expr_type: expr_type,
                 };
             }
         }
 
         IRExpr {
             kind: IRExprKind::Variable(symbol.mangled()),
-            expr_type: expr_type
+            expr_type: expr_type,
         }
     }
 
@@ -527,14 +554,19 @@ impl ExprVisitor for IRGen {
         let elements: Vec<_> = elements.iter().map(|e| e.accept(self)).collect();
         IRExpr {
             kind: IRExprKind::Array(elements),
-            expr_type: self.specialize_expr(expr)
+            expr_type: self.specialize_expr(expr),
         }
     }
 
-    fn visit_subscript_expr(&mut self, expr: &Expr, target: &Expr, index: &Expr) -> Self::ExprResult {
+    fn visit_subscript_expr(
+        &mut self,
+        expr: &Expr,
+        target: &Expr,
+        index: &Expr,
+    ) -> Self::ExprResult {
         let array_count = self.array_count(target);
         let array_count = array_count.to_string();
-        
+
         let index = index.accept(self);
         let index = self.writer.declare_temp(index);
 
@@ -544,17 +576,18 @@ impl ExprVisitor for IRGen {
                 String::from(">="),
                 Box::new(IRExpr::int_literal(&array_count)),
             ),
-            expr_type: NodeType::Bool
+            expr_type: NodeType::Bool,
         };
 
-        self.writer.write_guard(guard, "index out of bounds", &expr.span);
+        self.writer
+            .write_guard(guard, "index out of bounds", &expr.span);
         let kind = IRExprKind::Subscript(
             Box::new(target.accept(self)),
-            Box::new(IRExpr::variable(&index))
+            Box::new(IRExpr::variable(&index)),
         );
         IRExpr {
             kind,
-            expr_type: self.specialize_expr(expr)
+            expr_type: self.specialize_expr(expr),
         }
     }
 

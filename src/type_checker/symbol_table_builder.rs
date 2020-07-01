@@ -1,8 +1,8 @@
 use super::{TypeResolution, TypeResolutionError};
+use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::*;
-use crate::diagnostic::*;
 use log::trace;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -114,7 +114,8 @@ impl SymbolTableBuilder {
 
         type_metadata.methods = self.build_functions(&decl.methods);
 
-        self.context.push(Symbol::meta_symbol(self.current_symbol()));
+        self.context
+            .push(Symbol::meta_symbol(self.current_symbol()));
         type_metadata.meta_methods = self.build_functions(&decl.meta_methods);
 
         let init_symbol = Symbol::init_symbol(self.current_symbol());
@@ -221,7 +222,7 @@ impl SymbolTableBuilder {
         let requirements = self.build_functions(&decl.requirements);
         let metadata = TraitMetadata {
             symbol: trait_symbol.clone(),
-            function_requirements: requirements
+            function_requirements: requirements,
         };
         self.symbols.insert_trait_metadata(trait_symbol, metadata);
     }
@@ -252,19 +253,31 @@ impl SymbolTableBuilder {
         generic_symbols
     }
 
-    fn var_decl_type<'b>(&self, var_decl: &'b VariableDecl, enclosing_func: Option<&Symbol>) -> (&'b Token, NodeType) {
-        let resolved_type = self.resolve_type(var_decl.explicit_type.as_ref().unwrap(), enclosing_func);
+    fn var_decl_type<'b>(
+        &self,
+        var_decl: &'b VariableDecl,
+        enclosing_func: Option<&Symbol>,
+    ) -> (&'b Token, NodeType) {
+        let resolved_type =
+            self.resolve_type(var_decl.explicit_type.as_ref().unwrap(), enclosing_func);
         (&var_decl.name.token, resolved_type)
     }
 
-    fn resolve_type(&self, explicit_type: &ExplicitType, enclosing_func: Option<&Symbol>) -> NodeType {
+    fn resolve_type(
+        &self,
+        explicit_type: &ExplicitType,
+        enclosing_func: Option<&Symbol>,
+    ) -> NodeType {
         let resolver = TypeResolution::new(&self.lib, &self.symbols, &self.context, enclosing_func);
         match resolver.resolve(explicit_type) {
             Ok(resolved_type) => resolved_type,
             Err(error) => {
                 let diag = match error {
-                    TypeResolutionError::IncorrectlySpecialized(diag) | TypeResolutionError::Inaccessible(diag) => diag,
-                    TypeResolutionError::NotFound => Diagnostic::error(explicit_type, "Type not found"),
+                    TypeResolutionError::IncorrectlySpecialized(diag)
+                    | TypeResolutionError::Inaccessible(diag) => diag,
+                    TypeResolutionError::NotFound => {
+                        Diagnostic::error(explicit_type, "Type not found")
+                    }
                 };
                 self.reporter.report(diag);
                 NodeType::Ambiguous

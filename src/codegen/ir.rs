@@ -3,7 +3,7 @@ use crate::library::*;
 #[derive(Debug)]
 pub struct IRProgram {
     pub structures: Vec<IRStructure>,
-    pub functions: Vec<IRFunction>
+    pub functions: Vec<IRFunction>,
 }
 
 impl IRProgram {
@@ -18,7 +18,7 @@ impl IRProgram {
 #[derive(Debug)]
 pub struct IRStructure {
     pub name: String,
-    pub fields: Vec<IRVariable>
+    pub fields: Vec<IRVariable>,
 }
 
 #[derive(Debug)]
@@ -26,20 +26,20 @@ pub struct IRFunction {
     pub name: String,
     pub parameters: Vec<IRVariable>,
     pub return_type: NodeType,
-    pub statements: Vec<IRStatement>
+    pub statements: Vec<IRStatement>,
 }
 
 #[derive(Clone, Debug)]
 pub struct IRVariable {
     pub name: String,
-    pub var_type: NodeType
+    pub var_type: NodeType,
 }
 
 impl IRVariable {
     pub fn new(name: &str, var_type: NodeType) -> Self {
         IRVariable {
             name: String::from(name),
-            var_type
+            var_type,
         }
     }
 }
@@ -58,21 +58,21 @@ pub enum IRStatement {
 #[derive(Debug)]
 pub struct IRExpr {
     pub kind: IRExprKind,
-    pub expr_type: NodeType
+    pub expr_type: NodeType,
 }
 
 impl IRExpr {
     pub fn int_literal(slice: &str) -> Self {
         IRExpr {
             kind: IRExprKind::Literal(String::from(slice)),
-            expr_type: NodeType::Int
+            expr_type: NodeType::Int,
         }
     }
 
     pub fn variable(var: &IRVariable) -> Self {
         IRExpr {
             kind: IRExprKind::Variable(var.name.clone()),
-            expr_type: var.var_type.clone()
+            expr_type: var.var_type.clone(),
         }
     }
 
@@ -81,7 +81,7 @@ impl IRExpr {
         let expr_type = NodeType::pointer_to(var.expr_type.clone());
         IRExpr {
             kind: IRExprKind::Unary(String::from("&"), Box::new(var)),
-            expr_type
+            expr_type,
         }
     }
 
@@ -106,5 +106,5 @@ pub enum IRExprKind {
     Literal(String),
     Variable(String),
     ExplicitType,
-    Cast(Box<IRExpr>)
+    Cast(Box<IRExpr>),
 }
