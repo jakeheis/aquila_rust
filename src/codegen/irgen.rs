@@ -81,6 +81,10 @@ impl IRGen {
             panic!()
         }
     }
+
+    fn specialize_expr(&self, expr: &Expr) -> NodeType {
+        expr.get_type().unwrap().specialize_opt(self.lib.as_ref(), self.func_specialization.as_ref())
+    }
 }
 
 impl StmtVisitor for IRGen {
@@ -240,13 +244,14 @@ impl StmtVisitor for IRGen {
         });
 
         let var_type = variable.get_type().unwrap();
-        let local = self.writer.declare_local(variable.get_symbol().unwrap(), NodeType::pointer_to(var_type.clone()));
-        let indexed = IRExpr {
-            kind: IRExprKind::Subscript(Box::new(array), Box::new(IRExpr::variable(&counter))),
-            expr_type: var_type.clone()
-        };
+        let local = self.writer.declare_local(variable.get_symbol().unwrap(), var_type.clone());
+
         self.writer.assign(IRExpr::variable(&local), IRExpr {
-            kind: IRExprKind::Unary(String::from("&"), Box::new(indexed)),
+            kind: IRExprKind::Binary(
+                Box::new(array),
+                String::from("+"),
+                Box::new(IRExpr::variable(&counter))
+            ),
             expr_type: var_type
         });
 
@@ -347,7 +352,7 @@ impl ExprVisitor for IRGen {
         let rhs = rhs.accept(self);
         IRExpr {
             kind: IRExprKind::Binary(Box::new(lhs), op.lexeme().to_string(), Box::new(rhs)),
-            expr_type: expr.get_type().unwrap()
+            expr_type: self.specialize_expr(expr)
         }
     }
 
@@ -355,7 +360,7 @@ impl ExprVisitor for IRGen {
         let operand = operand.accept(self);
         IRExpr {
             kind: IRExprKind::Unary(op.lexeme().to_string(), Box::new(operand)),
-            expr_type: expr.get_type().unwrap()
+            expr_type: self.specialize_expr(expr)
         }
     }
 
@@ -440,7 +445,7 @@ impl ExprVisitor for IRGen {
 
         IRExpr {
             kind: IRExprKind::Call(function_name, args),
-            expr_type: expr.get_type().unwrap()
+            expr_type: self.specialize_expr(expr)
         }
     }
 
@@ -462,31 +467,33 @@ impl ExprVisitor for IRGen {
 
         IRExpr {
             kind,
-            expr_type: expr.get_type().unwrap()
+            expr_type: self.specialize_expr(expr)
         }
     }
 
     fn visit_literal_expr(&mut self, expr: &Expr, token: &Token) -> Self::ExprResult {
         IRExpr {
             kind: IRExprKind::Literal(token.lexeme().to_string()),
-            expr_type: expr.get_type().unwrap()
+            expr_type: self.specialize_expr(expr)
         }
     }
 
     fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
-        let expr_type = expr.get_type().unwrap();
+        let nonspec_expr_type = expr.get_type().unwrap();
 
-        if let NodeType::Metatype(symbol, _) = &expr_type {
-            let spec = self.func_specialization.as_ref().unwrap();
-            if spec.map.contains_key(&symbol) {
-                let spec_type = expr_type.specialize(self.lib.as_ref(), spec);
-                return IRExpr {
-                    kind: IRExprKind::ExplicitType,
-                    expr_type: spec_type
-                };
+        if let NodeType::Metatype(symbol, _) = &nonspec_expr_type {
+            if let Some(spec) = self.func_specialization.as_ref() {
+                if spec.map.contains_key(&symbol) {
+                    let spec_type = nonspec_expr_type.specialize(self.lib.as_ref(), spec);
+                    return IRExpr {
+                        kind: IRExprKind::ExplicitType,
+                        expr_type: spec_type
+                    };
+                }
             }
         }
 
+        let expr_type = self.specialize_expr(expr);
         let symbol = name.get_symbol().unwrap();
 
         if let Some(current_type) = self.current_type.as_ref() {
@@ -519,17 +526,26 @@ impl ExprVisitor for IRGen {
     }
 
     fn visit_array_expr(&mut self, expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
-        unimplemented!()
+        let elements: Vec<_> = elements.iter().map(|e| e.accept(self)).collect();
+        IRExpr {
+            kind: IRExprKind::Array(elements),
+            expr_type: self.specialize_expr(expr)
+        }
     }
 
     fn visit_subscript_expr(&mut self, expr: &Expr, target: &Expr, arg: &Expr) -> Self::ExprResult {
+        // let kind = IRExprKind::Binary(
+        //     Box::new(target.accept(self)),
+        //     String::from("+"),
+        //     Box::new(arg.accept(self))
+        // );
         let kind = IRExprKind::Subscript(
             Box::new(target.accept(self)),
             Box::new(arg.accept(self))
         );
         IRExpr {
             kind,
-            expr_type: expr.get_type().unwrap()
+            expr_type: self.specialize_expr(expr)
         }
     }
 
@@ -539,10 +555,9 @@ impl ExprVisitor for IRGen {
         _explicit_type: &ExplicitType,
         value: &Expr,
     ) -> Self::ExprResult {
-        let cast_type = expr.get_type().unwrap().specialize_opt(self.lib.as_ref(), self.func_specialization.as_ref());
         IRExpr {
             kind: IRExprKind::Cast(Box::new(value.accept(self))),
-            expr_type: cast_type,
+            expr_type: self.specialize_expr(expr),
         }
     }
 }

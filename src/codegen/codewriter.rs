@@ -8,6 +8,7 @@ pub struct CodeWriter {
     program: IRProgram,
     file: RefCell<File>,
     indent: Cell<u32>,
+    temp_count: Cell<u32>,
 }
 
 impl CodeWriter {
@@ -15,7 +16,8 @@ impl CodeWriter {
         CodeWriter {
             program,
             file: RefCell::new(file),
-            indent: Cell::new(0)
+            indent: Cell::new(0),
+            temp_count: Cell::new(0)
         }
     }
 
@@ -140,7 +142,13 @@ impl CodeWriter {
     fn form_expression(&self, expr: &IRExpr) -> String {
         match &expr.kind {
             IRExprKind::FieldAccess(target, field) => {
-                let target = self.form_expression(target);
+                let target_str = self.form_expression(target);
+                let target = if let IRExprKind::Call(..) = &target.kind {
+                    self.write_temp(&target.expr_type, target_str)
+                } else {
+                    target_str
+                };
+                
                 format!("{}.{}", target, field)
             }
             IRExprKind::DerefFieldAccess(target, field) => {
@@ -151,6 +159,13 @@ impl CodeWriter {
                 let args: Vec<_> = args.iter().map(|a| self.form_expression(a)).collect();
                 let args = args.join(",");
                 format!("{}({})", function, args)
+            }
+            IRExprKind::Array(elements) => {
+                let elements: Vec<String> = elements.iter().map(|e| self.form_expression(e)).collect();
+                self.write_temp(
+                    &expr.expr_type,
+                    format!("{{ {} }}", elements.join(",")),
+                )
             }
             IRExprKind::Subscript(target, value) => {
                 let target = self.form_expression(target);
@@ -163,7 +178,20 @@ impl CodeWriter {
                 format!("({}) {} ({})", lhs, op, rhs)
             }
             IRExprKind::Unary(operator, operand) => {
-                let operand = self.form_expression(operand);
+                let operand_str = self.form_expression(operand);
+                let operand = if operator == "&" {
+                    match &operand.kind {
+                        IRExprKind::Unary(inner_op, inner) if inner_op == "*" => {
+                            return self.form_expression(inner);
+                        }
+                        IRExprKind::Variable(..) | IRExprKind::FieldAccess(..) => {
+                            operand_str
+                        },
+                        _ => self.write_temp(&operand.expr_type, operand_str)
+                    }
+                } else {
+                    operand_str
+                };
                 format!("{}({})", operator, operand)
             }
             IRExprKind::Literal(l) => l.clone(),
@@ -205,7 +233,19 @@ impl CodeWriter {
         ));
     }
 
-    pub fn type_and_name(&self, var_type: &NodeType, name: &str) -> String {
+    fn write_temp(&self, temp_type: &NodeType, value: String) -> String {
+        let temp_count = self.temp_count.get();
+        let temp_name = format!("_temp_{}", temp_count);
+        self.temp_count.set(temp_count + 1);
+
+        let temp_type = self.type_and_name(&temp_type, &temp_name);
+        let temp = format!("{} = {};", temp_type, value);
+        self.writeln(&temp);
+
+        temp_name
+    }
+
+    fn type_and_name(&self, var_type: &NodeType, name: &str) -> String {
         let (t, n) = self.convert_type(var_type, String::from(name), false);
         format!("{} {}", t, n)
     }

@@ -8,6 +8,41 @@ use aquila::diagnostic::*;
 mod common;
 use common::*;
 
+#[test]
+fn array() -> Result<(), &'static str> {
+    test_file("array")
+}
+
+#[test]
+fn generics() -> Result<(), &'static str> {
+    test_file("generics")
+}
+
+#[test]
+fn math() -> Result<(), &'static str> {
+    test_file("math")
+}
+
+#[test]
+fn optional() -> Result<(), &'static str> {
+    test_file("optional")
+}
+
+#[test]
+fn string() -> Result<(), &'static str> {
+    test_file("string")
+}
+
+#[test]
+fn type_test() -> Result<(), &'static str> {
+    test_file("type")
+}
+
+#[test]
+fn vector() -> Result<(), &'static str> {
+    test_file("vector")
+}
+
 // #[test]
 // fn gauntlet() -> Result<(), &'static str> {
 //     let i = fs::read_dir("/Users/jakeheiser/Desktop/Projects/Rust/aquila/tests/aquila").unwrap();
@@ -20,16 +55,6 @@ use common::*;
 //     }
 //     Ok(())
 // }
-
-#[test]
-fn array() -> Result<(), &'static str> {
-    test_file("array")
-}
-
-#[test]
-fn vector() -> Result<(), &'static str> {
-    test_file("vector")
-}
 
 fn test_file(file_root: &str) -> Result<(), &'static str> {
     let path = format!("/Users/jakeheiser/Desktop/Projects/Rust/aquila/tests/aquila/{}.aq", file_root);
