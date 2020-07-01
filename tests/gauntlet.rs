@@ -8,21 +8,34 @@ use aquila::diagnostic::*;
 mod common;
 use common::*;
 
+// #[test]
+// fn gauntlet() -> Result<(), &'static str> {
+//     let i = fs::read_dir("/Users/jakeheiser/Desktop/Projects/Rust/aquila/tests/aquila").unwrap();
+//     for file in i {
+//         println!(
+//             "Testing file: {}",
+//             file.as_ref().ok().unwrap().path().to_str().unwrap()
+//         );
+//         test_file(file.unwrap().path())?;
+//     }
+//     Ok(())
+// }
+
 #[test]
-fn gauntlet() -> Result<(), &'static str> {
-    let i = fs::read_dir("/Users/jakeheiser/Desktop/Projects/Rust/aquila/tests/aquila").unwrap();
-    for file in i {
-        println!(
-            "Testing file: {}",
-            file.as_ref().ok().unwrap().path().to_str().unwrap()
-        );
-        test_file(file.unwrap().path())?;
-    }
-    Ok(())
+fn array() -> Result<(), &'static str> {
+    test_file("array")
 }
 
-fn test_file(file: PathBuf) -> Result<(), &'static str> {
-    let read = fs::read_to_string(file.clone()).unwrap();
+#[test]
+fn vector() -> Result<(), &'static str> {
+    test_file("vector")
+}
+
+fn test_file(file_root: &str) -> Result<(), &'static str> {
+    let path = format!("/Users/jakeheiser/Desktop/Projects/Rust/aquila/tests/aquila/{}.aq", file_root);
+    let path = PathBuf::from(&path);
+
+    let read = fs::read_to_string(path).unwrap();
     let lines: Vec<_> = read.lines().collect();
 
     if lines[0] == "/// skip" {
@@ -70,7 +83,7 @@ fn test_file(file: PathBuf) -> Result<(), &'static str> {
 
     fs::create_dir_all("/tmp/aquila").unwrap();
 
-    let main_file_path = format!("/tmp/aquila/{}_main.aq", file.file_stem().unwrap().to_str().unwrap());
+    let main_file_path = format!("/tmp/aquila/{}_main.aq", file_root);
     let mut main_file = File::create(main_file_path.clone()).unwrap();
     for line in &main {
         writeln!(main_file, "{}", line).unwrap();
@@ -78,7 +91,7 @@ fn test_file(file: PathBuf) -> Result<(), &'static str> {
     expect_success(Path::new(&main_file_path).to_path_buf(), expected_lines)?;
 
     for (index, fail_zone) in fail_zones.iter().enumerate() {
-        let file_path = format!("/tmp/aquila/{}_fail_{}.aq", file.file_stem().unwrap().to_str().unwrap(), index);
+        let file_path = format!("/tmp/aquila/{}_fail_{}.aq", file_root, index);
         let mut file = File::create(file_path.clone()).unwrap();
         for line in &main {
             writeln!(file, "{}", line).unwrap();
@@ -134,7 +147,7 @@ fn run_file(file: PathBuf) -> (String, Vec<Diagnostic>) {
     let (reporter, mut diagnostics) = TestReporter::new();
 
     let source = aquila::source::file(file.to_str().unwrap());
-    match aquila::run_with_reporter(source, reporter) {
+    match aquila::run_with_reporter(source, reporter, true) {
         Ok(_) => {
             assert_eq!(diagnostics.unwrap().len(), 0);
 

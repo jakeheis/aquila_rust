@@ -285,13 +285,6 @@ impl StmtVisitor for ASTPrinter {
             expr.accept(visitor);
         })
     }
-
-    fn visit_builtin_stmt(&mut self, inner: &Box<Stmt>) -> Self::StmtResult {
-        self.write_ln("Builtin");
-        self.indent(|visitor| {
-            inner.accept(visitor);
-        })
-    }
 }
 
 impl ExprVisitor for ASTPrinter {

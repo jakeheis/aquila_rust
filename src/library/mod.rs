@@ -264,7 +264,11 @@ impl Lib {
                 }
                 StmtKind::FunctionDecl(..) => {
                     if let StmtKind::FunctionDecl(decl) = stmt.kind {
-                        function_decls.push(decl);
+                        if decl.is_builtin {
+                            builtins.push(decl);
+                        } else {
+                            function_decls.push(decl);
+                        }
                     }
                 }
                 StmtKind::TraitDecl(..) => {
@@ -275,14 +279,6 @@ impl Lib {
                 StmtKind::ConformanceDecl(..) => {
                     if let StmtKind::ConformanceDecl(decl) = stmt.kind {
                         conformance_decls.push(decl);
-                    }
-                }
-                StmtKind::Builtin(..) => {
-                    if let StmtKind::Builtin(inner) = stmt.kind {
-                        match inner.kind {
-                            StmtKind::FunctionDecl(decl) => builtins.push(decl),
-                            _ => panic!("Can only have builtin functions (right now)"),
-                        }
                     }
                 }
                 _ => other.push(stmt),

@@ -23,6 +23,7 @@ pub struct FunctionDecl {
     pub body: Vec<Stmt>,
     pub is_meta: bool,
     pub is_public: bool,
+    pub is_builtin: bool,
 }
 
 #[derive(Debug)]
@@ -66,7 +67,6 @@ pub enum StmtKind {
     ReturnStmt(Option<Expr>),
     PrintStmt(Option<Expr>),
     ExpressionStmt(Expr),
-    Builtin(Box<Stmt>),
 }
 
 #[derive(Debug)]
@@ -97,7 +97,6 @@ impl Stmt {
             StmtKind::ReturnStmt(expr) => visitor.visit_return_stmt(&self, expr),
             StmtKind::PrintStmt(expr) => visitor.visit_print_stmt(expr),
             StmtKind::ExpressionStmt(expr) => visitor.visit_expression_stmt(expr),
-            StmtKind::Builtin(stmt) => visitor.visit_builtin_stmt(&stmt),
         }
     }
 
@@ -135,6 +134,7 @@ impl Stmt {
         body: Vec<Stmt>,
         right_brace_span: &Span,
         is_meta: bool,
+        is_builtin: bool,
     ) -> Self {
         let span = Span::join(&start_span, right_brace_span);
         let generics: Vec<_> = generics
@@ -148,7 +148,8 @@ impl Stmt {
             return_type,
             body,
             is_meta,
-            is_public: false
+            is_public: false,
+            is_builtin
         };
         Stmt::new(StmtKind::FunctionDecl(decl), span)
     }
@@ -247,11 +248,6 @@ impl Stmt {
         let span = expr.span.clone();
         Stmt::new(StmtKind::ExpressionStmt(expr), span)
     }
-
-    pub fn builtin(stmt: Stmt) -> Self {
-        let span = stmt.span().clone();
-        Stmt::new(StmtKind::Builtin(Box::new(stmt)), span)
-    }
 }
 
 impl ContainsSpan for Stmt {
@@ -294,8 +290,6 @@ pub trait StmtVisitor {
     fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Self::StmtResult;
 
     fn visit_expression_stmt(&mut self, expr: &Expr) -> Self::StmtResult;
-
-    fn visit_builtin_stmt(&mut self, inner: &Box<Stmt>) -> Self::StmtResult;
 }
 
 // Tokens

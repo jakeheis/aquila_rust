@@ -1,5 +1,5 @@
 use crate::library::*;
-use super::irgen::IRWriter;
+use super::irwriter::IRWriter;
 use super::ir::*;
 
 pub fn is_direct_c_binding(symbol: &Symbol) -> bool {
@@ -14,7 +14,7 @@ pub fn is_direct_c_binding(symbol: &Symbol) -> bool {
 
 pub fn write(symbol: &Symbol, writer: &mut IRWriter) {
     match symbol.last_component() {
-        "ptr_offset" => write_ptr_offset(writer),
+        "ptr_offset" => write_ptr_offset(writer, symbol),
         "_read_line" => write_read_line(writer),
         name => panic!("Haven't implemented builtin {}", name),
     }
@@ -34,29 +34,52 @@ pub fn add_builtin_symbols(_lib: &Lib) {
 //     false
 // }
 
-fn write_ptr_offset(writer: &mut IRWriter) {
-    // let line = String::from("(char*)stdlib__ptr_offset__pointer + stdlib__ptr_offset__distance");
-    // writer.write_return(Some(line));
+fn write_ptr_offset(writer: &mut IRWriter, func_symbol: &Symbol) {
+    let pointer_param = Symbol::new_str(func_symbol, "pointer");
+    let distance_param = Symbol::new_str(func_symbol, "distance");
+
+    let pointer = IRVariable::new(&pointer_param.mangled(), NodeType::pointer_to(NodeType::Any));
+    let distance = IRVariable::new(&distance_param.mangled(), NodeType::Int);
+
+    let pointer = IRExpr::variable(&pointer);
+    let casted = IRExpr {
+        kind: IRExprKind::Cast(Box::new(pointer)),
+        expr_type: NodeType::pointer_to(NodeType::Byte)
+    };
+    let distance = IRExpr::variable(&distance);
+    let addition = IRExpr {
+        kind: IRExprKind::Binary(Box::new(casted), String::from("+"), Box::new(distance)),
+        expr_type: NodeType::pointer_to(NodeType::Byte)
+    };
+    writer.return_value(Some(addition));
 }
 
 fn write_read_line(writer: &mut IRWriter) {
-    // writer.add_stmt(IRStatement::DeclLocal(IRVariable {
-    //     name: String::from("line"),
-    //     var_type: NodeType::pointer_to(NodeType::Byte)
-    // }));
-    // writer.assign("line", IRExpr::Literal(String::from("NULL")));
+    let line = IRVariable::new("line", NodeType::pointer_to(NodeType::Byte));
+    let size = IRVariable::new("size", NodeType::Int);
     
-    // writer.add_stmt(IRStatement::DeclLocal(IRVariable {
-    //     name: String::from("size"),
-    //     var_type: NodeType::Int
-    // }));
+    writer.declare_var(&line);
+    writer.assign_var(&line, IRExpr {
+        kind: IRExprKind::Literal(String::from("NULL")),
+        expr_type: NodeType::pointer_to(NodeType::Byte)
+    });
 
-    // let expr = IRExpr::Call(
-    //     String::from("getline"), 
-    //     vec![]
-    // )
+    writer.declare_var(&size);
 
-    // writer.add_stmt(IRStatement::Execute
-    // writer.writeln("getline(&line, &size, stdin);");
-    // writer.write_return(Some(String::from("line")));
+    let args = vec![
+        IRExpr::address_of(&line),
+        IRExpr::address_of(&size),
+        IRExpr {
+            kind: IRExprKind::Literal(String::from("stdin")),
+            expr_type: NodeType::Void,
+        }
+    ];
+
+    let call = IRExpr {
+        kind: IRExprKind::Call(String::from("getline"), args),
+        expr_type: NodeType::Void
+    };
+    writer.expr(call);
+
+    writer.return_var(&line);
 }

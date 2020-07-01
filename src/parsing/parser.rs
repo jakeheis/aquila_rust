@@ -36,15 +36,9 @@ impl Parser {
     fn stmt_list(&mut self, context: Context, end: Option<TokenKind>) -> Vec<Stmt> {
         let mut stmts: Vec<Stmt> = Vec::new();
         while !self.is_at_end() && Some(self.peek()) != end {
-            let is_builtin = self.matches(TokenKind::Builtin);
             match self.statement(context) {
                 Ok(stmt) => {
                     trace!(target: "parser", "Parsed stmt {}", stmt.span().lexeme());
-                    let stmt = if is_builtin {
-                        Stmt::builtin(stmt)
-                    } else {
-                        stmt
-                    };
                     stmts.push(stmt)
                 }
                 Err(diagnostic) => {
@@ -61,7 +55,16 @@ impl Parser {
     }
 
     fn statement(&mut self, context: Context) -> Result<Stmt> {
-        if self.matches(TokenKind::Pub) {
+        if self.matches(TokenKind::Builtin) {
+            self.consume(TokenKind::Def, "Expect 'def' after 'builtin'")?;
+            let decl = self.function_decl(false, true, true)?;
+            if let StmtKind::FunctionDecl(mut func) = decl.kind {
+                func.is_builtin = true;
+                Ok(Stmt::new(StmtKind::FunctionDecl(func), decl.span))
+            } else {
+                panic!()
+            }
+        } else if self.matches(TokenKind::Pub) {
             let pub_span = self.previous().span().clone();
             if context == Context::TopLevel || context == Context::InsideType {
                 let mut stmt = self.statement(context)?;
@@ -94,7 +97,7 @@ impl Parser {
             }
         } else if self.matches(TokenKind::Def) {
             if context == Context::TopLevel || context == Context::InsideType {
-                self.function_decl(false, true)
+                self.function_decl(false, true, false)
             } else {
                 Err(Diagnostic::error(
                     self.previous(),
@@ -103,7 +106,7 @@ impl Parser {
             }
         } else if self.matches(TokenKind::Meta) {
             if context == Context::InsideType {
-                self.function_decl(true, true)
+                self.function_decl(true, true, false)
             } else {
                 Err(Diagnostic::error(
                     self.previous(),
@@ -271,7 +274,7 @@ impl Parser {
         ))
     }
 
-    fn function_decl(&mut self, meta: bool, parse_body: bool) -> Result<Stmt> {
+    fn function_decl(&mut self, meta: bool, parse_body: bool, builtin: bool) -> Result<Stmt> {
         let start_span = self.previous().span.clone();
 
         if meta {
@@ -336,6 +339,7 @@ impl Parser {
             body,
             self.previous().span(),
             meta,
+            builtin,
         ))
     }
 
@@ -378,7 +382,7 @@ impl Parser {
                     "Traits can only require functions",
                 ));
             };
-            if let StmtKind::FunctionDecl(decl) = self.function_decl(meta, false)?.kind {
+            if let StmtKind::FunctionDecl(decl) = self.function_decl(meta, false, false)?.kind {
                 requirements.push(decl);
             } else {
                 unreachable!()
@@ -415,7 +419,7 @@ impl Parser {
                     "Trait conformances can only implement functions",
                 ));
             };
-            if let StmtKind::FunctionDecl(decl) = self.function_decl(meta, true)?.kind {
+            if let StmtKind::FunctionDecl(decl) = self.function_decl(meta, true, false)?.kind {
                 impls.push(decl);
             } else {
                 unreachable!()

@@ -90,15 +90,10 @@ impl CodeWriter {
                 let line = format!("{};", self.type_and_name(&var.var_type, &var.name));
                 self.writeln(&line);
             }
-            IRStatement::AssignLocal(local, value) => {
-                let value = self.form_expression(value);
-                let line = format!("{} = {};", local, value);
-                self.writeln(&line);
-            }
-            IRStatement::AssignField(object, field, value) => {
+            IRStatement::Assign(object, value) => {
                 let object = self.form_expression(object);
                 let value = self.form_expression(value);
-                let line = format!("{}.{} = {};", object, field, value);
+                let line = format!("{} = {};", object, value);
                 self.writeln(&line);
             }
             IRStatement::Loop(block) => {

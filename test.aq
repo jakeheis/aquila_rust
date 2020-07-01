@@ -1,25 +1,29 @@
-print 4;
+// print 4;
 
-type Adder {
-    let lhs: int;
-    let rhs: int;
+// type Adder {
+//     let lhs: int;
+//     let rhs: int;
 
-    def sum(hi: bool, yo: int, third: int): int {
-        return self.lhs + rhs;
-    }
+//     def sum(hi: bool, yo: int, third: int): int {
+//         return self.lhs + rhs;
+//     }
 
-}
+// }
 
-let a = 4 + 5;
-print a;
+let vector = Vec[int].new();
+vector.insert(2);
+vector.insert(4);
 
-let adder = Adder(1, 2);
-adder.sum(false, 4, a);
+// let a = 4 + 5;
+// print a;
 
-while a > 6 {
-  print a;
-  a = a - 1;
-}
+// let adder = Adder(1, 2);
+// adder.sum(false, 4, a);
+
+// while a > 6 {
+//   print a;
+//   a = a - 1;
+// }
 
 /*
 enum Hello {

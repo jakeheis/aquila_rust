@@ -5,7 +5,7 @@ use crate::parsing::*;
 use crate::lexing::*;
 use super::core;
 use log::trace;
-use crate::source::*;
+use super::irwriter::IRWriter;
 
 pub struct IRGen {
     lib: Rc<Lib>,
@@ -34,16 +34,19 @@ impl IRGen {
         for f in &lib.function_decls {
             self.visit_function_decl(f);
         }
-
-        self.writer.start_block();
-        for s in &lib.other {
-            s.accept(&mut self);
+        for f in &lib.builtins {
+            self.visit_function_decl(f);
         }
-        self.writer.return_value(Some(IRExpr {
-            kind: IRExprKind::Literal(String::from("0")),
-            expr_type: NodeType::Int
-        }));
-        self.writer.end_decl_main();
+
+        if !lib.other.is_empty() {
+            self.writer.start_block();
+            self.func_specialization = Some(GenericSpecialization::empty());
+            for s in &lib.other {
+                s.accept(&mut self);
+            }
+            self.writer.return_value(Some(IRExpr::int_literal("0")));
+            self.writer.end_decl_main();
+        }
 
         self.writer.program
     }
@@ -100,18 +103,14 @@ impl StmtVisitor for IRGen {
             .return_type
             .specialize(self.lib.as_ref(), &spec);
 
+            let new_item = IRVariable::new("new_item", instance_type.clone());
+
             self.writer.start_block();
-            self.writer.declare_local_str(
-                "new_item",
-                instance_type.clone(),
-            );
+            self.writer.declare_var(&new_item);
             
             for (field, field_type) in type_metadata.field_symbols.iter().zip(&type_metadata.field_types) {
-                let v = IRExpr {
-                    kind: IRExprKind::Variable(String::from("new_item")),
-                    expr_type: instance_type.clone()
-                };
-                self.writer.assign_field(v, &field.mangled(), IRExpr {
+                let field_expr = IRExpr::field(&new_item, &field.mangled(), field_type.clone());
+                self.writer.assign(field_expr, IRExpr {
                     kind: IRExprKind::Variable(field.mangled()),
                     expr_type: field_type.clone()
                 });
@@ -137,6 +136,7 @@ impl StmtVisitor for IRGen {
 
     fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Self::StmtResult {
         let func_symbol = decl.name.get_symbol().unwrap();
+
         if core::is_direct_c_binding(&func_symbol) {
             return;
         }
@@ -149,7 +149,7 @@ impl StmtVisitor for IRGen {
             self.func_specialization = Some(specialization.clone());
     
             self.writer.start_block();
-            if false {
+            if decl.is_builtin {
                 core::write(&func_symbol, &mut self.writer);
             } else {
                 self.gen_stmts(&decl.body);
@@ -176,7 +176,7 @@ impl StmtVisitor for IRGen {
 
         if let Some(init_value) = decl.initial_value.as_ref() {
             let init_value = init_value.accept(self);
-            self.writer.assign_local(&local, init_value);
+            self.writer.assign(IRExpr::variable(&local), init_value);
         }
     }
 
@@ -224,8 +224,7 @@ impl StmtVisitor for IRGen {
         let array = array_expr.accept(self);
         let limit = self.array_count(array_expr);
 
-        let counter = String::from("i");
-        self.writer.declare_local_str(&counter, NodeType::Int);
+        let counter = self.writer.declare_local_str("i", NodeType::Int);
         
         self.writer.start_block();
 
@@ -233,15 +232,9 @@ impl StmtVisitor for IRGen {
         self.writer.break_loop();
         self.writer.end_if_block(IRExpr {
             kind: IRExprKind::Binary(
-                Box::new(IRExpr {
-                    kind: IRExprKind::Variable(counter.clone()),
-                    expr_type: NodeType::Int
-                }),
+                Box::new(IRExpr::variable(&counter)),
                 String::from(">="),
-                Box::new(IRExpr {
-                    kind: IRExprKind::Literal(limit.to_string()),
-                    expr_type: NodeType::Int
-                }),
+                Box::new(IRExpr::int_literal(&limit.to_string()))
             ),
             expr_type: NodeType::Bool
         });
@@ -249,29 +242,20 @@ impl StmtVisitor for IRGen {
         let var_type = variable.get_type().unwrap();
         let local = self.writer.declare_local(variable.get_symbol().unwrap(), NodeType::pointer_to(var_type.clone()));
         let indexed = IRExpr {
-            kind: IRExprKind::Subscript(Box::new(array), Box::new(IRExpr {
-                kind: IRExprKind::Variable(counter.clone()),
-                expr_type: NodeType::Int
-            })),
+            kind: IRExprKind::Subscript(Box::new(array), Box::new(IRExpr::variable(&counter))),
             expr_type: var_type.clone()
         };
-        self.writer.assign_local(&local, IRExpr {
+        self.writer.assign(IRExpr::variable(&local), IRExpr {
             kind: IRExprKind::Unary(String::from("&"), Box::new(indexed)),
             expr_type: var_type
         });
 
         self.gen_stmts(body);
-        self.writer.assign_local(&counter, IRExpr {
+        self.writer.assign(IRExpr::variable(&counter), IRExpr {
             kind: IRExprKind::Binary(
-                Box::new(IRExpr {
-                    kind: IRExprKind::Variable(counter.clone()),
-                    expr_type: NodeType::Int,
-                }),
+                Box::new(IRExpr::variable(&counter)),
                 String::from("+"),
-                Box::new(IRExpr {
-                    kind: IRExprKind::Literal(String::from("1")),
-                    expr_type: NodeType::Int,
-                })
+                Box::new(IRExpr::int_literal("1"))
             ),
             expr_type: NodeType::Int
         });
@@ -281,15 +265,12 @@ impl StmtVisitor for IRGen {
     fn visit_return_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult {
         let ret = expr.as_ref().map(|e| e.accept(self));
         self.writer.return_value(ret);
-        // let val = expr.as_ref().map(|e| e.accept(self));
-        // self.writer.write_return(val)
     }
 
     fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Self::StmtResult {        
         let function = String::from("printf");
 
         if let Some(expr) = expr.as_ref() {
-            println!("visiting print of {}", expr.span().lexeme());
             let node_type = expr.get_type().unwrap();
             if let NodeType::Instance(type_symbol, spec) = node_type {
                 let full_symbol = Symbol::new_str(&type_symbol, "write");
@@ -333,29 +314,13 @@ impl StmtVisitor for IRGen {
 
     fn visit_expression_stmt(&mut self, expr: &Expr) -> Self::StmtResult {
         if let ExprKind::Assignment(target, value) = &expr.kind {
+            let target = target.accept(self);
             let value = value.accept(self);
-            match &target.kind {
-                ExprKind::Variable(name) => {
-                    let local_name = name.get_symbol().unwrap().mangled();
-                    self.writer.assign_local(&local_name, value);
-                },
-                ExprKind::Field(target, field) => {
-                    let target = target.accept(self);
-                    let field_name = field.get_symbol().unwrap().mangled();
-                    self.writer.assign_field(target, &field_name, value);
-                },
-                _ => unreachable!()
-            }
+            self.writer.assign(target, value);
         } else {
             let expr = expr.accept(self);
             self.writer.expr(expr);
         }
-    }
-
-    fn visit_builtin_stmt(&mut self, inner: &Box<Stmt>) {
-        // self.is_builtin = true;
-        // inner.accept(self);
-        // self.is_builtin = false;
     }
 }
 
@@ -366,10 +331,9 @@ impl ExprVisitor for IRGen {
         &mut self,
         _expr: &Expr,
         _target: &Expr,
-        value: &Expr,
+        _value: &Expr,
     ) -> Self::ExprResult {
-        value.accept(self)
-        // self.writer
+        unreachable!()
     }
 
     fn visit_binary_expr(
@@ -510,8 +474,6 @@ impl ExprVisitor for IRGen {
     }
 
     fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
-        // IRExpr::Variable(name.get_symbol().unwrap().mangled())
-
         let expr_type = expr.get_type().unwrap();
 
         if let NodeType::Metatype(symbol, _) = &expr_type {
@@ -577,168 +539,10 @@ impl ExprVisitor for IRGen {
         _explicit_type: &ExplicitType,
         value: &Expr,
     ) -> Self::ExprResult {
+        let cast_type = expr.get_type().unwrap().specialize_opt(self.lib.as_ref(), self.func_specialization.as_ref());
         IRExpr {
             kind: IRExprKind::Cast(Box::new(value.accept(self))),
-            expr_type: expr.get_type().unwrap(),
+            expr_type: cast_type,
         }
     }
-}
-
-pub struct IRWriter {
-    lib: Rc<Lib>,
-    program: IRProgram,
-    blocks: Vec<Vec<IRStatement>>
-}
-
-impl IRWriter {
-    fn new(lib: Rc<Lib>) -> Self {
-        IRWriter {
-            lib,
-            program: IRProgram::new(),
-            blocks: Vec::new()
-        }
-    }
-
-    pub fn declare_struct(
-        &mut self,
-        type_metadata: &TypeMetadata,
-        specialization: &GenericSpecialization,
-    ) {
-        let name = type_metadata.type_name(specialization);
-
-        let fields: Vec<_> = type_metadata
-            .field_types
-            .iter()
-            .zip(&type_metadata.field_symbols)
-            .map(|(node_type, symbol)| {
-                IRVariable {
-                    name: symbol.mangled(),
-                    var_type: node_type.specialize(self.lib.as_ref(), specialization)
-                }
-            }).collect();
-
-        let structure = IRStructure {
-            name,
-            fields
-        };
-        self.program.structures.push(structure);
-    }
-
-    pub fn start_block(&mut self,) {
-        self.blocks.push(Vec::new());
-    }
-
-    pub fn end_decl_main(&mut self) {
-        let main = IRFunction {
-            name: String::from("main"),
-            parameters: Vec::new(),
-            return_type: NodeType::Int,
-            statements: self.blocks.pop().unwrap(),
-        };
-        self.program.functions.push(main);
-    }
-
-    pub fn end_decl_func(&mut self, function: &FunctionMetadata, specialization: &GenericSpecialization) {
-        let mut parameters: Vec<_> = function
-            .parameter_types
-            .iter()
-            .zip(&function.parameter_symbols)
-            .map(|(param_type, symbol)| {
-                IRVariable {
-                    name: symbol.mangled(),
-                    var_type: param_type.clone(),
-                }
-            })
-            .collect();
-
-        if let FunctionKind::Method(owner) = &function.kind {
-            let self_instance = NodeType::Instance(owner.clone(), specialization.subset(owner));
-            let self_type = NodeType::pointer_to(self_instance);
-            parameters.insert(0, IRVariable {
-                name: String::from("self"),
-                var_type: self_type
-            });
-        }
-
-        let function = IRFunction {
-            name: function.function_name(self.lib.as_ref(), specialization),
-            parameters,
-            return_type: function.return_type.clone(),
-            statements: self.blocks.pop().unwrap()
-        };
-
-        self.program.functions.push(function);
-    }
-
-    pub fn end_if_block(&mut self, condition: IRExpr) {
-        let if_block = self.blocks.pop().unwrap();
-        self.add_stmt(IRStatement::Condition(condition, if_block, Vec::new()));
-    }
-
-    pub fn end_if_else_blocks(&mut self, condition: IRExpr) {
-        let else_block = self.blocks.pop().unwrap();
-        let if_block = self.blocks.pop().unwrap();
-        self.add_stmt(IRStatement::Condition(condition, if_block, else_block));
-    }
-
-    pub fn end_loop(&mut self) {
-        let loop_stmt = IRStatement::Loop(self.blocks.pop().unwrap());
-        self.add_stmt(loop_stmt);
-    }
-
-    pub fn declare_local(&mut self, symbol: Symbol, var_type: NodeType) -> String {
-        let name = symbol.mangled();
-        self.declare_local_str(&name, var_type);
-        name
-    }
-
-    pub fn declare_local_str(&mut self, name: &str, var_type: NodeType) {
-        let var = IRVariable {
-            name: String::from(name),
-            var_type,
-        };
-        self.add_stmt(IRStatement::DeclLocal(var));
-    }
-
-    pub fn assign_local(&mut self, var: &str, value: IRExpr) {
-        self.add_stmt(IRStatement::AssignLocal(String::from(var), value));
-    }
-
-    pub fn assign_field(&mut self, var: IRExpr, field: &str, value: IRExpr) {
-        self.add_stmt(IRStatement::AssignField(var, String::from(field), value));
-    }
-
-    pub fn return_value(&mut self, expr: Option<IRExpr>) {
-        self.add_stmt(IRStatement::Return(expr));
-    }
-
-    pub fn expr(&mut self, expr: IRExpr) {
-        self.add_stmt(IRStatement::Execute(expr));
-    }
-
-    pub fn break_loop(&mut self) {
-        self.add_stmt(IRStatement::Break);
-    }
-
-    pub fn add_stmt(&mut self, stmt: IRStatement) {
-        self.body().push(stmt);
-    }
-
-    pub fn body(&mut self) -> &mut Vec<IRStatement> {
-        self.blocks.last_mut().unwrap()
-    }
-
-    // pub fn write_guard<T: ContainsSpan>(&mut self, guard: String, message: &str, span: &T) {
-    //     self.start_condition_block("if", guard);
-
-    //     let message = format!(
-    //         "\\nFatal error: {}\\n\\n{}\\n",
-    //         message,
-    //         span.span().location(),
-    //     );
-
-    //     self.writeln(&format!("printf(\"{}\\n\");", message));
-    //     self.writeln("exit(1);");
-    //     self.end_conditional_block();
-    // }
 }

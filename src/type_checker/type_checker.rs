@@ -433,8 +433,4 @@ impl StmtVisitor for TypeChecker {
             guarantees_return: false,
         }
     }
-
-    fn visit_builtin_stmt(&mut self, _inner: &Box<Stmt>) -> Self::StmtResult {
-        unreachable!()
-    }
 }

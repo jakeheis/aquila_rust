@@ -11,6 +11,7 @@ use std::process::Command;
 use std::rc::Rc;
 use super::irgen::IRGen;
 use super::codewriter::CodeWriter;
+use super::ir::IRProgram;
 
 #[derive(PartialEq)]
 enum CodegenStage {
@@ -31,12 +32,25 @@ pub struct Codegen {
 }
 
 impl Codegen {
+    fn gen_ir(lib: Lib) -> IRProgram {
+        let lib = Rc::new(lib);
+        let mut program = IRGen::new(Rc::clone(&lib)).generate();
+        let mut lib = Rc::try_unwrap(lib).ok().unwrap();
+
+        let deps = std::mem::replace(&mut lib.dependencies, Vec::new());
+        for dep in deps {
+            let mut dep_program = Codegen::gen_ir(dep);
+            program.structures.append(&mut dep_program.structures);
+            program.functions.append(&mut dep_program.functions);
+        }
+
+        program
+    }
+
     pub fn generate(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {
         SpecializationPropagator::propogate(&mut lib);
 
-        let lib = Rc::new(lib);
-        let ir_gen = IRGen::new(lib);
-        let ir = ir_gen.generate();
+        let ir = Codegen::gen_ir(lib);
 
         // println!("{:#?}", ir);
 
@@ -396,12 +410,6 @@ impl StmtVisitor for Codegen {
         let expr = expr.accept(self);
         let line = format!("{};", expr);
         self.writer.writeln(&line);
-    }
-
-    fn visit_builtin_stmt(&mut self, inner: &Box<Stmt>) {
-        self.is_builtin = true;
-        inner.accept(self);
-        self.is_builtin = false;
     }
 }
 
