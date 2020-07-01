@@ -370,9 +370,7 @@ impl ExprVisitor for IRGen {
         target: Option<&Expr>,
         function: &ResolvedToken,
         args: &[Expr],
-    ) -> Self::ExprResult {
-        // let args: Vec<_> = args.iter().map(|a| a.accept(self)).collect();
-        
+    ) -> Self::ExprResult {        
         let function_symbol = function.get_symbol().unwrap();
         let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
 
@@ -420,8 +418,8 @@ impl ExprVisitor for IRGen {
         let mut args: Vec<_> = args.iter().map(|a| a.accept(self)).collect();
 
         if let Some(target) = target {
-            let target_expr = target.accept(self);
             if let FunctionKind::Method(..) = function_metadata.kind {
+                let target_expr = target.accept(self);
                 let target_expr = match &target_expr.kind {
                     IRExprKind::Variable(v) if v == "self" => target_expr,
                     _ => {
@@ -533,15 +531,26 @@ impl ExprVisitor for IRGen {
         }
     }
 
-    fn visit_subscript_expr(&mut self, expr: &Expr, target: &Expr, arg: &Expr) -> Self::ExprResult {
-        // let kind = IRExprKind::Binary(
-        //     Box::new(target.accept(self)),
-        //     String::from("+"),
-        //     Box::new(arg.accept(self))
-        // );
+    fn visit_subscript_expr(&mut self, expr: &Expr, target: &Expr, index: &Expr) -> Self::ExprResult {
+        let array_count = self.array_count(target);
+        let array_count = array_count.to_string();
+        
+        let index = index.accept(self);
+        let index = self.writer.declare_temp(index);
+
+        let guard = IRExpr {
+            kind: IRExprKind::Binary(
+                Box::new(IRExpr::variable(&index)),
+                String::from(">="),
+                Box::new(IRExpr::int_literal(&array_count)),
+            ),
+            expr_type: NodeType::Bool
+        };
+
+        self.writer.write_guard(guard, "index out of bounds", &expr.span);
         let kind = IRExprKind::Subscript(
             Box::new(target.accept(self)),
-            Box::new(arg.accept(self))
+            Box::new(IRExpr::variable(&index))
         );
         IRExpr {
             kind,

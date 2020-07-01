@@ -1,11 +1,13 @@
 use super::ir::*;
 use crate::library::*;
 use std::rc::Rc;
+use crate::source::Span;
 
 pub struct IRWriter {
     lib: Rc<Lib>,
     pub program: IRProgram,
-    blocks: Vec<Vec<IRStatement>>
+    blocks: Vec<Vec<IRStatement>>,
+    temp_count: usize,
 }
 
 impl IRWriter {
@@ -13,7 +15,8 @@ impl IRWriter {
         IRWriter {
             lib,
             program: IRProgram::new(),
-            blocks: Vec::new()
+            blocks: Vec::new(),
+            temp_count: 0,
         }
     }
 
@@ -121,6 +124,18 @@ impl IRWriter {
         self.add_stmt(IRStatement::DeclLocal(var.clone()));
     }
 
+    pub fn declare_temp(&mut self, expr: IRExpr) -> IRVariable {
+        let var = IRVariable {
+            name: format!("ir_tmp_{}", self.temp_count),
+            var_type: expr.expr_type.clone()
+        };
+        self.temp_count = self.temp_count + 1;
+
+        self.declare_var(&var);
+        self.assign(IRExpr::variable(&var), expr);
+        var
+    }
+
     pub fn assign(&mut self, var: IRExpr, value: IRExpr) {
         self.add_stmt(IRStatement::Assign(var, value));
     }
@@ -128,10 +143,6 @@ impl IRWriter {
     pub fn assign_var(&mut self, var: &IRVariable, value: IRExpr) {
         self.add_stmt(IRStatement::Assign(IRExpr::variable(var), value));
     }
-
-    // pub fn assign_field(&mut self, var: IRExpr, field: &str, value: IRExpr) {
-    //     self.add_stmt(IRStatement::AssignField(var, String::from(field), value));
-    // }
 
     pub fn return_value(&mut self, expr: Option<IRExpr>) {
         self.add_stmt(IRStatement::Return(expr));
@@ -158,17 +169,29 @@ impl IRWriter {
         self.blocks.last_mut().unwrap()
     }
 
-    // pub fn write_guard<T: ContainsSpan>(&mut self, guard: String, message: &str, span: &T) {
-    //     self.start_condition_block("if", guard);
+    pub fn write_guard(&mut self, guard: IRExpr, message: &str, span: &Span) {
+        self.start_block();
 
-    //     let message = format!(
-    //         "\\nFatal error: {}\\n\\n{}\\n",
-    //         message,
-    //         span.span().location(),
-    //     );
+        let message = format!(
+            "\"\\nFatal error: {}\\n\\n{}\\n\"",
+            message,
+            span.location(),
+        );
 
-    //     self.writeln(&format!("printf(\"{}\\n\");", message));
-    //     self.writeln("exit(1);");
-    //     self.end_conditional_block();
-    // }
+        let arg = IRExpr {
+            kind: IRExprKind::Literal(message),
+            expr_type: NodeType::pointer_to(NodeType::Byte)
+        };
+        self.expr(IRExpr {
+            kind: IRExprKind::Call(String::from("printf"), vec![arg]),
+            expr_type: NodeType::Void
+        });
+
+        self.expr(IRExpr {
+            kind: IRExprKind::Call(String::from("exit"), vec![IRExpr::int_literal("1")]),
+            expr_type: NodeType::Void
+        });
+
+        self.end_if_block(guard);
+    }
 }

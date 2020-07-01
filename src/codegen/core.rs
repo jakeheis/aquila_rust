@@ -20,20 +20,6 @@ pub fn write(symbol: &Symbol, writer: &mut IRWriter) {
     }
 }
 
-pub fn add_builtin_symbols(_lib: &Lib) {
-    // let mut symbols = lib.symbols.borrow_mut();
-    // symbols.insert(Symbol::new_str(None, "iterate"), NodeType::FlexibleFunction(iterate_check));
-}
-
-// pub fn iterate_check(args: &[NodeType]) -> bool {
-//     if args.len() == 1 {
-//         if let NodeType::Array(..) = args[0] {
-//             return true;
-//         }
-//     }
-//     false
-// }
-
 fn write_ptr_offset(writer: &mut IRWriter, func_symbol: &Symbol) {
     let pointer_param = Symbol::new_str(func_symbol, "pointer");
     let distance_param = Symbol::new_str(func_symbol, "distance");

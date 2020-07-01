@@ -7,7 +7,6 @@ pub mod parsing;
 pub mod source;
 pub mod type_checker;
 
-use codegen::Codegen;
 use diagnostic::{DefaultReporter, Reporter};
 use library::Lib;
 pub use source::*;
@@ -22,6 +21,6 @@ pub fn run_with_reporter(
     link_stdlib: bool
 ) -> Result<(), &'static str> {
     let lib = Lib::from_source(source, std::rc::Rc::clone(&reporter), link_stdlib)?;
-    Codegen::generate(lib, reporter)?;
+    codegen::generate(lib, reporter)?;
     Ok(())
 }

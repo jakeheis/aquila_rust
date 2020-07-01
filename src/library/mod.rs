@@ -1,5 +1,4 @@
 use crate::analysis::*;
-use crate::codegen::core;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::parsing::*;
@@ -39,7 +38,6 @@ impl Lib {
         let src =
             source::file("/Users/jakeheiser/Desktop/Projects/Rust/aquila/src/library/stdlib.aq");
         let lib = Lib::build_lib(src, "stdlib", false, reporter).expect("Standard library build should succeed");
-        core::add_builtin_symbols(&lib);
         lib
     }
 
