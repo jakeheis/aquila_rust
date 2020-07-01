@@ -101,8 +101,6 @@ impl Lib {
             return Err("Cycle checker failed");
         }
 
-        let lib = Rewriter::rewrite(lib);
-
         Ok(lib)
     }
 

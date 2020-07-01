@@ -5,6 +5,7 @@ use crate::parsing::*;
 use crate::lexing::*;
 use super::core;
 use log::trace;
+use crate::source::*;
 
 pub struct IRGen {
     lib: Rc<Lib>,
@@ -38,6 +39,10 @@ impl IRGen {
         for s in &lib.other {
             s.accept(&mut self);
         }
+        self.writer.return_value(Some(IRExpr {
+            kind: IRExprKind::Literal(String::from("0")),
+            expr_type: NodeType::Int
+        }));
         self.writer.end_decl_main();
 
         self.writer.program
@@ -280,10 +285,11 @@ impl StmtVisitor for IRGen {
         // self.writer.write_return(val)
     }
 
-    fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Self::StmtResult {
+    fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Self::StmtResult {        
         let function = String::from("printf");
 
         if let Some(expr) = expr.as_ref() {
+            println!("visiting print of {}", expr.span().lexeme());
             let node_type = expr.get_type().unwrap();
             if let NodeType::Instance(type_symbol, spec) = node_type {
                 let full_symbol = Symbol::new_str(&type_symbol, "write");

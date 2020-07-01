@@ -8,7 +8,7 @@ pub struct Rewriter {
 }
 
 impl Rewriter {
-    pub fn rewrite(mut lib: Lib) -> Lib {
+    fn rewrite(mut lib: Lib) -> Lib {
         let stmts = std::mem::replace(&mut lib.other, Vec::new());
 
         let mut writer = Rewriter {

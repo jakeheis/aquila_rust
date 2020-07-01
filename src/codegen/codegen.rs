@@ -38,14 +38,12 @@ impl Codegen {
         let ir_gen = IRGen::new(lib);
         let ir = ir_gen.generate();
 
+        // println!("{:#?}", ir);
+
         fs::create_dir_all("build").unwrap();
         let file = File::create("build/main.c").unwrap();
         let code_writer = CodeWriter::new(ir, file);
         code_writer.write();
-
-        return Ok(());
-
-        // Codegen::write(lib);
 
         let status = Command::new("/usr/local/opt/llvm/bin/clang")
             .args(&[

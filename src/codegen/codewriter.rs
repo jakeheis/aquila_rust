@@ -21,8 +21,12 @@ impl CodeWriter {
 
     pub fn write(&self) {
         self.write_includes();
+        
         self.write_struct_prototypes();
         self.write_struct_bodies();
+        
+        self.write_function_prototypes();
+        self.write_function_bodies();
     }
 
     fn write_includes(&self) {
@@ -46,16 +50,169 @@ impl CodeWriter {
         for struct_def in &self.program.structures {
             self.writeln("");
             self.writeln(&format!("typedef struct {} {{", struct_def.name));
-            self.add_indent();
+            self.increase_indent();
 
             for var in &struct_def.fields {
                 let (c_type, name) = self.convert_type(&var.var_type, var.name.clone(), true);
                 self.writeln(&format!("{} {};", c_type, name));
             }
 
-            self.remove_indent();
+            self.decrease_indent();
             self.writeln(&format!("}} {};", struct_def.name));
         }
+    }
+
+    fn write_function_prototypes(&self) {
+        for func in &self.program.functions {
+            self.write_function_header(func, ";");
+        }
+    }
+
+    fn write_function_bodies(&self) {
+        for func in &self.program.functions {
+            self.write_function_header(func, " {");
+            self.increase_indent();
+            self.write_block(&func.statements);
+            self.decrease_indent();
+            self.writeln("}");
+        }
+    }
+
+    fn write_block(&self, stmts: &[IRStatement]) {
+        for stmt in stmts {
+            self.write_statement(stmt);
+        }
+    }
+
+    fn write_statement(&self, stmt: &IRStatement) {
+        match stmt {
+            IRStatement::DeclLocal(var) => {
+                let line = format!("{};", self.type_and_name(&var.var_type, &var.name));
+                self.writeln(&line);
+            }
+            IRStatement::AssignLocal(local, value) => {
+                let value = self.form_expression(value);
+                let line = format!("{} = {};", local, value);
+                self.writeln(&line);
+            }
+            IRStatement::AssignField(object, field, value) => {
+                let object = self.form_expression(object);
+                let value = self.form_expression(value);
+                let line = format!("{}.{} = {};", object, field, value);
+                self.writeln(&line);
+            }
+            IRStatement::Loop(block) => {
+                self.writeln("while (true) {");
+                self.increase_indent();
+                self.write_block(block);
+                self.decrease_indent();
+                self.writeln("}");
+            }
+            IRStatement::Condition(condition, if_block, else_block) => {
+                let condition = format!("if ({}) {{", self.form_expression(condition));
+                self.writeln(&condition);
+                self.increase_indent();
+                self.write_block(if_block);
+                self.decrease_indent();
+                
+                if !else_block.is_empty() {
+                    self.writeln("} else {");
+                    self.increase_indent();
+                    self.write_block(else_block);
+                    self.decrease_indent();
+                }
+
+                self.writeln("}");
+            }
+            IRStatement::Execute(expr) => {
+                let line = format!("{};", self.form_expression(expr));
+                self.writeln(&line);
+            }
+            IRStatement::Return(value) => {
+                let line = if let Some(value) = value {
+                    format!("return {};", self.form_expression(value))
+                } else {
+                    String::from("return;")
+                };
+                self.writeln(&line);
+            }
+            IRStatement::Break => {
+                self.writeln("break;");
+            }
+        }
+    }
+
+    fn form_expression(&self, expr: &IRExpr) -> String {
+        match &expr.kind {
+            IRExprKind::FieldAccess(target, field) => {
+                let target = self.form_expression(target);
+                format!("{}.{}", target, field)
+            }
+            IRExprKind::DerefFieldAccess(target, field) => {
+                let target = self.form_expression(target);
+                format!("{}->{}", target, field)
+            }
+            IRExprKind::Call(function, args) => {
+                let args: Vec<_> = args.iter().map(|a| self.form_expression(a)).collect();
+                let args = args.join(",");
+                format!("{}({})", function, args)
+            }
+            IRExprKind::Subscript(target, value) => {
+                let target = self.form_expression(target);
+                let value = self.form_expression(value);
+                format!("{}[{}]", target, value)
+            }
+            IRExprKind::Binary(lhs, op, rhs) => {
+                let lhs = self.form_expression(lhs);
+                let rhs = self.form_expression(rhs);
+                format!("({}) {} ({})", lhs, op, rhs)
+            }
+            IRExprKind::Unary(operator, operand) => {
+                let operand = self.form_expression(operand);
+                format!("{}({})", operator, operand)
+            }
+            IRExprKind::Literal(l) => l.clone(),
+            IRExprKind::Variable(var) => String::from(var),
+            IRExprKind::ExplicitType => {
+                let (to_type, _) = self.convert_type(&expr.expr_type, String::new(), false);
+                to_type
+            }
+            IRExprKind::Cast(value) => {
+                let value = self.form_expression(value);
+                let (to_type, _) = self.convert_type(&expr.expr_type, String::new(), false);
+                format!("({})({})", to_type, value)
+            }
+        }
+    }
+
+    fn write_function_header(
+        &self,
+        function: &IRFunction,
+        terminator: &str,
+    ) {
+        let param_str: Vec<String> = function
+            .parameters
+            .iter()
+            .map(|param| self.type_and_name(&param.var_type, &param.name))
+            .collect();
+
+        let param_str = param_str.join(",");
+
+        self.writeln("");
+        self.writeln(&format!(
+            "{}({}){}",
+            self.type_and_name(
+                &function.return_type,
+                &function.name
+            ),
+            param_str,
+            terminator
+        ));
+    }
+
+    pub fn type_and_name(&self, var_type: &NodeType, name: &str) -> String {
+        let (t, n) = self.convert_type(var_type, String::from(name), false);
+        format!("{} {}", t, n)
     }
 
     fn convert_type(
@@ -101,12 +258,12 @@ impl CodeWriter {
         }
     }
 
-    fn add_indent(&self) {
+    fn increase_indent(&self) {
         let i = self.indent.get();
         self.indent.set(i + 1);
     }
 
-    fn remove_indent(&self) {
+    fn decrease_indent(&self) {
         let i = self.indent.get();
         self.indent.set(i - 1);
     }
