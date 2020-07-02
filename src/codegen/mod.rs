@@ -1,10 +1,13 @@
-mod codewriter;
 mod builtins;
+mod codewriter;
 mod ir;
 mod irgen;
 mod irwriter;
 
-pub use ir::{IRExpr, IRExprKind, IRFunction, IRProgram, IRStatement, IRStructure, IRBinaryOperator, IRUnaryOperator};
+pub use ir::{
+    IRBinaryOperator, IRExpr, IRExprKind, IRFunction, IRProgram, IRStatement, IRStructure,
+    IRUnaryOperator,
+};
 pub use irgen::IRGen;
 
 use crate::analysis::SpecializationPropagator;

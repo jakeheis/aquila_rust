@@ -129,14 +129,14 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
-    fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Analysis {        
+    fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Analysis {
         let (func_symbol, metadata) = self.context.push_function_scope(&decl.name);
         decl.name.set_symbol(func_symbol.clone());
 
         if decl.is_builtin {
             self.context.pop_scope();
-            return Analysis { 
-                guarantees_return: false
+            return Analysis {
+                guarantees_return: false,
             };
         }
 

@@ -63,16 +63,17 @@ pub struct IRExpr {
 
 impl IRExpr {
     pub fn int_literal(slice: &str) -> Self {
-        IRExpr {
-            kind: IRExprKind::Literal(String::from(slice)),
-            expr_type: NodeType::Int,
-        }
+        IRExpr::literal(slice, NodeType::Int)
     }
 
     pub fn string_literal(slice: &str) -> Self {
+        IRExpr::literal(slice, NodeType::pointer_to(NodeType::Byte))
+    }
+
+    pub fn literal(slice: &str, expr_type: NodeType) -> Self {
         IRExpr {
             kind: IRExprKind::Literal(String::from(slice)),
-            expr_type: NodeType::pointer_to(NodeType::Byte),
+            expr_type,
         }
     }
 
@@ -80,15 +81,6 @@ impl IRExpr {
         IRExpr {
             kind: IRExprKind::Variable(var.name.clone()),
             expr_type: var.var_type.clone(),
-        }
-    }
-
-    pub fn address_of(var: &IRVariable) -> Self {
-        let var = IRExpr::variable(var);
-        let expr_type = NodeType::pointer_to(var.expr_type.clone());
-        IRExpr {
-            kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(var)),
-            expr_type,
         }
     }
 
@@ -103,7 +95,34 @@ impl IRExpr {
     pub fn call(func: &str, args: Vec<IRExpr>, ret_type: NodeType) -> Self {
         IRExpr {
             kind: IRExprKind::Call(String::from(func), args),
-            expr_type: ret_type
+            expr_type: ret_type,
+        }
+    }
+
+    pub fn cast(expr: IRExpr, to: NodeType) -> Self {
+        IRExpr {
+            kind: IRExprKind::Cast(Box::new(expr)),
+            expr_type: to,
+        }
+    }
+
+    pub fn address_of(var: &IRVariable) -> Self {
+        let expr_type = NodeType::pointer_to(var.var_type.clone());
+        IRExpr::unary(IRUnaryOperator::Reference, var, expr_type)
+    }
+
+    pub fn unary(op: IRUnaryOperator, var: &IRVariable, expr_type: NodeType) -> Self {
+        let var = IRExpr::variable(var);
+        IRExpr {
+            kind: IRExprKind::Unary(op, Box::new(var)),
+            expr_type,
+        }
+    }
+
+    pub fn binary(lhs: IRExpr, op: IRBinaryOperator, rhs: IRExpr, expr_type: NodeType) -> Self {
+        IRExpr {
+            kind: IRExprKind::Binary(Box::new(lhs), op, Box::new(rhs)),
+            expr_type,
         }
     }
 }

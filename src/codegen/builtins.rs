@@ -11,7 +11,12 @@ struct Builtin {
 
 impl Builtin {
     fn all() -> Vec<Builtin> {
-        vec![Builtin::fatal_error(), Builtin::size(), Builtin::ptr_offset(), Builtin::read_line()]
+        vec![
+            Builtin::fatal_error(),
+            Builtin::size(),
+            Builtin::ptr_offset(),
+            Builtin::read_line(),
+        ]
     }
 
     fn named(symbol: &Symbol) -> Option<Builtin> {
@@ -20,14 +25,17 @@ impl Builtin {
             "stdlib$Memory$Meta$size" => Some(Builtin::size()),
             "stdlib$ptr_offset" => Some(Builtin::ptr_offset()),
             "stdlib$_read_line" => Some(Builtin::read_line()),
-            _ => None
+            _ => None,
         }
     }
 
     fn fatal_error() -> Self {
         Builtin {
             name: "fatal_error",
-            implicit_calls: vec![Symbol::new_str(&Symbol::stdlib_root(), "fatal_error_location")],
+            implicit_calls: vec![Symbol::new_str(
+                &Symbol::stdlib_root(),
+                "fatal_error_location",
+            )],
             write: None,
             special_call: Some(fatal_error_call),
         }
@@ -38,7 +46,7 @@ impl Builtin {
             name: "size",
             implicit_calls: Vec::new(),
             write: None,
-            special_call: Some(size_call)
+            special_call: Some(size_call),
         }
     }
 
@@ -47,7 +55,7 @@ impl Builtin {
             name: "ptr_offset",
             implicit_calls: Vec::new(),
             write: Some(write_ptr_offset),
-            special_call: None
+            special_call: None,
         }
     }
 
@@ -56,7 +64,7 @@ impl Builtin {
             name: "_read_line",
             implicit_calls: Vec::new(),
             write: Some(write_read_line),
-            special_call: None
+            special_call: None,
         }
     }
 
@@ -79,12 +87,20 @@ pub fn record_implicit_calls(lib: &mut Lib) {
     for builtin in Builtin::all() {
         for call in &builtin.implicit_calls {
             let builtin_symbol = builtin.symbol();
-            lib.specialization_tracker.add_call(builtin_symbol, call.clone(), GenericSpecialization::empty());
+            lib.specialization_tracker.add_call(
+                builtin_symbol,
+                call.clone(),
+                GenericSpecialization::empty(),
+            );
         }
     }
 }
 
-pub fn write_special_call(symbol: &Symbol, args: &[IRExpr], spec: &GenericSpecialization) -> Option<IRExpr> {
+pub fn write_special_call(
+    symbol: &Symbol,
+    args: &[IRExpr],
+    spec: &GenericSpecialization,
+) -> Option<IRExpr> {
     if let Some(builtin) = Builtin::named(&symbol) {
         if let Some(call) = &builtin.special_call {
             return Some(call(symbol, args, spec));
@@ -93,7 +109,11 @@ pub fn write_special_call(symbol: &Symbol, args: &[IRExpr], spec: &GenericSpecia
     None
 }
 
-pub fn write_special_function(writer: &mut IRWriter, metadata: &FunctionMetadata, spec: &GenericSpecialization) {
+pub fn write_special_function(
+    writer: &mut IRWriter,
+    metadata: &FunctionMetadata,
+    spec: &GenericSpecialization,
+) {
     if is_direct_c_binding(&metadata.symbol) {
         return;
     }
@@ -121,16 +141,16 @@ fn write_ptr_offset(writer: &mut IRWriter, func_symbol: &Symbol) {
     );
     let distance = IRVariable::new(&distance_param.mangled(), NodeType::Int);
 
-    let pointer = IRExpr::variable(&pointer);
-    let casted = IRExpr {
-        kind: IRExprKind::Cast(Box::new(pointer)),
-        expr_type: NodeType::pointer_to(NodeType::Byte),
-    };
-    let distance = IRExpr::variable(&distance);
-    let addition = IRExpr {
-        kind: IRExprKind::Binary(Box::new(casted), IRBinaryOperator::Plus, Box::new(distance)),
-        expr_type: NodeType::pointer_to(NodeType::Byte),
-    };
+    let casted = IRExpr::cast(
+        IRExpr::variable(&pointer),
+        NodeType::pointer_to(NodeType::Byte),
+    );
+    let addition = IRExpr::binary(
+        casted,
+        IRBinaryOperator::Plus,
+        IRExpr::variable(&distance),
+        NodeType::pointer_to(NodeType::Byte),
+    );
     writer.return_value(Some(addition));
 }
 
@@ -141,10 +161,7 @@ fn write_read_line(writer: &mut IRWriter, _func_symbol: &Symbol) {
     writer.declare_var(&line);
     writer.assign_var(
         &line,
-        IRExpr {
-            kind: IRExprKind::Literal(String::from("NULL")),
-            expr_type: NodeType::pointer_to(NodeType::Byte),
-        },
+        IRExpr::literal("NULL", NodeType::pointer_to(NodeType::Byte)),
     );
 
     writer.declare_var(&size);
@@ -152,10 +169,7 @@ fn write_read_line(writer: &mut IRWriter, _func_symbol: &Symbol) {
     let args = vec![
         IRExpr::address_of(&line),
         IRExpr::address_of(&size),
-        IRExpr {
-            kind: IRExprKind::Literal(String::from("stdin")),
-            expr_type: NodeType::Void,
-        },
+        IRExpr::literal("stdin", NodeType::Void),
     ];
 
     let call = IRExpr::call("getline", args, NodeType::Void);
@@ -179,7 +193,7 @@ fn size_call(symbol: &Symbol, _args: &[IRExpr], spec: &GenericSpecialization) ->
 
     let arg = IRExpr {
         kind: IRExprKind::ExplicitType,
-        expr_type: mem_type.clone()
+        expr_type: mem_type.clone(),
     };
     IRExpr::call("sizeof", vec![arg], NodeType::Double)
 }

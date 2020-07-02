@@ -376,7 +376,7 @@ impl ExprVisitor for IRGen {
             TokenKind::LessEqual => IRBinaryOperator::LessEqual,
             TokenKind::AmpersandAmpersand => IRBinaryOperator::And,
             TokenKind::BarBar => IRBinaryOperator::Or,
-            tk => panic!("Illegal operator {:?}", tk)
+            tk => panic!("Illegal operator {:?}", tk),
         };
         IRExpr {
             kind: IRExprKind::Binary(Box::new(lhs), op_type, Box::new(rhs)),
@@ -391,7 +391,7 @@ impl ExprVisitor for IRGen {
             TokenKind::Bang => IRUnaryOperator::Invert,
             TokenKind::Ampersand => IRUnaryOperator::Reference,
             TokenKind::Star => IRUnaryOperator::Dereference,
-            tk => panic!("Illegal operator {:?}", tk)
+            tk => panic!("Illegal operator {:?}", tk),
         };
         IRExpr {
             kind: IRExprKind::Unary(op_type, Box::new(operand)),
@@ -460,7 +460,10 @@ impl ExprVisitor for IRGen {
                     _ => {
                         let expr_type = NodeType::pointer_to(target_expr.expr_type.clone());
                         IRExpr {
-                            kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(target_expr)),
+                            kind: IRExprKind::Unary(
+                                IRUnaryOperator::Reference,
+                                Box::new(target_expr),
+                            ),
                             expr_type,
                         }
                     }
@@ -479,7 +482,9 @@ impl ExprVisitor for IRGen {
             }
         }
 
-        if let Some(special) = builtins::write_special_call(&function_symbol, &args, &specialization) {
+        if let Some(special) =
+            builtins::write_special_call(&function_symbol, &args, &specialization)
+        {
             special
         } else {
             IRExpr {

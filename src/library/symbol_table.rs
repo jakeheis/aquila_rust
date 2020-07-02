@@ -42,7 +42,9 @@ impl Symbol {
     }
 
     pub fn stdlib_root() -> Self {
-        Symbol { id: String::from("stdlib") }
+        Symbol {
+            id: String::from("stdlib"),
+        }
     }
 
     pub fn writable_symbol() -> Self {
