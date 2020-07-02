@@ -1,5 +1,5 @@
 mod codewriter;
-mod core;
+mod builtins;
 mod ir;
 mod irgen;
 mod irwriter;
@@ -15,7 +15,7 @@ use std::process::Command;
 use std::rc::Rc;
 
 pub fn generate(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {
-    core::record_implicit_calls(&mut lib);
+    builtins::record_implicit_calls(&mut lib);
     SpecializationPropagator::propogate(&mut lib);
 
     let ir = gen_ir(lib);

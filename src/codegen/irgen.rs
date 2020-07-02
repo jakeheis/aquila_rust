@@ -1,4 +1,4 @@
-use super::core;
+use super::builtins;
 use super::ir::*;
 use super::irwriter::IRWriter;
 use crate::lexing::*;
@@ -159,7 +159,7 @@ impl StmtVisitor for IRGen {
             self.func_specialization = Some(specialization.clone());
 
             if decl.is_builtin {
-                core::write_special_function(&mut self.writer, &func_metadata, specialization)
+                builtins::write_special_function(&mut self.writer, &func_metadata, specialization)
             } else {
                 self.writer.start_block();
                 self.gen_stmts(&decl.body);
@@ -423,7 +423,7 @@ impl ExprVisitor for IRGen {
             specialization = specialization.merge(self.lib.as_ref(), caller_specs)
         }
 
-        let function_name = if core::is_direct_c_binding(&function_symbol) {
+        let function_name = if builtins::is_direct_c_binding(&function_symbol) {
             String::from(function_symbol.last_component())
         } else {
             function_metadata.function_name(self.lib.as_ref(), &specialization)
@@ -457,7 +457,7 @@ impl ExprVisitor for IRGen {
             }
         }
 
-        if let Some(special) = core::write_special_call(&function_symbol, &args, &specialization) {
+        if let Some(special) = builtins::write_special_call(&function_symbol, &args, &specialization) {
             special
         } else {
             IRExpr {
