@@ -10,9 +10,7 @@ builtin def _read_line(): ptr byte {}
 
 type Memory {
 
-    meta def size[T](): int {
-        return sizeof(T);
-    }
+    builtin meta def size[T](): int {}
 
     meta def size_instance[T](instance: T): int {
         return sizeof(instance);
@@ -48,8 +46,12 @@ pub def read_line(): String {
     return String.from(_read_line());
 }
 
-pub def fatal_error(message: ptr byte) {
+pub builtin def fatal_error(message: ptr byte) {}
+
+pub def fatal_error_location(message: ptr byte, location: ptr byte) {
     print String.from("Fatal error: ").append_literal(message).storage;
+    print;
+    print location;
     exit(1);
 }
 

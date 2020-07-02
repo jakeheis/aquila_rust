@@ -32,12 +32,6 @@ impl TypeChecker {
         for decl in &lib.function_decls {
             checker.visit_function_decl(decl);
         }
-        for decl in &lib.builtins {
-            decl.name.set_symbol(Symbol::new(
-                &Symbol::lib_root(lib.as_ref()),
-                &decl.name.token,
-            ));
-        }
         for decl in &lib.conformance_decls {
             checker.visit_conformance_decl(decl);
         }
@@ -135,9 +129,16 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
-    fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Analysis {
+    fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Analysis {        
         let (func_symbol, metadata) = self.context.push_function_scope(&decl.name);
         decl.name.set_symbol(func_symbol.clone());
+
+        if decl.is_builtin {
+            self.context.pop_scope();
+            return Analysis { 
+                guarantees_return: false
+            };
+        }
 
         let return_type = match &metadata.return_type {
             NodeType::Array(..) => {

@@ -23,7 +23,6 @@ pub struct Lib {
     pub function_decls: Vec<FunctionDecl>,
     pub trait_decls: Vec<TraitDecl>,
     pub conformance_decls: Vec<ConformanceDecl>,
-    pub builtins: Vec<FunctionDecl>,
     pub other: Vec<Stmt>,
     pub symbols: SymbolTable,
     pub dependencies: Vec<Lib>,
@@ -72,7 +71,7 @@ impl Lib {
             return Err("Parsing failed");
         }
 
-        let (type_decls, function_decls, trait_decls, conformance_decls, builtins, other) =
+        let (type_decls, function_decls, trait_decls, conformance_decls, other) =
             Lib::organize_stms(stmts);
 
         let mut lib = Lib {
@@ -81,7 +80,6 @@ impl Lib {
             function_decls,
             trait_decls,
             conformance_decls,
-            builtins,
             symbols: SymbolTable::new(),
             other,
             dependencies,
@@ -249,14 +247,12 @@ impl Lib {
         Vec<FunctionDecl>,
         Vec<TraitDecl>,
         Vec<ConformanceDecl>,
-        Vec<FunctionDecl>,
         Vec<Stmt>,
     ) {
         let mut type_decls: Vec<TypeDecl> = Vec::new();
         let mut function_decls: Vec<FunctionDecl> = Vec::new();
         let mut trait_decls: Vec<TraitDecl> = Vec::new();
         let mut conformance_decls: Vec<ConformanceDecl> = Vec::new();
-        let mut builtins: Vec<FunctionDecl> = Vec::new();
         let mut other: Vec<Stmt> = Vec::new();
 
         for stmt in stmts {
@@ -268,11 +264,7 @@ impl Lib {
                 }
                 StmtKind::FunctionDecl(..) => {
                     if let StmtKind::FunctionDecl(decl) = stmt.kind {
-                        if decl.is_builtin {
-                            builtins.push(decl);
-                        } else {
-                            function_decls.push(decl);
-                        }
+                        function_decls.push(decl);
                     }
                 }
                 StmtKind::TraitDecl(..) => {
@@ -293,7 +285,6 @@ impl Lib {
             function_decls,
             trait_decls,
             conformance_decls,
-            builtins,
             other,
         )
     }

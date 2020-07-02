@@ -34,9 +34,6 @@ impl IRGen {
         for f in &lib.function_decls {
             self.visit_function_decl(f);
         }
-        for f in &lib.builtins {
-            self.visit_function_decl(f);
-        }
 
         if !lib.other.is_empty() {
             self.writer.start_block();
@@ -150,10 +147,6 @@ impl StmtVisitor for IRGen {
     fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Self::StmtResult {
         let func_symbol = decl.name.get_symbol().unwrap();
 
-        if core::is_direct_c_binding(&func_symbol) {
-            return;
-        }
-
         let func_metadata = self.lib.function_metadata(&func_symbol).unwrap();
 
         for specialization in &func_metadata.specializations {
@@ -165,13 +158,13 @@ impl StmtVisitor for IRGen {
 
             self.func_specialization = Some(specialization.clone());
 
-            self.writer.start_block();
             if decl.is_builtin {
-                core::write(&func_symbol, &mut self.writer);
+                core::write_special_function(&mut self.writer, &func_metadata, specialization)
             } else {
+                self.writer.start_block();
                 self.gen_stmts(&decl.body);
+                self.writer.end_decl_func(&func_metadata, specialization);
             }
-            self.writer.end_decl_func(&func_metadata, specialization);
 
             trace!(target: "codegen", "Finished function {} with specialization {}", func_symbol, specialization);
 
@@ -464,9 +457,13 @@ impl ExprVisitor for IRGen {
             }
         }
 
-        IRExpr {
-            kind: IRExprKind::Call(function_name, args),
-            expr_type: self.specialize_expr(expr),
+        if let Some(special) = core::write_special_call(&function_symbol, &args, &specialization) {
+            special
+        } else {
+            IRExpr {
+                kind: IRExprKind::Call(function_name, args),
+                expr_type: self.specialize_expr(expr),
+            }
         }
     }
 

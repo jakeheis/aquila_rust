@@ -56,8 +56,12 @@ impl Parser {
 
     fn statement(&mut self, context: Context) -> Result<Stmt> {
         if self.matches(TokenKind::Builtin) {
-            self.consume(TokenKind::Def, "Expect 'def' after 'builtin'")?;
-            let decl = self.function_decl(false, true, true)?;
+            let decl = if self.matches(TokenKind::Meta) {
+                self.function_decl(true, true, true)?
+            } else {
+                self.consume(TokenKind::Def, "Expect 'def' after 'builtin'")?;
+                self.function_decl(false, true, true)?
+            };
             if let StmtKind::FunctionDecl(mut func) = decl.kind {
                 func.is_builtin = true;
                 Ok(Stmt::new(StmtKind::FunctionDecl(func), decl.span))

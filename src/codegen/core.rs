@@ -2,6 +2,12 @@ use super::ir::*;
 use super::irwriter::IRWriter;
 use crate::library::*;
 
+pub fn record_implicit_calls(lib: &mut Lib) {
+    let fatal_error_location = Symbol::new_str(&Symbol::stdlib_root(), "fatal_error_location");
+    let main = Symbol::main_symbol(lib);
+    lib.specialization_tracker.add_call(main, fatal_error_location, GenericSpecialization::empty());
+}
+
 pub fn is_direct_c_binding(symbol: &Symbol) -> bool {
     if symbol.lib_component() != "stdlib" {
         return false;
@@ -12,12 +18,57 @@ pub fn is_direct_c_binding(symbol: &Symbol) -> bool {
     }
 }
 
-pub fn write(symbol: &Symbol, writer: &mut IRWriter) {
-    match symbol.last_component() {
-        "ptr_offset" => write_ptr_offset(writer, symbol),
-        "_read_line" => write_read_line(writer),
-        name => panic!("Haven't implemented builtin {}", name),
+pub fn write_special_call(symbol: &Symbol, args: &[IRExpr], spec: &GenericSpecialization) -> Option<IRExpr> {
+    if symbol.lib_component() != "stdlib" {
+        return None;
     }
+
+    match symbol.last_component() {
+        "size" => {
+            let mem_type = Symbol::new_str(symbol, "T");
+            let mem_type = spec.type_for(&mem_type).unwrap();
+
+            let arg = IRExpr {
+                kind: IRExprKind::ExplicitType,
+                expr_type: mem_type.clone()
+            };
+            let call = IRExpr::call("sizeof", vec![arg], NodeType::Double);
+            Some(call)
+        }
+        "fatal_error" => {
+            let message = args[0].clone();
+            let location = IRExpr::string_literal("\"<unknown>\"");
+            let callee = Symbol::new_str(&Symbol::stdlib_root(), "fatal_error_location");
+            let call = IRExpr::call(&callee.mangled(), vec![message, location], NodeType::Void);
+            Some(call)
+        }
+        _ => None,
+    }
+}
+
+pub fn write_special_function(writer: &mut IRWriter, metadata: &FunctionMetadata, spec: &GenericSpecialization) {
+    // If direct c binding, don't write anything
+    if is_direct_c_binding(&metadata.symbol) {
+        return;
+    }
+
+    let write_func: fn(&mut IRWriter, &Symbol) -> () = match metadata.symbol.last_component() {
+        "ptr_offset" => {
+            write_ptr_offset
+        },
+        "_read_line" => {
+            write_read_line
+        },
+        "size" | "fatal_error" => {
+            // Don't write function; modify call sites
+            return;
+        }
+        _ => panic!("Builtin not handled: {}", metadata.symbol),
+    };
+
+    writer.start_block();
+    write_func(writer, &metadata.symbol);
+    writer.end_decl_func(metadata, spec);
 }
 
 fn write_ptr_offset(writer: &mut IRWriter, func_symbol: &Symbol) {
@@ -43,7 +94,7 @@ fn write_ptr_offset(writer: &mut IRWriter, func_symbol: &Symbol) {
     writer.return_value(Some(addition));
 }
 
-fn write_read_line(writer: &mut IRWriter) {
+fn write_read_line(writer: &mut IRWriter, _func_symbol: &Symbol) {
     let line = IRVariable::new("line", NodeType::pointer_to(NodeType::Byte));
     let size = IRVariable::new("size", NodeType::Int);
 
@@ -67,10 +118,7 @@ fn write_read_line(writer: &mut IRWriter) {
         },
     ];
 
-    let call = IRExpr {
-        kind: IRExprKind::Call(String::from("getline"), args),
-        expr_type: NodeType::Void,
-    };
+    let call = IRExpr::call("getline", args, NodeType::Void);
     writer.expr(call);
 
     writer.return_var(&line);

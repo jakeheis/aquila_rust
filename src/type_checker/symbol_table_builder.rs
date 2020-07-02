@@ -12,7 +12,6 @@ pub struct SymbolTableBuilder {
     symbols: SymbolTable,
     context: Vec<Symbol>,
     reporter: Rc<dyn Reporter>,
-    is_builtin: bool,
 }
 
 impl SymbolTableBuilder {
@@ -24,7 +23,6 @@ impl SymbolTableBuilder {
             symbols: SymbolTable::new(),
             context: vec![Symbol::lib_root(lib.as_ref())],
             reporter,
-            is_builtin: false,
         };
 
         builder.build_type_headers(&lib.type_decls);
@@ -38,9 +36,6 @@ impl SymbolTableBuilder {
         for decl in &lib.conformance_decls {
             builder.build_conformance(decl);
         }
-
-        builder.is_builtin = true;
-        builder.build_functions(&lib.builtins);
 
         let symbols = std::mem::replace(&mut builder.symbols, SymbolTable::new());
         std::mem::drop(builder);

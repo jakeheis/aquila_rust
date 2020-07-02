@@ -55,7 +55,7 @@ pub enum IRStatement {
     Break,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct IRExpr {
     pub kind: IRExprKind,
     pub expr_type: NodeType,
@@ -66,6 +66,13 @@ impl IRExpr {
         IRExpr {
             kind: IRExprKind::Literal(String::from(slice)),
             expr_type: NodeType::Int,
+        }
+    }
+
+    pub fn string_literal(slice: &str) -> Self {
+        IRExpr {
+            kind: IRExprKind::Literal(String::from(slice)),
+            expr_type: NodeType::pointer_to(NodeType::Byte),
         }
     }
 
@@ -92,9 +99,16 @@ impl IRExpr {
             expr_type: field_type,
         }
     }
+
+    pub fn call(func: &str, args: Vec<IRExpr>, ret_type: NodeType) -> Self {
+        IRExpr {
+            kind: IRExprKind::Call(String::from(func), args),
+            expr_type: ret_type
+        }
+    }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum IRExprKind {
     FieldAccess(Box<IRExpr>, String),
     DerefFieldAccess(Box<IRExpr>, String),
