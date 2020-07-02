@@ -23,7 +23,7 @@ pub struct Lib {
     pub function_decls: Vec<FunctionDecl>,
     pub trait_decls: Vec<TraitDecl>,
     pub conformance_decls: Vec<ConformanceDecl>,
-    pub other: Vec<Stmt>,
+    pub main: Vec<Stmt>,
     pub symbols: SymbolTable,
     pub dependencies: Vec<Lib>,
     pub specialization_tracker: SpecializationTracker,
@@ -35,33 +35,15 @@ impl Lib {
         let mut function_decls: Vec<FunctionDecl> = Vec::new();
         let mut trait_decls: Vec<TraitDecl> = Vec::new();
         let mut conformance_decls: Vec<ConformanceDecl> = Vec::new();
-        let mut other: Vec<Stmt> = Vec::new();
+        let mut main: Vec<Stmt> = Vec::new();
 
         for node in ast {
             match node {
-                ASTNode::FunctionDecl(decl) => {
-                    function_decls.push(decl);
-                },
-                ASTNode::Stmt(stmt) => {
-                    match &stmt.kind {
-                        StmtKind::TypeDecl(..) => {
-                            if let StmtKind::TypeDecl(decl) = stmt.kind {
-                                type_decls.push(decl);
-                            }
-                        }
-                        StmtKind::TraitDecl(..) => {
-                            if let StmtKind::TraitDecl(decl) = stmt.kind {
-                                trait_decls.push(decl);
-                            }
-                        }
-                        StmtKind::ConformanceDecl(..) => {
-                            if let StmtKind::ConformanceDecl(decl) = stmt.kind {
-                                conformance_decls.push(decl);
-                            }
-                        }
-                        _ => other.push(stmt),
-                    }
-                }
+                ASTNode::FunctionDecl(decl) => function_decls.push(decl),
+                ASTNode::TypeDecl(decl) => type_decls.push(decl),
+                ASTNode::TraitDecl(decl) => trait_decls.push(decl),
+                ASTNode::ConformanceDecl(decl) => conformance_decls.push(decl),
+                ASTNode::Stmt(stmt) => main.push(stmt),
             }
         }
 
@@ -72,7 +54,7 @@ impl Lib {
             trait_decls,
             conformance_decls,
             symbols: SymbolTable::new(),
-            other,
+            main,
             dependencies,
             specialization_tracker: SpecializationTracker::new(),
         }

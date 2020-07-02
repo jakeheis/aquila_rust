@@ -35,10 +35,10 @@ impl IRGen {
             self.visit_function_decl(f);
         }
 
-        if !lib.other.is_empty() {
+        if !lib.main.is_empty() {
             self.writer.start_block();
             self.func_specialization = Some(GenericSpecialization::empty());
-            for s in &lib.other {
+            for s in &lib.main {
                 s.accept(&mut self);
             }
             self.writer.return_value(IRExpr::int_literal("0"));

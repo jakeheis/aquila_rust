@@ -107,6 +107,36 @@ impl Parser {
                     "Meta function declaration not allowed",
                 ));
             }
+        } else if self.matches(TokenKind::Type) {
+            if context == Context::TopLevel {
+                let decl = self.type_decl()?;
+                return Ok(ASTNode::TypeDecl(decl));
+            } else {
+                return Err(Diagnostic::error(
+                    self.previous(),
+                    "Type declaration not allowed",
+                ));
+            }
+        } else if self.matches(TokenKind::Trait) {
+            if context == Context::TopLevel {
+                let decl = self.trait_decl()?;
+                return Ok(ASTNode::TraitDecl(decl));
+            } else {
+                return Err(Diagnostic::error(
+                    self.previous(),
+                    "Trait declaration not allowed",
+                ));
+            }
+        } else if self.matches(TokenKind::Impl) {
+            if context == Context::TopLevel {
+                let decl = self.trait_conformance()?;
+                return Ok(ASTNode::ConformanceDecl(decl));
+            } else {
+                return Err(Diagnostic::error(
+                    self.previous(),
+                    "Trait conformance not allowed",
+                ));
+            }
         } 
         
         if self.matches(TokenKind::Pub) {
@@ -115,9 +145,9 @@ impl Parser {
                 let mut node = self.decl(context)?;
                 match &mut node {
                     ASTNode::FunctionDecl(decl) => decl.is_public = true,
+                    ASTNode::TypeDecl(decl) => decl.is_public = true,
                     ASTNode::Stmt(stmt) => {
                         match &mut stmt.kind {
-                            StmtKind::TypeDecl(decl) => decl.is_public = true,
                             StmtKind::VariableDecl(decl) if context == Context::InsideType => {
                                 decl.is_public = true
                             }
@@ -128,7 +158,11 @@ impl Parser {
                                 ));
                             }
                         }
-                    }
+                    },
+                    _ => return Err(Diagnostic::error(
+                        &pub_span,
+                        "Pub can only modify types declarations, function declarations, or type fields",
+                    ))
                 }
                 return Ok(node);
             } else {
@@ -145,16 +179,7 @@ impl Parser {
     }
 
     fn actual_stmt(&mut self, context: Context) -> DiagnosticResult<Stmt> {
-        if self.matches(TokenKind::Type) {
-            if context == Context::TopLevel {
-                self.type_decl()
-            } else {
-                Err(Diagnostic::error(
-                    self.previous(),
-                    "Type declaration not allowed",
-                ))
-            }
-        } else if self.matches(TokenKind::Let) {
+        if self.matches(TokenKind::Let) {
             let allow_init = context != Context::InsideType;
             let decl = self.variable_decl(allow_init)?;
             self.consume(
@@ -163,24 +188,6 @@ impl Parser {
             )
             .replace_span(&decl)?;
             Ok(decl)
-        } else if self.matches(TokenKind::Trait) {
-            if context == Context::TopLevel {
-                self.trait_decl()
-            } else {
-                Err(Diagnostic::error(
-                    self.previous(),
-                    "Trait declaration not allowed",
-                ))
-            }
-        } else if self.matches(TokenKind::Impl) {
-            if context == Context::TopLevel {
-                self.trait_conformance()
-            } else {
-                Err(Diagnostic::error(
-                    self.previous(),
-                    "Trait conformance not allowed",
-                ))
-            }
         } else if self.matches(TokenKind::If) {
             if context == Context::TopLevel || context == Context::InsideFunction {
                 self.if_stmt()
@@ -270,7 +277,7 @@ impl Parser {
         }
     }
 
-    fn type_decl(&mut self) -> Result<Stmt> {
+    fn type_decl(&mut self) -> Result<TypeDecl> {
         let type_span = self.previous().span.clone();
         let name = self
             .consume(TokenKind::Identifier, "Expect type name")?
@@ -304,7 +311,8 @@ impl Parser {
                     } else {
                         panic!()
                     }
-                }
+                },
+                _ => panic!()
             }
         }
 
@@ -410,7 +418,7 @@ impl Parser {
         }
     }
 
-    fn trait_decl(&mut self) -> Result<Stmt> {
+    fn trait_decl(&mut self) -> Result<TraitDecl> {
         let trait_span = self.previous().span.clone();
         let name = self
             .consume(TokenKind::Identifier, "Expect trait name")?
@@ -442,7 +450,7 @@ impl Parser {
         ))
     }
 
-    fn trait_conformance(&mut self) -> Result<Stmt> {
+    fn trait_conformance(&mut self) -> Result<ConformanceDecl> {
         let impl_span = self.previous().span().clone();
         let target = self
             .consume(TokenKind::Identifier, "Expect type name")?

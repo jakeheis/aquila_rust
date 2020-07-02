@@ -55,17 +55,16 @@ pub struct ConformanceDecl {
 }
 
 pub enum ASTNode {
+    TypeDecl(TypeDecl),
     FunctionDecl(FunctionDecl),
+    TraitDecl(TraitDecl),
+    ConformanceDecl(ConformanceDecl),
     Stmt(Stmt)
 }
 
 #[derive(Debug)]
 pub enum StmtKind {
-    TypeDecl(TypeDecl),
-    // FunctionDecl(FunctionDecl),
     VariableDecl(VariableDecl),
-    TraitDecl(TraitDecl),
-    ConformanceDecl(ConformanceDecl),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     WhileStmt(Expr, Vec<Stmt>),
     ForStmt(TypedToken, Expr, Vec<Stmt>),
@@ -87,11 +86,7 @@ impl Stmt {
 
     pub fn accept<V: StmtVisitor>(&self, visitor: &mut V) -> V::StmtResult {
         match &self.kind {
-            StmtKind::TypeDecl(decl) => visitor.visit_type_decl(decl),
-            // StmtKind::FunctionDecl(decl) => visitor.visit_function_decl(decl),
             StmtKind::VariableDecl(decl) => visitor.visit_variable_decl(decl),
-            StmtKind::TraitDecl(decl) => visitor.visit_trait_decl(decl),
-            StmtKind::ConformanceDecl(decl) => visitor.visit_conformance_decl(decl),
             StmtKind::IfStmt(condition, body, else_body) => {
                 visitor.visit_if_stmt(&condition, &body, &else_body)
             }
@@ -113,8 +108,8 @@ impl Stmt {
         methods: Vec<FunctionDecl>,
         meta_methods: Vec<FunctionDecl>,
         right_brace: &Token,
-    ) -> Self {
-        let span = Span::join(&type_span, right_brace);
+    ) -> TypeDecl {
+        let _span = Span::join(&type_span, right_brace);
         let generics: Vec<_> = generics
             .into_iter()
             .map(|g| ResolvedToken::new_non_specialized(g))
@@ -127,7 +122,7 @@ impl Stmt {
             meta_methods,
             is_public: false,
         };
-        Stmt::new(StmtKind::TypeDecl(decl), span)
+        decl
     }
 
     pub fn function_decl(
@@ -141,7 +136,7 @@ impl Stmt {
         is_meta: bool,
         is_builtin: bool,
     ) -> FunctionDecl {
-        let span = Span::join(&start_span, right_brace_span);
+        let _span = Span::join(&start_span, right_brace_span);
         let generics: Vec<_> = generics
             .into_iter()
             .map(|g| ResolvedToken::new_non_specialized(g))
@@ -186,13 +181,13 @@ impl Stmt {
         name: Token,
         requirements: Vec<FunctionDecl>,
         end: &Span,
-    ) -> Self {
-        let span = Span::join(&trait_span, end);
+    ) -> TraitDecl {
+        let _span = Span::join(&trait_span, end);
         let decl = TraitDecl {
             name: ResolvedToken::new(name, Vec::new()),
             requirements,
         };
-        Stmt::new(StmtKind::TraitDecl(decl), span)
+        decl
     }
 
     pub fn conformance_decl(
@@ -201,14 +196,14 @@ impl Stmt {
         trait_name: Token,
         impls: Vec<FunctionDecl>,
         end: &Span,
-    ) -> Self {
-        let span = Span::join(&impl_span, end);
+    ) -> ConformanceDecl {
+        let _span = Span::join(&impl_span, end);
         let decl = ConformanceDecl {
             target: ResolvedToken::new_non_specialized(target),
             trait_name: ResolvedToken::new_non_specialized(trait_name),
             implementations: impls,
         };
-        Stmt::new(StmtKind::ConformanceDecl(decl), span)
+        decl
     }
 
     pub fn if_stmt(

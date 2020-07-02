@@ -39,7 +39,10 @@ impl ASTPrinter {
     pub fn print(&mut self, nodes: &[ASTNode]) {
         for node in nodes {
             match node {
+                ASTNode::TypeDecl(decl) => self.visit_type_decl(decl),
                 ASTNode::FunctionDecl(decl) => self.visit_function_decl(decl),
+                ASTNode::TraitDecl(decl) => self.visit_trait_decl(decl),
+                ASTNode::ConformanceDecl(decl) => self.visit_conformance_decl(decl),
                 ASTNode::Stmt(stmt) => stmt.accept(self)
             }
         }

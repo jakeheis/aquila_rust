@@ -41,7 +41,7 @@ impl TypeChecker {
             main_func.symbol.clone(),
             ScopeType::InsideFunction(main_func),
         );
-        checker.check_list(&lib.other);
+        checker.check_list(&lib.main);
         checker.context.pop_scope();
 
         std::mem::drop(checker);
