@@ -30,6 +30,54 @@ pub struct Lib {
 }
 
 impl Lib {
+    pub fn new(name: &str, ast: Vec<ASTNode>, dependencies: Vec<Lib>) -> Self {
+        let mut type_decls: Vec<TypeDecl> = Vec::new();
+        let mut function_decls: Vec<FunctionDecl> = Vec::new();
+        let mut trait_decls: Vec<TraitDecl> = Vec::new();
+        let mut conformance_decls: Vec<ConformanceDecl> = Vec::new();
+        let mut other: Vec<Stmt> = Vec::new();
+
+        for node in ast {
+            match node {
+                ASTNode::FunctionDecl(decl) => {
+                    function_decls.push(decl);
+                },
+                ASTNode::Stmt(stmt) => {
+                    match &stmt.kind {
+                        StmtKind::TypeDecl(..) => {
+                            if let StmtKind::TypeDecl(decl) = stmt.kind {
+                                type_decls.push(decl);
+                            }
+                        }
+                        StmtKind::TraitDecl(..) => {
+                            if let StmtKind::TraitDecl(decl) = stmt.kind {
+                                trait_decls.push(decl);
+                            }
+                        }
+                        StmtKind::ConformanceDecl(..) => {
+                            if let StmtKind::ConformanceDecl(decl) = stmt.kind {
+                                conformance_decls.push(decl);
+                            }
+                        }
+                        _ => other.push(stmt),
+                    }
+                }
+            }
+        }
+
+        Lib {
+            name: String::from(name),
+            type_decls,
+            function_decls,
+            trait_decls,
+            conformance_decls,
+            symbols: SymbolTable::new(),
+            other,
+            dependencies,
+            specialization_tracker: SpecializationTracker::new(),
+        }
+    }
+
     pub fn from_source(
         source: Source,
         reporter: Rc<dyn Reporter>,
@@ -63,28 +111,15 @@ impl Lib {
         let tokens = lexer.lex();
 
         let parser = Parser::new(tokens, Rc::clone(&reporter));
-        let stmts = parser.parse();
+        let ast = parser.parse();
 
-        ASTPrinter::trace().print(&stmts);
+        ASTPrinter::trace().print(&ast);
 
         if reporter.has_errored() {
             return Err("Parsing failed");
         }
 
-        let (type_decls, function_decls, trait_decls, conformance_decls, other) =
-            Lib::organize_stms(stmts);
-
-        let mut lib = Lib {
-            name: String::from(name),
-            type_decls,
-            function_decls,
-            trait_decls,
-            conformance_decls,
-            symbols: SymbolTable::new(),
-            other,
-            dependencies,
-            specialization_tracker: SpecializationTracker::new(),
-        };
+        let mut lib = Lib::new(name, ast, dependencies);
 
         lib = SymbolTableBuilder::build_symbols(lib, Rc::clone(&reporter));
 
@@ -238,54 +273,5 @@ impl Lib {
             }
             None
         }
-    }
-
-    fn organize_stms(
-        stmts: Vec<Stmt>,
-    ) -> (
-        Vec<TypeDecl>,
-        Vec<FunctionDecl>,
-        Vec<TraitDecl>,
-        Vec<ConformanceDecl>,
-        Vec<Stmt>,
-    ) {
-        let mut type_decls: Vec<TypeDecl> = Vec::new();
-        let mut function_decls: Vec<FunctionDecl> = Vec::new();
-        let mut trait_decls: Vec<TraitDecl> = Vec::new();
-        let mut conformance_decls: Vec<ConformanceDecl> = Vec::new();
-        let mut other: Vec<Stmt> = Vec::new();
-
-        for stmt in stmts {
-            match &stmt.kind {
-                StmtKind::TypeDecl(..) => {
-                    if let StmtKind::TypeDecl(decl) = stmt.kind {
-                        type_decls.push(decl);
-                    }
-                }
-                StmtKind::FunctionDecl(..) => {
-                    if let StmtKind::FunctionDecl(decl) = stmt.kind {
-                        function_decls.push(decl);
-                    }
-                }
-                StmtKind::TraitDecl(..) => {
-                    if let StmtKind::TraitDecl(decl) = stmt.kind {
-                        trait_decls.push(decl);
-                    }
-                }
-                StmtKind::ConformanceDecl(..) => {
-                    if let StmtKind::ConformanceDecl(decl) = stmt.kind {
-                        conformance_decls.push(decl);
-                    }
-                }
-                _ => other.push(stmt),
-            }
-        }
-        (
-            type_decls,
-            function_decls,
-            trait_decls,
-            conformance_decls,
-            other,
-        )
     }
 }

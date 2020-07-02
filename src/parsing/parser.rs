@@ -29,16 +29,43 @@ impl Parser {
         }
     }
 
-    pub fn parse(mut self) -> Vec<Stmt> {
-        self.stmt_list(Context::TopLevel, None)
+    pub fn parse(mut self) -> Vec<ASTNode> {
+        let mut nodes: Vec<ASTNode> = Vec::new();
+        while !self.is_at_end() {
+            match self.decl(Context::TopLevel) {
+                Ok(node) => {
+                    nodes.push(node)
+                }
+                Err(diagnostic) => {
+                    self.reporter.report(diagnostic);
+                    self.synchronize();
+                }
+            }
+        }
+        nodes
     }
 
-    fn stmt_list(&mut self, context: Context, end: Option<TokenKind>) -> Vec<Stmt> {
+    fn decl_block(&mut self, context: Context) -> Vec<ASTNode> {
+        let mut nodes: Vec<ASTNode> = Vec::new();
+        while !self.is_at_end() && self.peek() != TokenKind::RightBrace {
+            match self.decl(context) {
+                Ok(node) => {
+                    nodes.push(node)
+                }
+                Err(diagnostic) => {
+                    self.reporter.report(diagnostic);
+                    self.synchronize();
+                }
+            }
+        }
+        nodes
+    }
+
+    fn block(&mut self, context: Context) -> Vec<Stmt> {
         let mut stmts: Vec<Stmt> = Vec::new();
-        while !self.is_at_end() && Some(self.peek()) != end {
-            match self.statement(context) {
+        while !self.is_at_end() && self.peek() != TokenKind::RightBrace {
+            match self.actual_stmt(context) {
                 Ok(stmt) => {
-                    trace!(target: "parser", "Parsed stmt {}", stmt.span().lexeme());
                     stmts.push(stmt)
                 }
                 Err(diagnostic) => {
@@ -50,73 +77,81 @@ impl Parser {
         stmts
     }
 
-    fn block(&mut self, context: Context) -> Vec<Stmt> {
-        self.stmt_list(context, Some(TokenKind::RightBrace))
-    }
-
-    fn statement(&mut self, context: Context) -> Result<Stmt> {
+    fn decl(&mut self, context: Context) -> Result<ASTNode> {
         if self.matches(TokenKind::Builtin) {
-            let decl = if self.matches(TokenKind::Meta) {
+            let mut decl = if self.matches(TokenKind::Meta) {
                 self.function_decl(true, true, true)?
             } else {
                 self.consume(TokenKind::Def, "Expect 'def' after 'builtin'")?;
                 self.function_decl(false, true, true)?
             };
-            if let StmtKind::FunctionDecl(mut func) = decl.kind {
-                func.is_builtin = true;
-                Ok(Stmt::new(StmtKind::FunctionDecl(func), decl.span))
+            decl.is_builtin = true;
+            return Ok(ASTNode::FunctionDecl(decl));
+        } else if self.matches(TokenKind::Def) {
+            if context == Context::TopLevel || context == Context::InsideType {
+                let decl= self.function_decl(false, true, false)?;
+                return Ok(ASTNode::FunctionDecl(decl));
             } else {
-                panic!()
+                return Err(Diagnostic::error(
+                    self.previous(),
+                    "Function declaration not allowed",
+                ));
             }
-        } else if self.matches(TokenKind::Pub) {
+        } else if self.matches(TokenKind::Meta) {
+            if context == Context::InsideType {
+                let decl = self.function_decl(true, true, false)?;
+                return Ok(ASTNode::FunctionDecl(decl));
+            } else {
+                return Err(Diagnostic::error(
+                    self.previous(),
+                    "Meta function declaration not allowed",
+                ));
+            }
+        } 
+        
+        if self.matches(TokenKind::Pub) {
             let pub_span = self.previous().span().clone();
             if context == Context::TopLevel || context == Context::InsideType {
-                let mut stmt = self.statement(context)?;
-                match &mut stmt.kind {
-                    StmtKind::TypeDecl(decl) => decl.is_public = true,
-                    StmtKind::FunctionDecl(decl) => decl.is_public = true,
-                    StmtKind::VariableDecl(decl) if context == Context::InsideType => {
-                        decl.is_public = true
-                    }
-                    _ => {
-                        return Err(Diagnostic::error(
-                            &pub_span,
-                            "Pub can only modify types declarations, function declarations, or type fields",
-                        ));
+                let mut node = self.decl(context)?;
+                match &mut node {
+                    ASTNode::FunctionDecl(decl) => decl.is_public = true,
+                    ASTNode::Stmt(stmt) => {
+                        match &mut stmt.kind {
+                            StmtKind::TypeDecl(decl) => decl.is_public = true,
+                            StmtKind::VariableDecl(decl) if context == Context::InsideType => {
+                                decl.is_public = true
+                            }
+                            _ => {
+                                return Err(Diagnostic::error(
+                                    &pub_span,
+                                    "Pub can only modify types declarations, function declarations, or type fields",
+                                ));
+                            }
+                        }
                     }
                 }
-                Ok(stmt)
+                return Ok(node);
             } else {
-                Err(Diagnostic::error(
+                return Err(Diagnostic::error(
                     self.previous(),
                     "Pub not allowed inside functions",
                 ))
-            }
-        } else if self.matches(TokenKind::Type) {
+            };
+        }
+    
+        let stmt = self.actual_stmt(context)?;
+        let node = ASTNode::Stmt(stmt);
+        Ok(node)
+    }
+
+    fn actual_stmt(&mut self, context: Context) -> DiagnosticResult<Stmt> {
+        if self.matches(TokenKind::Type) {
             if context == Context::TopLevel {
                 self.type_decl()
             } else {
                 Err(Diagnostic::error(
                     self.previous(),
                     "Type declaration not allowed",
-                ))
-            }
-        } else if self.matches(TokenKind::Def) {
-            if context == Context::TopLevel || context == Context::InsideType {
-                self.function_decl(false, true, false)
-            } else {
-                Err(Diagnostic::error(
-                    self.previous(),
-                    "Function declaration not allowed",
-                ))
-            }
-        } else if self.matches(TokenKind::Meta) {
-            if context == Context::InsideType {
-                self.function_decl(true, true, false)
-            } else {
-                Err(Diagnostic::error(
-                    self.previous(),
-                    "Meta function declaration not allowed",
                 ))
             }
         } else if self.matches(TokenKind::Let) {
@@ -253,17 +288,23 @@ impl Parser {
         let mut methods: Vec<FunctionDecl> = Vec::new();
         let mut meta_methods: Vec<FunctionDecl> = Vec::new();
 
-        for stmt in self.block(Context::InsideType) {
-            match stmt.kind {
-                StmtKind::VariableDecl(decl) => fields.push(decl),
-                StmtKind::FunctionDecl(decl) => {
+        let block = self.decl_block(Context::InsideType);
+        for node in block {
+            match node {
+                ASTNode::FunctionDecl(decl) => {
                     if decl.is_meta {
                         meta_methods.push(decl)
                     } else {
                         methods.push(decl)
                     }
                 }
-                _ => panic!(),
+                ASTNode::Stmt(stmt) => {
+                    if let StmtKind::VariableDecl(decl) = stmt.kind {
+                        fields.push(decl);
+                    } else {
+                        panic!()
+                    }
+                }
             }
         }
 
@@ -280,7 +321,7 @@ impl Parser {
         ))
     }
 
-    fn function_decl(&mut self, meta: bool, parse_body: bool, builtin: bool) -> Result<Stmt> {
+    fn function_decl(&mut self, meta: bool, parse_body: bool, builtin: bool) -> Result<FunctionDecl> {
         let start_span = self.previous().span.clone();
 
         if meta {
@@ -388,11 +429,7 @@ impl Parser {
                     "Traits can only require functions",
                 ));
             };
-            if let StmtKind::FunctionDecl(decl) = self.function_decl(meta, false, false)?.kind {
-                requirements.push(decl);
-            } else {
-                unreachable!()
-            }
+            requirements.push(self.function_decl(meta, false, false)?);
         }
 
         let brace = self.consume(TokenKind::RightBrace, "Expect '}' after trait body")?;
@@ -429,11 +466,7 @@ impl Parser {
                     "Trait conformances can only implement functions",
                 ));
             };
-            if let StmtKind::FunctionDecl(decl) = self.function_decl(meta, true, false)?.kind {
-                impls.push(decl);
-            } else {
-                unreachable!()
-            }
+            impls.push(self.function_decl(meta, true, false)?);
         }
 
         let brace = self.consume(TokenKind::RightBrace, "Expect '}' after impl body")?;

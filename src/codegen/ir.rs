@@ -42,6 +42,13 @@ impl IRVariable {
             var_type,
         }
     }
+
+    pub fn new_sym(symbol: &Symbol, var_type: NodeType) -> Self {
+        IRVariable {
+            name: symbol.mangled(),
+            var_type,
+        }
+    }
 }
 
 #[derive(Debug)]

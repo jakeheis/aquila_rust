@@ -36,8 +36,13 @@ impl ASTPrinter {
         }
     }
 
-    pub fn print(&mut self, stmts: &[Stmt]) {
-        stmts.iter().for_each(|s| s.accept(self));
+    pub fn print(&mut self, nodes: &[ASTNode]) {
+        for node in nodes {
+            match node {
+                ASTNode::FunctionDecl(decl) => self.visit_function_decl(decl),
+                ASTNode::Stmt(stmt) => stmt.accept(self)
+            }
+        }
     }
 
     pub fn collected(&self) -> &[String] {

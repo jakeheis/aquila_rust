@@ -151,7 +151,7 @@ fn write_ptr_offset(writer: &mut IRWriter, func_symbol: &Symbol) {
         IRExpr::variable(&distance),
         NodeType::pointer_to(NodeType::Byte),
     );
-    writer.return_value(Some(addition));
+    writer.return_value(addition);
 }
 
 fn write_read_line(writer: &mut IRWriter, _func_symbol: &Symbol) {

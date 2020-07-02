@@ -41,7 +41,7 @@ impl IRGen {
             for s in &lib.other {
                 s.accept(&mut self);
             }
-            self.writer.return_value(Some(IRExpr::int_literal("0")));
+            self.writer.return_value(IRExpr::int_literal("0"));
             self.writer.end_decl_main();
         }
 
@@ -117,18 +117,10 @@ impl StmtVisitor for IRGen {
                 .zip(&type_metadata.field_types)
             {
                 let field_expr = IRExpr::field(&new_item, &field.mangled(), field_type.clone());
-                self.writer.assign(
-                    field_expr,
-                    IRExpr {
-                        kind: IRExprKind::Variable(field.mangled()),
-                        expr_type: field_type.clone(),
-                    },
-                );
+                let param = IRVariable::new_sym(&field, field_type.clone());
+                self.writer.assign(field_expr, IRExpr::variable(&param));
             }
-            self.writer.return_value(Some(IRExpr {
-                kind: IRExprKind::Variable(String::from("new_item")),
-                expr_type: instance_type,
-            }));
+            self.writer.return_value(IRExpr::variable(&new_item));
             self.writer.end_decl_func(&init_metadata, &spec);
 
             trace!("Finished type {} with specialization {}", type_symbol, spec);
@@ -282,7 +274,7 @@ impl StmtVisitor for IRGen {
 
     fn visit_return_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult {
         let ret = expr.as_ref().map(|e| e.accept(self));
-        self.writer.return_value(ret);
+        self.writer.return_opt(ret);
     }
 
     fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Self::StmtResult {

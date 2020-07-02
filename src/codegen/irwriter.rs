@@ -147,8 +147,16 @@ impl IRWriter {
         self.add_stmt(IRStatement::Assign(IRExpr::variable(var), value));
     }
 
-    pub fn return_value(&mut self, expr: Option<IRExpr>) {
+    pub fn return_opt(&mut self, expr: Option<IRExpr>) {
         self.add_stmt(IRStatement::Return(expr));
+    }
+
+    pub fn return_value(&mut self, expr: IRExpr) {
+        self.add_stmt(IRStatement::Return(Some(expr)));
+    }
+
+    pub fn _return_none(&mut self) {
+        self.add_stmt(IRStatement::Return(None));
     }
 
     pub fn return_var(&mut self, var: &IRVariable) {
