@@ -15,8 +15,7 @@ impl Builtin {
     }
 
     fn named(symbol: &Symbol) -> Option<Builtin> {
-        let slice: &str = &symbol.id;
-        match slice {
+        match symbol.id.as_str() {
             "stdlib$fatal_error" => Some(Builtin::fatal_error()),
             "stdlib$Memory$Meta$size" => Some(Builtin::size()),
             "stdlib$ptr_offset" => Some(Builtin::ptr_offset()),
@@ -129,7 +128,7 @@ fn write_ptr_offset(writer: &mut IRWriter, func_symbol: &Symbol) {
     };
     let distance = IRExpr::variable(&distance);
     let addition = IRExpr {
-        kind: IRExprKind::Binary(Box::new(casted), String::from("+"), Box::new(distance)),
+        kind: IRExprKind::Binary(Box::new(casted), IRBinaryOperator::Plus, Box::new(distance)),
         expr_type: NodeType::pointer_to(NodeType::Byte),
     };
     writer.return_value(Some(addition));

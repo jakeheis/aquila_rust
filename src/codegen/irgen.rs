@@ -220,7 +220,7 @@ impl StmtVisitor for IRGen {
         self.writer.start_block();
         self.writer.break_loop();
         self.writer.end_if_block(IRExpr {
-            kind: IRExprKind::Unary(String::from("!"), Box::new(condition)),
+            kind: IRExprKind::Unary(IRUnaryOperator::Invert, Box::new(condition)),
             expr_type: NodeType::Bool,
         });
 
@@ -242,7 +242,7 @@ impl StmtVisitor for IRGen {
         self.writer.end_if_block(IRExpr {
             kind: IRExprKind::Binary(
                 Box::new(IRExpr::variable(&counter)),
-                String::from(">="),
+                IRBinaryOperator::GreaterEqual,
                 Box::new(IRExpr::int_literal(&limit.to_string())),
             ),
             expr_type: NodeType::Bool,
@@ -258,7 +258,7 @@ impl StmtVisitor for IRGen {
             IRExpr {
                 kind: IRExprKind::Binary(
                     Box::new(array),
-                    String::from("+"),
+                    IRBinaryOperator::Plus,
                     Box::new(IRExpr::variable(&counter)),
                 ),
                 expr_type: var_type,
@@ -271,7 +271,7 @@ impl StmtVisitor for IRGen {
             IRExpr {
                 kind: IRExprKind::Binary(
                     Box::new(IRExpr::variable(&counter)),
-                    String::from("+"),
+                    IRBinaryOperator::Plus,
                     Box::new(IRExpr::int_literal("1")),
                 ),
                 expr_type: NodeType::Int,
@@ -363,16 +363,38 @@ impl ExprVisitor for IRGen {
     ) -> Self::ExprResult {
         let lhs = lhs.accept(self);
         let rhs = rhs.accept(self);
+        let op_type = match &op.kind {
+            TokenKind::Plus => IRBinaryOperator::Plus,
+            TokenKind::Minus => IRBinaryOperator::Minus,
+            TokenKind::Star => IRBinaryOperator::Multiply,
+            TokenKind::Slash => IRBinaryOperator::Divide,
+            TokenKind::EqualEqual => IRBinaryOperator::EqualEqual,
+            TokenKind::BangEqual => IRBinaryOperator::BangEqual,
+            TokenKind::Greater => IRBinaryOperator::Greater,
+            TokenKind::GreaterEqual => IRBinaryOperator::GreaterEqual,
+            TokenKind::Less => IRBinaryOperator::Less,
+            TokenKind::LessEqual => IRBinaryOperator::LessEqual,
+            TokenKind::AmpersandAmpersand => IRBinaryOperator::And,
+            TokenKind::BarBar => IRBinaryOperator::Or,
+            tk => panic!("Illegal operator {:?}", tk)
+        };
         IRExpr {
-            kind: IRExprKind::Binary(Box::new(lhs), op.lexeme().to_string(), Box::new(rhs)),
+            kind: IRExprKind::Binary(Box::new(lhs), op_type, Box::new(rhs)),
             expr_type: self.specialize_expr(expr),
         }
     }
 
     fn visit_unary_expr(&mut self, expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
         let operand = operand.accept(self);
+        let op_type = match &op.kind {
+            TokenKind::Minus => IRUnaryOperator::Negate,
+            TokenKind::Bang => IRUnaryOperator::Invert,
+            TokenKind::Ampersand => IRUnaryOperator::Reference,
+            TokenKind::Star => IRUnaryOperator::Dereference,
+            tk => panic!("Illegal operator {:?}", tk)
+        };
         IRExpr {
-            kind: IRExprKind::Unary(op.lexeme().to_string(), Box::new(operand)),
+            kind: IRExprKind::Unary(op_type, Box::new(operand)),
             expr_type: self.specialize_expr(expr),
         }
     }
@@ -438,7 +460,7 @@ impl ExprVisitor for IRGen {
                     _ => {
                         let expr_type = NodeType::pointer_to(target_expr.expr_type.clone());
                         IRExpr {
-                            kind: IRExprKind::Unary(String::from("&"), Box::new(target_expr)),
+                            kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(target_expr)),
                             expr_type,
                         }
                     }
@@ -570,7 +592,7 @@ impl ExprVisitor for IRGen {
         let guard = IRExpr {
             kind: IRExprKind::Binary(
                 Box::new(IRExpr::variable(&index)),
-                String::from(">="),
+                IRBinaryOperator::GreaterEqual,
                 Box::new(IRExpr::int_literal(&array_count)),
             ),
             expr_type: NodeType::Bool,

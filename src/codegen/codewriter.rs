@@ -170,13 +170,27 @@ impl CodeWriter {
             IRExprKind::Binary(lhs, op, rhs) => {
                 let lhs = self.form_expression(lhs);
                 let rhs = self.form_expression(rhs);
+                let op = match op {
+                    IRBinaryOperator::Plus => "+",
+                    IRBinaryOperator::Minus => "-",
+                    IRBinaryOperator::Multiply => "*",
+                    IRBinaryOperator::Divide => "/",
+                    IRBinaryOperator::EqualEqual => "==",
+                    IRBinaryOperator::BangEqual => "!=",
+                    IRBinaryOperator::Greater => ">",
+                    IRBinaryOperator::GreaterEqual => ">=",
+                    IRBinaryOperator::Less => "<",
+                    IRBinaryOperator::LessEqual => "<=",
+                    IRBinaryOperator::And => "&&",
+                    IRBinaryOperator::Or => "||",
+                };
                 format!("({}) {} ({})", lhs, op, rhs)
             }
             IRExprKind::Unary(operator, operand) => {
                 let operand_str = self.form_expression(operand);
-                let operand = if operator == "&" {
+                let operand = if let IRUnaryOperator::Reference = operator {
                     match &operand.kind {
-                        IRExprKind::Unary(inner_op, inner) if inner_op == "*" => {
+                        IRExprKind::Unary(IRUnaryOperator::Dereference, inner) => {
                             return self.form_expression(inner);
                         }
                         IRExprKind::Variable(..) | IRExprKind::FieldAccess(..) => operand_str,
@@ -184,6 +198,12 @@ impl CodeWriter {
                     }
                 } else {
                     operand_str
+                };
+                let operator = match operator {
+                    IRUnaryOperator::Negate => "-",
+                    IRUnaryOperator::Invert => "!",
+                    IRUnaryOperator::Reference => "&",
+                    IRUnaryOperator::Dereference => "*",
                 };
                 format!("{}({})", operator, operand)
             }

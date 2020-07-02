@@ -87,7 +87,7 @@ impl IRExpr {
         let var = IRExpr::variable(var);
         let expr_type = NodeType::pointer_to(var.expr_type.clone());
         IRExpr {
-            kind: IRExprKind::Unary(String::from("&"), Box::new(var)),
+            kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(var)),
             expr_type,
         }
     }
@@ -109,14 +109,38 @@ impl IRExpr {
 }
 
 #[derive(Clone, Debug)]
+pub enum IRBinaryOperator {
+    Plus,
+    Minus,
+    Multiply,
+    Divide,
+    EqualEqual,
+    BangEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
+    And,
+    Or,
+}
+
+#[derive(Clone, Debug)]
+pub enum IRUnaryOperator {
+    Negate,
+    Invert,
+    Reference,
+    Dereference,
+}
+
+#[derive(Clone, Debug)]
 pub enum IRExprKind {
     FieldAccess(Box<IRExpr>, String),
     DerefFieldAccess(Box<IRExpr>, String),
     Call(String, Vec<IRExpr>),
     Array(Vec<IRExpr>),
     Subscript(Box<IRExpr>, Box<IRExpr>),
-    Binary(Box<IRExpr>, String, Box<IRExpr>),
-    Unary(String, Box<IRExpr>),
+    Binary(Box<IRExpr>, IRBinaryOperator, Box<IRExpr>),
+    Unary(IRUnaryOperator, Box<IRExpr>),
     Literal(String),
     Variable(String),
     ExplicitType,

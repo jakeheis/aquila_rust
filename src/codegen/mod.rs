@@ -4,7 +4,7 @@ mod ir;
 mod irgen;
 mod irwriter;
 
-pub use ir::{IRExpr, IRExprKind, IRFunction, IRProgram, IRStatement, IRStructure};
+pub use ir::{IRExpr, IRExprKind, IRFunction, IRProgram, IRStatement, IRStructure, IRBinaryOperator, IRUnaryOperator};
 pub use irgen::IRGen;
 
 use crate::analysis::SpecializationPropagator;
