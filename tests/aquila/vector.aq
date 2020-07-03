@@ -25,6 +25,9 @@ vec_of_vecs.insert(Vec[bool].new());
 /// -> 1
 print *(*vec_of_vecs.get(1)).get(1);
 
+/// -> 2
+print vec_of_vecs.count;
+
 /// error
 print my_vec.element_size;
 /// end

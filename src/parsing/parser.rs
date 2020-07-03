@@ -1,23 +1,16 @@
 use super::ast::*;
+use super::ast_printer::ASTPrinter;
 use super::expr::*;
 use crate::diagnostic::*;
 use crate::lexing::*;
+use crate::library::Lib;
 use log::trace;
 use std::rc::Rc;
-
-type Result<T> = DiagnosticResult<T>;
 
 pub struct Parser {
     tokens: Vec<Token>,
     index: usize,
     reporter: Rc<dyn Reporter>,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum Context {
-    TopLevel,
-    InsideType,
-    InsideFunction,
 }
 
 impl Parser {
@@ -29,12 +22,21 @@ impl Parser {
         }
     }
 
-    pub fn parse(mut self) -> Vec<ASTNode> {
-        let mut nodes: Vec<ASTNode> = Vec::new();
+    pub fn parse(mut self, name: &str) -> Lib {
+        let mut lib = Lib::new(name);
+
         while !self.is_at_end() {
-            match self.decl(Context::TopLevel) {
+            match self.top_level(false) {
                 Ok(node) => {
-                    nodes.push(node)
+                    ASTPrinter::trace().visit(&node);
+
+                    match node {
+                        ASTNode::TypeDecl(decl) => lib.type_decls.push(decl),
+                        ASTNode::FunctionDecl(decl) => lib.function_decls.push(decl),
+                        ASTNode::TraitDecl(decl) => lib.trait_decls.push(decl),
+                        ASTNode::ConformanceDecl(decl) => lib.conformance_decls.push(decl),
+                        ASTNode::Stmt(decl) => lib.main.push(decl),
+                    }
                 }
                 Err(diagnostic) => {
                     self.reporter.report(diagnostic);
@@ -42,146 +44,85 @@ impl Parser {
                 }
             }
         }
-        nodes
+        
+        lib
     }
 
-    fn decl_block(&mut self, context: Context) -> Vec<ASTNode> {
-        let mut nodes: Vec<ASTNode> = Vec::new();
-        while !self.is_at_end() && self.peek() != TokenKind::RightBrace {
-            match self.decl(context) {
-                Ok(node) => {
-                    nodes.push(node)
-                }
-                Err(diagnostic) => {
-                    self.reporter.report(diagnostic);
-                    self.synchronize();
-                }
-            }
+    fn top_level(&mut self, public: bool) -> DiagnosticResult<ASTNode> {
+        if self.matches(TokenKind::Pub) {
+            return self.top_level(true);
         }
-        nodes
+
+        if self.should_parse_function() {
+            let decl = self.parse_function(public)?;
+            if decl.is_meta {
+                return Err(Diagnostic::error(&decl.name, "Meta function not allowed"))
+            }
+            return Ok(ASTNode::FunctionDecl(decl));
+        } else if self.matches(TokenKind::Type) {
+            let decl = self.type_decl(public)?;
+            return Ok(ASTNode::TypeDecl(decl));
+        }
+        
+        if public {
+            return Err(Diagnostic::error(
+                self.previous(),
+                "Pub can only modify types declarations, function declarations, or type fields",
+            ));
+        }
+
+        if self.matches(TokenKind::Trait) {
+            let decl = self.trait_decl()?;
+            Ok(ASTNode::TraitDecl(decl))
+        } else if self.matches(TokenKind::Impl) {
+            let decl = self.trait_conformance()?;
+            Ok(ASTNode::ConformanceDecl(decl))
+        } else {
+            let stmt = self.single_stmt(true)?;
+            Ok(ASTNode::Stmt(stmt))
+        }
     }
 
-    fn block(&mut self, context: Context) -> Vec<Stmt> {
+    fn should_parse_function(&mut self) -> bool {
+        match self.peek() {
+            TokenKind::Builtin | TokenKind::Meta | TokenKind::Def => true,
+            _ => false,
+        }
+    }
+
+    fn parse_function(&mut self, public: bool) -> DiagnosticResult<FunctionDecl> {
+        if self.matches(TokenKind::Builtin) {
+            let mut decl = if self.matches(TokenKind::Meta) {
+                self.function_decl(true, true, true, public)?
+            } else {
+                self.consume(TokenKind::Def, "Expect 'def' after 'builtin'")?;
+                self.function_decl(false, true, true, public)?
+            };
+            decl.is_builtin = true;
+            Ok(decl)
+        } else if self.matches(TokenKind::Def) {
+            self.function_decl(false, true, false, public)
+        } else if self.matches(TokenKind::Meta) {
+            self.function_decl(true, true, false, public)
+        } else {
+            panic!()
+        }
+    }
+
+    fn block(&mut self) -> Vec<Stmt> {
         let mut stmts: Vec<Stmt> = Vec::new();
         while !self.is_at_end() && self.peek() != TokenKind::RightBrace {
-            match self.actual_stmt(context) {
-                Ok(stmt) => {
-                    stmts.push(stmt)
-                }
-                Err(diagnostic) => {
-                    self.reporter.report(diagnostic);
-                    self.synchronize();
-                }
+            let result = self.single_stmt(false);
+            if let Some(stmt) = self.success_or_report_and_sync(result) {
+                stmts.push(stmt)
             }
         }
         stmts
     }
 
-    fn decl(&mut self, context: Context) -> Result<ASTNode> {
-        if self.matches(TokenKind::Builtin) {
-            let mut decl = if self.matches(TokenKind::Meta) {
-                self.function_decl(true, true, true)?
-            } else {
-                self.consume(TokenKind::Def, "Expect 'def' after 'builtin'")?;
-                self.function_decl(false, true, true)?
-            };
-            decl.is_builtin = true;
-            return Ok(ASTNode::FunctionDecl(decl));
-        } else if self.matches(TokenKind::Def) {
-            if context == Context::TopLevel || context == Context::InsideType {
-                let decl= self.function_decl(false, true, false)?;
-                return Ok(ASTNode::FunctionDecl(decl));
-            } else {
-                return Err(Diagnostic::error(
-                    self.previous(),
-                    "Function declaration not allowed",
-                ));
-            }
-        } else if self.matches(TokenKind::Meta) {
-            if context == Context::InsideType {
-                let decl = self.function_decl(true, true, false)?;
-                return Ok(ASTNode::FunctionDecl(decl));
-            } else {
-                return Err(Diagnostic::error(
-                    self.previous(),
-                    "Meta function declaration not allowed",
-                ));
-            }
-        } else if self.matches(TokenKind::Type) {
-            if context == Context::TopLevel {
-                let decl = self.type_decl()?;
-                return Ok(ASTNode::TypeDecl(decl));
-            } else {
-                return Err(Diagnostic::error(
-                    self.previous(),
-                    "Type declaration not allowed",
-                ));
-            }
-        } else if self.matches(TokenKind::Trait) {
-            if context == Context::TopLevel {
-                let decl = self.trait_decl()?;
-                return Ok(ASTNode::TraitDecl(decl));
-            } else {
-                return Err(Diagnostic::error(
-                    self.previous(),
-                    "Trait declaration not allowed",
-                ));
-            }
-        } else if self.matches(TokenKind::Impl) {
-            if context == Context::TopLevel {
-                let decl = self.trait_conformance()?;
-                return Ok(ASTNode::ConformanceDecl(decl));
-            } else {
-                return Err(Diagnostic::error(
-                    self.previous(),
-                    "Trait conformance not allowed",
-                ));
-            }
-        } 
-        
-        if self.matches(TokenKind::Pub) {
-            let pub_span = self.previous().span().clone();
-            if context == Context::TopLevel || context == Context::InsideType {
-                let mut node = self.decl(context)?;
-                match &mut node {
-                    ASTNode::FunctionDecl(decl) => decl.is_public = true,
-                    ASTNode::TypeDecl(decl) => decl.is_public = true,
-                    ASTNode::Stmt(stmt) => {
-                        match &mut stmt.kind {
-                            StmtKind::VariableDecl(decl) if context == Context::InsideType => {
-                                decl.is_public = true
-                            }
-                            _ => {
-                                return Err(Diagnostic::error(
-                                    &pub_span,
-                                    "Pub can only modify types declarations, function declarations, or type fields",
-                                ));
-                            }
-                        }
-                    },
-                    _ => return Err(Diagnostic::error(
-                        &pub_span,
-                        "Pub can only modify types declarations, function declarations, or type fields",
-                    ))
-                }
-                return Ok(node);
-            } else {
-                return Err(Diagnostic::error(
-                    self.previous(),
-                    "Pub not allowed inside functions",
-                ))
-            };
-        }
-    
-        let stmt = self.actual_stmt(context)?;
-        let node = ASTNode::Stmt(stmt);
-        Ok(node)
-    }
-
-    fn actual_stmt(&mut self, context: Context) -> DiagnosticResult<Stmt> {
+    fn single_stmt(&mut self, is_top_level: bool) -> DiagnosticResult<Stmt> {
         if self.matches(TokenKind::Let) {
-            let allow_init = context != Context::InsideType;
-            let decl = self.variable_decl(allow_init)?;
+            let decl = self.local_variable_decl()?;
             self.consume(
                 TokenKind::Semicolon,
                 "Expected semicolon after variable declaration",
@@ -189,39 +130,18 @@ impl Parser {
             .replace_span(&decl)?;
             Ok(decl)
         } else if self.matches(TokenKind::If) {
-            if context == Context::TopLevel || context == Context::InsideFunction {
-                self.if_stmt()
-            } else {
-                Err(Diagnostic::error(
-                    self.previous(),
-                    "If statement not allowed",
-                ))
-            }
+            self.if_stmt()
         } else if self.matches(TokenKind::While) {
-            if context == Context::TopLevel || context == Context::InsideFunction {
-                self.while_stmt()
-            } else {
-                Err(Diagnostic::error(
-                    self.previous(),
-                    "While statement not allowed",
-                ))
-            }
+            self.while_stmt()
         } else if self.matches(TokenKind::For) {
-            if context == Context::TopLevel || context == Context::InsideFunction {
-                self.for_stmt()
-            } else {
-                Err(Diagnostic::error(
-                    self.previous(),
-                    "For statement not allowed",
-                ))
-            }
+            self.for_stmt()
         } else if self.matches(TokenKind::Return) {
             let stmt = self.return_stmt();
             self.consume(
                 TokenKind::Semicolon,
                 "Expected semicolon after return statement",
             )?;
-            if context == Context::InsideFunction {
+            if !is_top_level {
                 stmt
             } else {
                 let span = stmt
@@ -240,14 +160,9 @@ impl Parser {
             )?;
             stmt
         } else {
-            if context == Context::TopLevel || context == Context::InsideFunction {
-                let stmt = Stmt::expression(self.parse_precedence(Precedence::Assignment)?);
-                self.consume(TokenKind::Semicolon, "Expected semicolon after expression")
-                    .replace_span(&stmt)?;
-                Ok(stmt)
-            } else {
-                Err(Diagnostic::error(self.previous(), "Expression not allowed"))
-            }
+            let stmt = Stmt::expression(self.parse_precedence(Precedence::Assignment)?);
+            self.consume(TokenKind::Semicolon, "Expected semicolon after expression").replace_span(&stmt)?;
+            Ok(stmt)
         }
     }
 
@@ -277,8 +192,7 @@ impl Parser {
         }
     }
 
-    fn type_decl(&mut self) -> Result<TypeDecl> {
-        let type_span = self.previous().span.clone();
+    fn type_decl(&mut self, public: bool) -> DiagnosticResult<TypeDecl> {
         let name = self
             .consume(TokenKind::Identifier, "Expect type name")?
             .clone();
@@ -291,47 +205,43 @@ impl Parser {
 
         self.consume(TokenKind::LeftBrace, "Expect '{' after type name")?;
 
-        let mut fields: Vec<VariableDecl> = Vec::new();
+        let mut fields: Vec<StructuralVariableDecl> = Vec::new();
         let mut methods: Vec<FunctionDecl> = Vec::new();
         let mut meta_methods: Vec<FunctionDecl> = Vec::new();
 
-        let block = self.decl_block(Context::InsideType);
-        for node in block {
-            match node {
-                ASTNode::FunctionDecl(decl) => {
-                    if decl.is_meta {
-                        meta_methods.push(decl)
+        while !self.is_at_end() && self.peek() != TokenKind::RightBrace {
+            let public = self.matches(TokenKind::Pub);
+
+            if self.should_parse_function() {
+                let result = self.parse_function(public);
+                if let Some(function) = self.success_or_report_and_sync(result) {
+                    if function.is_meta {
+                        meta_methods.push(function);
                     } else {
-                        methods.push(decl)
+                        methods.push(function);
                     }
                 }
-                ASTNode::Stmt(stmt) => {
-                    if let StmtKind::VariableDecl(decl) = stmt.kind {
-                        fields.push(decl);
-                    } else {
-                        panic!()
+            } else if self.matches(TokenKind::Let) {
+                let result = self.structural_variable_decl(public);
+                if let Some(field) = self.success_or_report_and_sync(result) {
+                    let semicolon = self.consume(TokenKind::Semicolon, "Expect ';' after field declaration");
+                    if let Err(diag) = semicolon {
+                        self.reporter.report(diag);
                     }
-                },
-                _ => panic!()
+                    fields.push(field);
+                }
+            } else {
+                self.reporter.report(Diagnostic::error(self.current(), "Expression not allowed"));
+                self.synchronize();
             }
         }
 
-        let right_brace = self.consume(TokenKind::RightBrace, "Expect '}' after type body")?;
+        self.consume(TokenKind::RightBrace, "Expect '}' after type body")?;
 
-        Ok(Stmt::type_decl(
-            type_span,
-            name,
-            generics,
-            fields,
-            methods,
-            meta_methods,
-            right_brace,
-        ))
+        Ok(TypeDecl::new(name, generics, fields, methods, meta_methods, public))
     }
 
-    fn function_decl(&mut self, meta: bool, parse_body: bool, builtin: bool) -> Result<FunctionDecl> {
-        let start_span = self.previous().span.clone();
-
+    fn function_decl(&mut self, meta: bool, parse_body: bool, builtin: bool, public: bool) -> DiagnosticResult<FunctionDecl> {
         if meta {
             self.consume(TokenKind::Def, "Expect def after meta")?;
         }
@@ -346,13 +256,10 @@ impl Parser {
             Vec::new()
         };
 
-        let mut params: Vec<VariableDecl> = Vec::new();
+        let mut params: Vec<StructuralVariableDecl> = Vec::new();
         self.consume(TokenKind::LeftParen, "Expect '(' after function name")?;
         while !self.is_at_end() && self.peek() != TokenKind::RightParen {
-            match self.variable_decl(false)?.kind {
-                StmtKind::VariableDecl(decl) => params.push(decl),
-                _ => unreachable!(),
-            }
+            params.push(self.structural_variable_decl(false)?);
             if self.peek() != TokenKind::RightParen {
                 self.consume(TokenKind::Comma, "Expect ',' separating parameters")?;
             }
@@ -370,7 +277,7 @@ impl Parser {
                 TokenKind::LeftBrace,
                 "Expect '{' after function declaration",
             )?;
-            let body = self.block(Context::InsideFunction);
+            let body = self.block();
             self.consume(TokenKind::RightBrace, "Expect '}' after function body")?;
             body
         } else {
@@ -385,41 +292,36 @@ impl Parser {
             Vec::new()
         };
 
-        Ok(Stmt::function_decl(
-            start_span,
-            name,
-            generics,
-            params,
-            return_type,
-            body,
-            self.previous().span(),
-            meta,
-            builtin,
-        ))
+        Ok(FunctionDecl::new(name, generics, params, return_type, body, meta, builtin, public))
     }
 
-    fn variable_decl(&mut self, allow_initializer: bool) -> Result<Stmt> {
-        self.consume(TokenKind::Identifier, "Expected variable name")?;
+    fn structural_variable_decl(&mut self, public: bool) -> DiagnosticResult<StructuralVariableDecl> {
+        let var_name = self.consume(TokenKind::Identifier, "Expected variable name")?.clone();
+        self.consume(TokenKind::Colon, "Exepct ':' after variable name")?;
+        let explicit_type = self.parse_explicit_type()?;
 
-        let (name, kind) = self.parse_var(true, !allow_initializer)?;
+        Ok(StructuralVariableDecl::new(var_name, explicit_type, public))
+    }
 
-        if self.matches(TokenKind::Equal) {
-            if allow_initializer {
-                let value = self.expression()?;
-                Ok(Stmt::variable_decl(name, kind, Some(value)))
-            } else {
-                Err(Diagnostic::error(
-                    self.previous(),
-                    "Variable cannot be initialized",
-                ))
-            }
+    fn local_variable_decl(&mut self) -> DiagnosticResult<Stmt> {
+        let name = self.consume(TokenKind::Identifier, "Expected variable name")?.clone();
+
+        let explicit_type = if self.matches(TokenKind::Colon) {
+            Some(self.parse_explicit_type()?)
         } else {
-            Ok(Stmt::variable_decl(name, kind, None))
-        }
+            None
+        };
+
+        let value = if self.matches(TokenKind::Equal) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        Ok(Stmt::local_variable_decl(name, explicit_type, value))
     }
 
-    fn trait_decl(&mut self) -> Result<TraitDecl> {
-        let trait_span = self.previous().span.clone();
+    fn trait_decl(&mut self) -> DiagnosticResult<TraitDecl> {
         let name = self
             .consume(TokenKind::Identifier, "Expect trait name")?
             .clone();
@@ -437,21 +339,15 @@ impl Parser {
                     "Traits can only require functions",
                 ));
             };
-            requirements.push(self.function_decl(meta, false, false)?);
+            requirements.push(self.function_decl(meta, false, false, false)?);
         }
 
-        let brace = self.consume(TokenKind::RightBrace, "Expect '}' after trait body")?;
+        self.consume(TokenKind::RightBrace, "Expect '}' after trait body")?;
 
-        Ok(Stmt::trait_decl(
-            trait_span,
-            name,
-            requirements,
-            &brace.span,
-        ))
+        Ok(TraitDecl::new(name, requirements))
     }
 
-    fn trait_conformance(&mut self) -> Result<ConformanceDecl> {
-        let impl_span = self.previous().span().clone();
+    fn trait_conformance(&mut self) -> DiagnosticResult<ConformanceDecl> {
         let target = self
             .consume(TokenKind::Identifier, "Expect type name")?
             .clone();
@@ -474,27 +370,21 @@ impl Parser {
                     "Trait conformances can only implement functions",
                 ));
             };
-            impls.push(self.function_decl(meta, true, false)?);
+            impls.push(self.function_decl(meta, true, false, false)?);
         }
 
-        let brace = self.consume(TokenKind::RightBrace, "Expect '}' after impl body")?;
+        self.consume(TokenKind::RightBrace, "Expect '}' after impl body")?;
 
-        Ok(Stmt::conformance_decl(
-            impl_span,
-            target,
-            trait_name,
-            impls,
-            brace.span(),
-        ))
+        Ok(ConformanceDecl::new(target, trait_name, impls))
     }
 
-    fn if_stmt(&mut self) -> Result<Stmt> {
+    fn if_stmt(&mut self) -> DiagnosticResult<Stmt> {
         let if_span = self.previous().span.clone();
 
         let condition = self.expression()?;
 
         self.consume(TokenKind::LeftBrace, "Expect '{' after condition")?;
-        let body = self.block(Context::InsideFunction);
+        let body = self.block();
 
         let mut end_brace_span = self
             .consume(TokenKind::RightBrace, "Expect '}' after if body")?
@@ -503,7 +393,7 @@ impl Parser {
 
         let else_body = if self.matches(TokenKind::Else) {
             self.consume(TokenKind::LeftBrace, "Expect '{' after else")?;
-            let block = self.block(Context::InsideFunction);
+            let block = self.block();
             end_brace_span = self
                 .consume(TokenKind::RightBrace, "Expect '}' after else body")?
                 .span
@@ -522,12 +412,12 @@ impl Parser {
         ))
     }
 
-    fn while_stmt(&mut self) -> Result<Stmt> {
+    fn while_stmt(&mut self) -> DiagnosticResult<Stmt> {
         let while_span = self.previous().span.clone();
 
         let condition = self.expression()?;
         self.consume(TokenKind::LeftBrace, "Expect '{' after condition")?;
-        let body = self.block(Context::InsideFunction);
+        let body = self.block();
 
         let end_brace_span = &self
             .consume(TokenKind::RightBrace, "Expect '}' after while body")?
@@ -541,7 +431,7 @@ impl Parser {
         ))
     }
 
-    fn for_stmt(&mut self) -> Result<Stmt> {
+    fn for_stmt(&mut self) -> DiagnosticResult<Stmt> {
         let for_span = self.previous().span.clone();
 
         let var_name = self
@@ -551,7 +441,7 @@ impl Parser {
         let array = self.expression()?;
 
         self.consume(TokenKind::LeftBrace, "Expect '{' after array")?;
-        let body = self.block(Context::InsideFunction);
+        let body = self.block();
 
         let end_brace_span = &self
             .consume(TokenKind::RightBrace, "Expect '}' after for body")?
@@ -566,7 +456,7 @@ impl Parser {
         ))
     }
 
-    fn return_stmt(&mut self) -> Result<Stmt> {
+    fn return_stmt(&mut self) -> DiagnosticResult<Stmt> {
         let ret_keyword = self.previous().span.clone();
         if self.peek() != TokenKind::Semicolon {
             let value = self.expression()?;
@@ -576,7 +466,7 @@ impl Parser {
         }
     }
 
-    fn print_stmt(&mut self) -> Result<Stmt> {
+    fn print_stmt(&mut self) -> DiagnosticResult<Stmt> {
         let print_keyword = self.previous().span.clone();
         if self.peek() != TokenKind::Semicolon {
             let expr = self.expression()?;
@@ -586,11 +476,11 @@ impl Parser {
         }
     }
 
-    fn expression(&mut self) -> Result<Expr> {
+    fn expression(&mut self) -> DiagnosticResult<Expr> {
         self.parse_precedence(Precedence::Logic)
     }
 
-    fn parse_precedence(&mut self, prec: Precedence) -> Result<Expr> {
+    fn parse_precedence(&mut self, prec: Precedence) -> DiagnosticResult<Expr> {
         if self.is_at_end() {
             return Err(Diagnostic::error(self.previous(), "Expected expression"));
         }
@@ -629,25 +519,25 @@ impl Parser {
         Ok(lhs)
     }
 
-    fn assignment(&mut self, lhs: Expr) -> Result<Expr> {
+    fn assignment(&mut self, lhs: Expr) -> DiagnosticResult<Expr> {
         let value = self.parse_precedence(Precedence::Equality.next())?;
         Ok(Expr::assignment(lhs, value))
     }
 
-    fn binary(&mut self, lhs: Expr, _can_assign: bool) -> Result<Expr> {
+    fn binary(&mut self, lhs: Expr, _can_assign: bool) -> DiagnosticResult<Expr> {
         let operator = self.previous().clone();
         let next_prec = Precedence::for_kind(operator.kind).next();
         let rhs = self.parse_precedence(next_prec)?;
         Ok(Expr::binary(lhs, operator, rhs))
     }
 
-    fn unary(&mut self, _can_assign: bool) -> Result<Expr> {
+    fn unary(&mut self, _can_assign: bool) -> DiagnosticResult<Expr> {
         let operator = self.previous().clone();
         let expr = self.parse_precedence(Precedence::Unary.next())?;
         Ok(Expr::unary(operator, expr))
     }
 
-    fn call(&mut self, lhs: Expr, _can_assign: bool) -> Result<Expr> {
+    fn call(&mut self, lhs: Expr, _can_assign: bool) -> DiagnosticResult<Expr> {
         let mut args: Vec<Expr> = Vec::new();
         while !self.is_at_end() && self.peek() != TokenKind::RightParen {
             let arg = self.expression()?;
@@ -671,7 +561,7 @@ impl Parser {
         }
     }
 
-    fn field(&mut self, lhs: Expr, can_assign: bool) -> Result<Expr> {
+    fn field(&mut self, lhs: Expr, can_assign: bool) -> DiagnosticResult<Expr> {
         let field_name = self
             .consume(TokenKind::Identifier, "Expect field name after '.'")?
             .clone();
@@ -692,18 +582,18 @@ impl Parser {
         }
     }
 
-    fn subscript(&mut self, lhs: Expr, _can_assign: bool) -> Result<Expr> {
+    fn subscript(&mut self, lhs: Expr, _can_assign: bool) -> DiagnosticResult<Expr> {
         let index = self.expression()?;
         let right_bracket =
             self.consume(TokenKind::RightBracket, "Expect ']' after subscript index")?;
         Ok(Expr::subscript(lhs, index, &right_bracket))
     }
 
-    fn literal(&mut self, _can_assign: bool) -> Result<Expr> {
+    fn literal(&mut self, _can_assign: bool) -> DiagnosticResult<Expr> {
         Ok(Expr::literal(self.previous()))
     }
 
-    fn variable(&mut self, can_assign: bool) -> Result<Expr> {
+    fn variable(&mut self, can_assign: bool) -> DiagnosticResult<Expr> {
         let name = self.previous().clone();
 
         let specialization = self.parse_possible_specialization()?;
@@ -716,7 +606,7 @@ impl Parser {
         }
     }
 
-    fn parse_possible_specialization(&mut self) -> Result<Vec<ExplicitType>> {
+    fn parse_possible_specialization(&mut self) -> DiagnosticResult<Vec<ExplicitType>> {
         if self.peek() == TokenKind::LeftBracket {
             match self.peek_next() {
                 Some(TokenKind::Int) => Ok(Vec::new()), // Do nothing, it's a subscript
@@ -730,7 +620,7 @@ impl Parser {
         }
     }
 
-    fn array(&mut self, _can_assign: bool) -> Result<Expr> {
+    fn array(&mut self, _can_assign: bool) -> DiagnosticResult<Expr> {
         let left_bracket = self.previous().span.clone();
         let mut elements: Vec<Expr> = Vec::new();
         while !self.is_at_end() && self.peek() != TokenKind::RightBracket {
@@ -744,13 +634,13 @@ impl Parser {
         Ok(Expr::array(left_bracket, elements, right_bracket))
     }
 
-    fn grouping(&mut self, _can_assign: bool) -> Result<Expr> {
+    fn grouping(&mut self, _can_assign: bool) -> DiagnosticResult<Expr> {
         let expr = self.expression()?;
         self.consume(TokenKind::RightParen, "Expect matching ')'")?;
         Ok(expr)
     }
 
-    fn cast(&mut self, _can_assign: bool) -> Result<Expr> {
+    fn cast(&mut self, _can_assign: bool) -> DiagnosticResult<Expr> {
         let cast_span = self.previous().span.clone();
 
         self.consume(TokenKind::LeftBracket, "Expect [cast type]")?;
@@ -772,7 +662,7 @@ impl Parser {
         ))
     }
 
-    fn parse_generic_list(&mut self) -> Result<Vec<Token>> {
+    fn parse_generic_list(&mut self) -> DiagnosticResult<Vec<Token>> {
         let mut generics = Vec::new();
         while !self.is_at_end() && self.peek() != TokenKind::RightBracket {
             let generic_type = self
@@ -787,7 +677,7 @@ impl Parser {
         Ok(generics)
     }
 
-    fn parse_specialization(&mut self) -> Result<Vec<ExplicitType>> {
+    fn parse_specialization(&mut self) -> DiagnosticResult<Vec<ExplicitType>> {
         let mut specialized_types = Vec::new();
         while !self.is_at_end() && self.peek() != TokenKind::RightBracket {
             let specialized_type = self.parse_explicit_type()?;
@@ -801,33 +691,7 @@ impl Parser {
         Ok(specialized_types)
     }
 
-    fn parse_var(
-        &mut self,
-        allow_type: bool,
-        require_type: bool,
-    ) -> Result<(Token, Option<ExplicitType>)> {
-        let name = self.previous().clone();
-        let mut explicit_type: Option<ExplicitType> = None;
-
-        if self.matches(TokenKind::Colon) {
-            if allow_type {
-                explicit_type = Some(self.parse_explicit_type()?);
-            } else {
-                return Err(Diagnostic::error(
-                    self.previous(),
-                    "Variable type not allowed",
-                ));
-            }
-        } else {
-            if require_type {
-                return Err(Diagnostic::error(self.previous(), "Variable type required"));
-            }
-        }
-
-        Ok((name, explicit_type))
-    }
-
-    fn parse_explicit_type(&mut self) -> Result<ExplicitType> {
+    fn parse_explicit_type(&mut self) -> DiagnosticResult<ExplicitType> {
         let start = self.current().span.clone();
 
         let category = if self.matches(TokenKind::Ptr) {
@@ -873,7 +737,7 @@ impl Parser {
         }
     }
 
-    fn consume(&mut self, kind: TokenKind, message: &str) -> Result<&Token> {
+    fn consume(&mut self, kind: TokenKind, message: &str) -> DiagnosticResult<&Token> {
         if self.is_at_end() {
             return Err(Diagnostic::error(self.previous(), message));
         }
@@ -914,15 +778,22 @@ impl Parser {
         self.peek() == TokenKind::EOF
     }
 
-    fn _print_state(&self) {
-        println!("prev {} cur {}", self.previous(), self.current());
+    fn success_or_report_and_sync<T>(&mut self, result: DiagnosticResult<T>) -> Option<T> {
+        match result {
+            Ok(value) => Some(value),
+            Err(diag) => {
+                self.reporter.report(diag);
+                self.synchronize();
+                None
+            }
+        }
     }
 }
 
 // ParseTable
 
-type PrefixFn = fn(&mut Parser, can_assign: bool) -> Result<Expr>;
-type InfixFn = fn(&mut Parser, lhs: Expr, can_assign: bool) -> Result<Expr>;
+type PrefixFn = fn(&mut Parser, can_assign: bool) -> DiagnosticResult<Expr>;
+type InfixFn = fn(&mut Parser, lhs: Expr, can_assign: bool) -> DiagnosticResult<Expr>;
 
 impl TokenKind {
     fn prefix(&self) -> Option<PrefixFn> {

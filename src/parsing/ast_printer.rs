@@ -36,15 +36,19 @@ impl ASTPrinter {
         }
     }
 
-    pub fn print(&mut self, nodes: &[ASTNode]) {
-        for node in nodes {
-            match node {
-                ASTNode::TypeDecl(decl) => self.visit_type_decl(decl),
-                ASTNode::FunctionDecl(decl) => self.visit_function_decl(decl),
-                ASTNode::TraitDecl(decl) => self.visit_trait_decl(decl),
-                ASTNode::ConformanceDecl(decl) => self.visit_conformance_decl(decl),
-                ASTNode::Stmt(stmt) => stmt.accept(self)
-            }
+    pub fn print_stmts(&mut self, stmts: &[Stmt]) {
+        for stmt in stmts {
+            stmt.accept(self);
+        }
+    }
+
+    pub fn visit(&mut self, node: &ASTNode) {
+        match node {
+            ASTNode::TypeDecl(decl) => self.visit_type_decl(decl),
+            ASTNode::FunctionDecl(decl) => self.visit_function_decl(decl),
+            ASTNode::TraitDecl(decl) => self.visit_trait_decl(decl),
+            ASTNode::ConformanceDecl(decl) => self.visit_conformance_decl(decl),
+            ASTNode::Stmt(stmt) => stmt.accept(self)
         }
     }
 
@@ -114,6 +118,23 @@ impl ASTPrinter {
             }
         }
     }
+
+    fn visit_structural_variable_decl(&mut self, decl: &StructuralVariableDecl) {
+        let symbol = decl
+            .name
+            .get_symbol()
+            .map(|s| s.id.clone())
+            .unwrap_or(String::from("<none>"));
+        self.write_ln(&format!(
+            "StructuralVariableDecl(name: {}, symbol: {}, pub: {})",
+            decl.name.span().lexeme(),
+            symbol,
+            decl.is_public,
+        ));
+        self.indent(|visitor| {
+            visitor.write_explicit_type(&decl.explicit_type);
+        })
+    }
 }
 
 impl StmtVisitor for ASTPrinter {
@@ -136,7 +157,7 @@ impl StmtVisitor for ASTPrinter {
             visitor.indent(|visitor| {
                 decl.fields
                     .iter()
-                    .for_each(|f| visitor.visit_variable_decl(f));
+                    .for_each(|f| visitor.visit_structural_variable_decl(f));
             });
             visitor.write_ln("Methods");
             visitor.indent(|visitor| {
@@ -178,7 +199,7 @@ impl StmtVisitor for ASTPrinter {
             visitor.indent(|visitor| {
                 decl.parameters
                     .iter()
-                    .for_each(|p| visitor.visit_variable_decl(p));
+                    .for_each(|p| visitor.visit_structural_variable_decl(p));
             });
             visitor.write_ln("Body");
             visitor.indent(|visitor| {
@@ -187,17 +208,16 @@ impl StmtVisitor for ASTPrinter {
         });
     }
 
-    fn visit_variable_decl(&mut self, decl: &VariableDecl) {
+    fn visit_local_variable_decl(&mut self, decl: &LocalVariableDecl) {
         let symbol = decl
             .name
             .get_symbol()
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
-            "VariableDecl(name: {}, symbol: {}, pub: {})",
+            "LocalVariableDecl(name: {}, symbol: {})",
             decl.name.span().lexeme(),
             symbol,
-            decl.is_public,
         ));
         self.indent(|visitor| {
             if let Some(e) = decl.explicit_type.as_ref() {

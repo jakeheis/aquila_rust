@@ -164,7 +164,7 @@ impl StmtVisitor for IRGen {
         }
     }
 
-    fn visit_variable_decl(&mut self, decl: &VariableDecl) -> Self::StmtResult {
+    fn visit_local_variable_decl(&mut self, decl: &LocalVariableDecl) -> Self::StmtResult {
         let var_symbol = decl.name.get_symbol().unwrap();
         let mut var_type = decl.name.get_type().unwrap();
 

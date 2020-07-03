@@ -30,32 +30,16 @@ pub struct Lib {
 }
 
 impl Lib {
-    pub fn new(name: &str, ast: Vec<ASTNode>, dependencies: Vec<Lib>) -> Self {
-        let mut type_decls: Vec<TypeDecl> = Vec::new();
-        let mut function_decls: Vec<FunctionDecl> = Vec::new();
-        let mut trait_decls: Vec<TraitDecl> = Vec::new();
-        let mut conformance_decls: Vec<ConformanceDecl> = Vec::new();
-        let mut main: Vec<Stmt> = Vec::new();
-
-        for node in ast {
-            match node {
-                ASTNode::FunctionDecl(decl) => function_decls.push(decl),
-                ASTNode::TypeDecl(decl) => type_decls.push(decl),
-                ASTNode::TraitDecl(decl) => trait_decls.push(decl),
-                ASTNode::ConformanceDecl(decl) => conformance_decls.push(decl),
-                ASTNode::Stmt(stmt) => main.push(stmt),
-            }
-        }
-
+    pub fn new(name: &str) -> Self {
         Lib {
             name: String::from(name),
-            type_decls,
-            function_decls,
-            trait_decls,
-            conformance_decls,
+            type_decls: Vec::new(),
+            function_decls: Vec::new(),
+            trait_decls: Vec::new(),
+            conformance_decls: Vec::new(),
             symbols: SymbolTable::new(),
-            main,
-            dependencies,
+            main: Vec::new(),
+            dependencies: Vec::new(),
             specialization_tracker: SpecializationTracker::new(),
         }
     }
@@ -93,15 +77,13 @@ impl Lib {
         let tokens = lexer.lex();
 
         let parser = Parser::new(tokens, Rc::clone(&reporter));
-        let ast = parser.parse();
-
-        ASTPrinter::trace().print(&ast);
+        let mut lib = parser.parse(name);
 
         if reporter.has_errored() {
             return Err("Parsing failed");
         }
 
-        let mut lib = Lib::new(name, ast, dependencies);
+        lib.dependencies = dependencies;
 
         lib = SymbolTableBuilder::build_symbols(lib, Rc::clone(&reporter));
 

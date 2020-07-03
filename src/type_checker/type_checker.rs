@@ -191,7 +191,7 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
-    fn visit_variable_decl(&mut self, decl: &VariableDecl) -> Analysis {
+    fn visit_local_variable_decl(&mut self, decl: &LocalVariableDecl) -> Analysis {
         let explicit_type =
             decl.explicit_type
                 .as_ref()

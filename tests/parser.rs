@@ -1,6 +1,7 @@
 use aquila::diagnostic::*;
 use aquila::lexing::*;
 use aquila::parsing::*;
+use aquila::library::Lib;
 
 mod common;
 use common::*;
@@ -51,7 +52,7 @@ fn invalid_assignment() -> TestResult {
 //
 
 fn assert_expr_success(tokens: Vec<Token>, expr: Expr) -> TestResult {
-    let (program, diagnostics) = test_parse(tokens);
+    let (lib, diagnostics) = test_parse(tokens);
     let diagnostics: &[Diagnostic] = &diagnostics;
 
     if !diagnostics.is_empty() {
@@ -63,7 +64,7 @@ fn assert_expr_success(tokens: Vec<Token>, expr: Expr) -> TestResult {
     }
 
     let mut got_printer = ASTPrinter::collect();
-    got_printer.print(&program);
+    got_printer.print_stmts(&lib.main);
 
     let mut expected_printer = ASTPrinter::collect();
     Stmt::expression(expr).accept(&mut expected_printer);
@@ -94,10 +95,10 @@ fn assert_failure(tokens: Vec<Token>, expected: &[Diagnostic]) -> TestResult {
     )
 }
 
-fn test_parse(mut tokens: Vec<Token>) -> (Vec<ASTNode>, Vec<Diagnostic>) {
+fn test_parse(mut tokens: Vec<Token>) -> (Lib, Vec<Diagnostic>) {
     tokens.push(test_token::semicolon());
     let (_, combined) = test_token::join(&tokens);
     let (reporter, mut diagnostics) = TestReporter::new();
     let parser = Parser::new(combined, reporter);
-    (parser.parse(), diagnostics.unwrap())
+    (parser.parse("test"), diagnostics.unwrap())
 }

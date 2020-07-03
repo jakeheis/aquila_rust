@@ -8,17 +8,41 @@ use std::cell::RefCell;
 pub struct TypeDecl {
     pub name: ResolvedToken,
     pub generics: Vec<ResolvedToken>,
-    pub fields: Vec<VariableDecl>,
+    pub fields: Vec<StructuralVariableDecl>,
     pub methods: Vec<FunctionDecl>,
     pub meta_methods: Vec<FunctionDecl>,
     pub is_public: bool,
+}
+
+impl TypeDecl {
+    pub fn new(
+        name: Token,
+        generics: Vec<Token>,
+        fields: Vec<StructuralVariableDecl>,
+        methods: Vec<FunctionDecl>,
+        meta_methods: Vec<FunctionDecl>,
+        public: bool
+    ) -> Self {
+        let generics: Vec<_> = generics
+            .into_iter()
+            .map(|g| ResolvedToken::new_non_specialized(g))
+            .collect();
+        TypeDecl {
+            name: ResolvedToken::new_non_specialized(name),
+            generics,
+            fields,
+            methods,
+            meta_methods,
+            is_public: public,
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct FunctionDecl {
     pub name: ResolvedToken,
     pub generics: Vec<ResolvedToken>,
-    pub parameters: Vec<VariableDecl>,
+    pub parameters: Vec<StructuralVariableDecl>,
     pub return_type: Option<ExplicitType>,
     pub body: Vec<Stmt>,
     pub is_meta: bool,
@@ -26,16 +50,55 @@ pub struct FunctionDecl {
     pub is_builtin: bool,
 }
 
+impl FunctionDecl {
+    pub fn new(
+        name: Token,
+        generics: Vec<Token>,
+        parameters: Vec<StructuralVariableDecl>,
+        return_type: Option<ExplicitType>,
+        body: Vec<Stmt>,
+        is_meta: bool,
+        is_builtin: bool,
+        is_public: bool
+    ) -> Self {
+        let generics: Vec<_> = generics
+            .into_iter()
+            .map(|g| ResolvedToken::new_non_specialized(g))
+            .collect();
+        FunctionDecl {
+            name: ResolvedToken::new_non_specialized(name),
+            generics,
+            parameters,
+            return_type,
+            body,
+            is_meta,
+            is_public,
+            is_builtin,
+        }
+    }
+}
+
 #[derive(Debug)]
-pub struct VariableDecl {
+pub struct StructuralVariableDecl {
     pub name: TypedToken,
-    pub explicit_type: Option<ExplicitType>,
-    pub initial_value: Option<Expr>,
+    pub explicit_type: ExplicitType,
     pub span: Span,
     pub is_public: bool,
 }
 
-impl ContainsSpan for VariableDecl {
+impl StructuralVariableDecl {
+    pub fn new(name: Token, explicit_type: ExplicitType, public: bool) -> Self {
+        let span = Span::join(&name, &explicit_type);
+        StructuralVariableDecl {
+            name: TypedToken::new(name),
+            explicit_type,
+            span: span.clone(),
+            is_public: public,
+        }
+    }
+}
+
+impl ContainsSpan for StructuralVariableDecl {
     fn span(&self) -> &Span {
         &self.span
     }
@@ -47,11 +110,30 @@ pub struct TraitDecl {
     pub requirements: Vec<FunctionDecl>,
 }
 
+impl TraitDecl {
+    pub fn new(name: Token, requirements: Vec<FunctionDecl>) -> Self {
+        TraitDecl {
+            name: ResolvedToken::new(name, Vec::new()),
+            requirements,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ConformanceDecl {
     pub target: ResolvedToken,
     pub trait_name: ResolvedToken,
     pub implementations: Vec<FunctionDecl>,
+}
+
+impl ConformanceDecl {
+    pub fn new(target: Token, trait_name: Token, impls: Vec<FunctionDecl>) -> ConformanceDecl {
+        ConformanceDecl {
+            target: ResolvedToken::new_non_specialized(target),
+            trait_name: ResolvedToken::new_non_specialized(trait_name),
+            implementations: impls,
+        }
+    }
 }
 
 pub enum ASTNode {
@@ -63,8 +145,22 @@ pub enum ASTNode {
 }
 
 #[derive(Debug)]
+pub struct LocalVariableDecl {
+    pub name: TypedToken,
+    pub explicit_type: Option<ExplicitType>,
+    pub initial_value: Option<Expr>,
+    pub span: Span,
+}
+
+impl ContainsSpan for LocalVariableDecl {
+    fn span(&self) -> &Span {
+        &self.span
+    }
+}
+
+#[derive(Debug)]
 pub enum StmtKind {
-    VariableDecl(VariableDecl),
+    LocalVariableDecl(LocalVariableDecl),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     WhileStmt(Expr, Vec<Stmt>),
     ForStmt(TypedToken, Expr, Vec<Stmt>),
@@ -86,7 +182,7 @@ impl Stmt {
 
     pub fn accept<V: StmtVisitor>(&self, visitor: &mut V) -> V::StmtResult {
         match &self.kind {
-            StmtKind::VariableDecl(decl) => visitor.visit_variable_decl(decl),
+            StmtKind::LocalVariableDecl(decl) => visitor.visit_local_variable_decl(decl),
             StmtKind::IfStmt(condition, body, else_body) => {
                 visitor.visit_if_stmt(&condition, &body, &else_body)
             }
@@ -100,60 +196,7 @@ impl Stmt {
         }
     }
 
-    pub fn type_decl(
-        type_span: Span,
-        name: Token,
-        generics: Vec<Token>,
-        fields: Vec<VariableDecl>,
-        methods: Vec<FunctionDecl>,
-        meta_methods: Vec<FunctionDecl>,
-        right_brace: &Token,
-    ) -> TypeDecl {
-        let _span = Span::join(&type_span, right_brace);
-        let generics: Vec<_> = generics
-            .into_iter()
-            .map(|g| ResolvedToken::new_non_specialized(g))
-            .collect();
-        let decl = TypeDecl {
-            name: ResolvedToken::new_non_specialized(name),
-            generics,
-            fields,
-            methods,
-            meta_methods,
-            is_public: false,
-        };
-        decl
-    }
-
-    pub fn function_decl(
-        start_span: Span,
-        name: Token,
-        generics: Vec<Token>,
-        parameters: Vec<VariableDecl>,
-        return_type: Option<ExplicitType>,
-        body: Vec<Stmt>,
-        right_brace_span: &Span,
-        is_meta: bool,
-        is_builtin: bool,
-    ) -> FunctionDecl {
-        let _span = Span::join(&start_span, right_brace_span);
-        let generics: Vec<_> = generics
-            .into_iter()
-            .map(|g| ResolvedToken::new_non_specialized(g))
-            .collect();
-        FunctionDecl {
-            name: ResolvedToken::new_non_specialized(name),
-            generics,
-            parameters,
-            return_type,
-            body,
-            is_meta,
-            is_public: false,
-            is_builtin,
-        }
-    }
-
-    pub fn variable_decl(
+    pub fn local_variable_decl(
         name: Token,
         explicit_type: Option<ExplicitType>,
         value: Option<Expr>,
@@ -166,44 +209,13 @@ impl Stmt {
             name.span()
         };
         let span = Span::join(&name, end_span);
-        let decl = VariableDecl {
+        let decl = LocalVariableDecl {
             name: TypedToken::new(name),
             explicit_type,
             initial_value: value,
             span: span.clone(),
-            is_public: false,
         };
-        Stmt::new(StmtKind::VariableDecl(decl), span)
-    }
-
-    pub fn trait_decl(
-        trait_span: Span,
-        name: Token,
-        requirements: Vec<FunctionDecl>,
-        end: &Span,
-    ) -> TraitDecl {
-        let _span = Span::join(&trait_span, end);
-        let decl = TraitDecl {
-            name: ResolvedToken::new(name, Vec::new()),
-            requirements,
-        };
-        decl
-    }
-
-    pub fn conformance_decl(
-        impl_span: Span,
-        target: Token,
-        trait_name: Token,
-        impls: Vec<FunctionDecl>,
-        end: &Span,
-    ) -> ConformanceDecl {
-        let _span = Span::join(&impl_span, end);
-        let decl = ConformanceDecl {
-            target: ResolvedToken::new_non_specialized(target),
-            trait_name: ResolvedToken::new_non_specialized(trait_name),
-            implementations: impls,
-        };
-        decl
+        Stmt::new(StmtKind::LocalVariableDecl(decl), span)
     }
 
     pub fn if_stmt(
@@ -270,7 +282,7 @@ pub trait StmtVisitor {
 
     fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Self::StmtResult;
 
-    fn visit_variable_decl(&mut self, decl: &VariableDecl) -> Self::StmtResult;
+    fn visit_local_variable_decl(&mut self, decl: &LocalVariableDecl) -> Self::StmtResult;
 
     fn visit_trait_decl(&mut self, decl: &TraitDecl) -> Self::StmtResult;
 

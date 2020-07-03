@@ -250,11 +250,10 @@ impl SymbolTableBuilder {
 
     fn var_decl_type<'b>(
         &self,
-        var_decl: &'b VariableDecl,
+        var_decl: &'b StructuralVariableDecl,
         enclosing_func: Option<&Symbol>,
     ) -> (&'b Token, NodeType) {
-        let resolved_type =
-            self.resolve_type(var_decl.explicit_type.as_ref().unwrap(), enclosing_func);
+        let resolved_type = self.resolve_type(&var_decl.explicit_type, enclosing_func);
         (&var_decl.name.token, resolved_type)
     }
 
