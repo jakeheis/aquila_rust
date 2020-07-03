@@ -186,7 +186,7 @@ impl NodeType {
     ) -> Option<(Symbol, NodeType)> {
         match (param, arg) {
             (NodeType::Instance(symbol, _), arg) => {
-                if let Some(generic_def) = lib.type_metadata(symbol) {
+                if let Some(generic_def) = lib.type_metadata_ref(symbol) {
                     Some((generic_def.symbol.clone(), arg.clone()))
                 } else {
                     None

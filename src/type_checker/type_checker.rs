@@ -83,7 +83,7 @@ impl TypeChecker {
         }
     }
 
-    fn report_error(&mut self, diag: Diagnostic) {
+    fn report_error(&self, diag: Diagnostic) {
         self.reporter.report(diag);
     }
 }
@@ -303,6 +303,7 @@ impl StmtVisitor for TypeChecker {
 
         self.context.pop_scope();
 
+        let trait_metadata = self.lib.trait_metadata(decl.trait_name.token.lexeme()).unwrap();
         for requirement in &trait_metadata.function_requirements {
             let requirement_metadata = self.lib.function_metadata(&requirement).unwrap();
             let impl_symbol = Symbol::new_str(&type_metadata.symbol, requirement.last_component());
@@ -439,7 +440,7 @@ impl StmtVisitor for TypeChecker {
                         let _ = expr.set_type(node_type);
                     }
                     NodeType::Instance(sym, _) => {
-                        let metadata = self.lib.type_metadata(&sym).unwrap();
+                        let metadata = self.lib.type_metadata_ref(&sym).unwrap();
                         if !metadata.conforms_to(&Symbol::writable_symbol()) {
                             let message = format!("Can't print object of type {}", sym.mangled());
                             self.report_error(Diagnostic::error(expr, &message));

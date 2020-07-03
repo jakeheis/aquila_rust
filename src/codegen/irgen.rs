@@ -91,7 +91,7 @@ impl StmtVisitor for IRGen {
 
     fn visit_type_decl(&mut self, decl: &TypeDecl) -> Self::StmtResult {
         let type_symbol = decl.name.get_symbol().unwrap();
-        let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
+        let type_metadata = self.lib.type_metadata_ref(&type_symbol).unwrap();
 
         for spec in &type_metadata.specializations {
             trace!("Writing type {} with specialization {}", type_symbol, spec);
@@ -139,7 +139,7 @@ impl StmtVisitor for IRGen {
     fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Self::StmtResult {
         let func_symbol = decl.name.get_symbol().unwrap();
 
-        let func_metadata = self.lib.function_metadata(&func_symbol).unwrap();
+        let func_metadata = self.lib.function_metadata(&func_symbol).unwrap().clone();
 
         for specialization in &func_metadata.specializations {
             trace!(
@@ -398,6 +398,8 @@ impl ExprVisitor for IRGen {
         function: &ResolvedToken,
         args: &[Expr],
     ) -> Self::ExprResult {
+        let mut arg_exprs: Vec<_> = args.iter().map(|a| a.accept(self)).collect();
+
         let function_symbol = function.get_symbol().unwrap();
         let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
 
@@ -417,7 +419,7 @@ impl ExprVisitor for IRGen {
 
             match &function_metadata.kind {
                 FunctionKind::MetaMethod(owner) if function_symbol.is_init() => {
-                    let type_init = self.lib.type_metadata(&owner).unwrap();
+                    let type_init = self.lib.type_metadata_ref(&owner).unwrap();
                     GenericSpecialization::new(&type_init.generics, explicit_types)
                 }
                 _ => GenericSpecialization::new(&function_metadata.generics, explicit_types),
@@ -442,7 +444,6 @@ impl ExprVisitor for IRGen {
         } else {
             function_metadata.function_name(self.lib.as_ref(), &specialization)
         };
-        let mut args: Vec<_> = args.iter().map(|a| a.accept(self)).collect();
 
         if let Some(target) = target {
             if let FunctionKind::Method(..) = function_metadata.kind {
@@ -460,11 +461,11 @@ impl ExprVisitor for IRGen {
                         }
                     }
                 };
-                args.insert(0, target_expr);
+                arg_exprs.insert(0, target_expr);
             }
         } else {
             if let FunctionKind::Method(..) = function_metadata.kind {
-                args.insert(
+                arg_exprs.insert(
                     0,
                     IRExpr {
                         kind: IRExprKind::Variable(String::from("self")),
@@ -475,12 +476,12 @@ impl ExprVisitor for IRGen {
         }
 
         if let Some(special) =
-            builtins::write_special_call(&function_symbol, &args, &specialization)
+            builtins::write_special_call(&function_symbol, &arg_exprs, &specialization)
         {
             special
         } else {
             IRExpr {
-                kind: IRExprKind::Call(function_name, args),
+                kind: IRExprKind::Call(function_name, arg_exprs),
                 expr_type: self.specialize_expr(expr),
             }
         }

@@ -72,7 +72,7 @@ impl CycleChecker {
         for field_symbol in fields {
             if field_symbol == &cur_symbol {
                 self.reporter.report(Diagnostic::error(
-                    &lib.symbol_span(&cur_symbol).unwrap(),
+                    lib.symbol_span(&cur_symbol).unwrap(),
                     "Cannot contain a property of the same type",
                 ));
             } else if chain.contains(field_symbol) {
@@ -82,7 +82,7 @@ impl CycleChecker {
                     field_symbol.mangled()
                 );
                 self.reporter.report(Diagnostic::error(
-                    &lib.symbol_span(&cur_symbol).unwrap(),
+                    lib.symbol_span(&cur_symbol).unwrap(),
                     &message,
                 ));
             } else {

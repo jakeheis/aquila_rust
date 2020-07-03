@@ -59,7 +59,12 @@ impl SymbolTableBuilder {
     fn build_type_header(&mut self, decl: &TypeDecl) {
         let new_symbol = Symbol::new(self.current_symbol(), &decl.name.token);
 
-        let metadata = TypeMetadata::new(new_symbol.clone(), decl.is_public);
+        let mut metadata = TypeMetadata::new(new_symbol.clone(), decl.is_public);
+
+        self.context.push(new_symbol.clone());
+        metadata.generics = self.insert_generics(&new_symbol, &decl.generics);
+        self.context.pop();
+        
         self.symbols
             .insert_type_metadata(new_symbol.clone(), metadata);
 
@@ -78,12 +83,6 @@ impl SymbolTableBuilder {
         trace!(target: "symbol_table", "Building type {} (symbol = {})", decl.name.token.lexeme(), type_symbol);
 
         self.context.push(type_symbol.clone());
-
-        let generics = self.insert_generics(&type_symbol, &decl.generics);
-        self.symbols
-            .get_type_metadata_mut(&type_symbol)
-            .unwrap()
-            .generics = generics;
 
         let mut type_metadata = self
             .symbols

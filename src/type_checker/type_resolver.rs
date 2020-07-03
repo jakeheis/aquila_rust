@@ -88,11 +88,7 @@ impl<'a> TypeResolution<'a> {
 
         let found_metadata = self.lib.deep_search(&|lib| {
             let symbol = Symbol::new(&Symbol::lib_root(lib), token);
-            if let Some(type_metadata) = lib.symbols.get_type_metadata(&symbol) {
-                Some(type_metadata.clone())
-            } else {
-                None
-            }
+            lib.symbols.get_type_metadata(&symbol)
         });
         if let Some(type_metadata) = found_metadata {
             trace!(target: "symbol_table", "Resolving {} as other lib {}", token.lexeme(), type_metadata.symbol);

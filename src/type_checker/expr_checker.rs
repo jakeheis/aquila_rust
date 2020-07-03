@@ -35,7 +35,7 @@ impl ExprChecker {
             }
         };
 
-        let target_metadata = self.lib.type_metadata(target_symbol).unwrap();
+        let target_metadata = self.lib.type_metadata_ref(target_symbol).unwrap();
 
         let method_metadata = if is_meta {
             target_metadata.meta_method_named(method)
@@ -56,13 +56,13 @@ impl ExprChecker {
         &self,
         span: &S,
         function: &ResolvedToken,
-    ) -> DiagnosticResult<(FunctionMetadata, GenericSpecialization, bool)> {
+    ) -> DiagnosticResult<(&FunctionMetadata, GenericSpecialization, bool)> {
         match self.context.resolve_var(function.token.lexeme()) {
             Some((found_symbol, NodeType::Function(_))) => {
                 let func_metadata = self.lib.function_metadata(&found_symbol).unwrap();
                 match &func_metadata.kind {
                     FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
-                        let implicit_self = self.lib.type_metadata(owner).unwrap();
+                        let implicit_self = self.lib.type_metadata_ref(owner).unwrap();
                         let implicit_spec = implicit_self.dummy_specialization();
                         return Ok((func_metadata, implicit_spec, false));
                     }
@@ -188,6 +188,9 @@ impl ExprVisitor for ExprChecker {
         function: &ResolvedToken,
         args: &[Expr],
     ) -> Self::ExprResult {
+        let arg_types: DiagnosticResult<Vec<NodeType>> = args.iter().map(|a| a.accept(self)).collect();
+        let arg_types = arg_types?;
+
         let function_name = function.token.lexeme();
 
         let (metadata, target_specialization, is_init) = if let Some(target) = target {
@@ -212,10 +215,6 @@ impl ExprVisitor for ExprChecker {
         function.set_symbol(metadata.symbol.clone());
 
         trace!(target: "type_checker", "Callee metadata: {}", metadata);
-
-        let arg_types: DiagnosticResult<Vec<NodeType>> =
-            args.iter().map(|a| a.accept(self)).collect();
-        let arg_types = arg_types?;
 
         if metadata.parameter_types.len() != arg_types.len() {
             let message = format!(
@@ -300,7 +299,7 @@ impl ExprVisitor for ExprChecker {
 
         match target_type {
             NodeType::Instance(type_symbol, specialization) => {
-                let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
+                let type_metadata = self.lib.type_metadata_ref(&type_symbol).unwrap();
                 if let Some((field_symbol, field_type, is_public)) =
                     type_metadata.field_named(field_name)
                 {

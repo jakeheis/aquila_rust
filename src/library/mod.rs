@@ -37,8 +37,8 @@ impl Lib {
             function_decls: Vec::new(),
             trait_decls: Vec::new(),
             conformance_decls: Vec::new(),
-            symbols: SymbolTable::new(),
             main: Vec::new(),
+            symbols: SymbolTable::new(),
             dependencies: Vec::new(),
             specialization_tracker: SpecializationTracker::new(),
         }
@@ -104,9 +104,9 @@ impl Lib {
         Ok(lib)
     }
 
-    pub fn deep_search<F, U>(&self, search: &F) -> Option<U>
+    pub fn deep_search<'a, F, U>(&'a self, search: &F) -> Option<&U>
     where
-        F: Fn(&Lib) -> Option<U>,
+        F: Fn(&'a Lib) -> Option<&'a U>,
     {
         if let Some(found) = search(self) {
             Some(found)
@@ -120,30 +120,8 @@ impl Lib {
         }
     }
 
-    pub fn type_metadata(&self, symbol: &Symbol) -> Option<TypeMetadata> {
-        if let Some(found) = self.symbols.get_type_metadata(symbol) {
-            Some(found.clone())
-        } else {
-            for dep in &self.dependencies {
-                if let Some(found) = dep.type_metadata(symbol) {
-                    return Some(found);
-                }
-            }
-            None
-        }
-    }
-
     pub fn type_metadata_ref(&self, symbol: &Symbol) -> Option<&TypeMetadata> {
-        if let Some(found) = self.symbols.get_type_metadata(symbol) {
-            Some(found)
-        } else {
-            for dep in &self.dependencies {
-                if let Some(found) = dep.type_metadata_ref(symbol) {
-                    return Some(found);
-                }
-            }
-            None
-        }
+        self.deep_search(&|l: &Lib| l.symbols.get_type_metadata(symbol))
     }
 
     pub fn type_metadata_mut(&mut self, symbol: &Symbol) -> Option<&mut TypeMetadata> {
@@ -160,30 +138,14 @@ impl Lib {
     }
 
     pub fn top_level_function_named(&self, name: &str) -> Option<&FunctionMetadata> {
-        let func_symbol = Symbol::new_str(&Symbol::lib_root(self), name);
-        if let Some(found) = self.symbols.get_func_metadata(&func_symbol) {
-            return Some(found);
-        }
-
-        for dep in &self.dependencies {
-            if let Some(found) = dep.top_level_function_named(name) {
-                return Some(found);
-            }
-        }
-        None
+        self.deep_search(&|lib: &Lib| {
+            let func_symbol = Symbol::new_str(&Symbol::lib_root(lib), name);
+            lib.symbols.get_func_metadata(&func_symbol)
+        })
     }
 
-    pub fn function_metadata(&self, symbol: &Symbol) -> Option<FunctionMetadata> {
-        if let Some(found) = self.symbols.get_func_metadata(symbol) {
-            Some(found.clone())
-        } else {
-            for dep in &self.dependencies {
-                if let Some(found) = dep.function_metadata(symbol) {
-                    return Some(found);
-                }
-            }
-            None
-        }
+    pub fn function_metadata(&self, symbol: &Symbol) -> Option<&FunctionMetadata> {
+        self.deep_search(&|l| l.symbols.get_func_metadata(symbol))
     }
 
     pub fn function_metadata_mut(&mut self, symbol: &Symbol) -> Option<&mut FunctionMetadata> {
@@ -199,43 +161,18 @@ impl Lib {
         }
     }
 
-    pub fn trait_metadata(&self, name: &str) -> Option<TraitMetadata> {
-        let my_symbol = Symbol::new_str(&Symbol::lib_root(self), name);
-        if let Some(found) = self.symbols.get_trait_metadata(&my_symbol) {
-            Some(found.clone())
-        } else {
-            for dep in &self.dependencies {
-                if let Some(found) = dep.trait_metadata(name) {
-                    return Some(found);
-                }
-            }
-            None
-        }
+    pub fn trait_metadata(&self, name: &str) -> Option<&TraitMetadata> {
+        self.deep_search(&|lib| {
+            let trait_symbol = Symbol::new_str(&Symbol::lib_root(lib), name);
+            lib.symbols.get_trait_metadata(&trait_symbol)
+        })
     }
 
-    pub fn trait_metadata_symbol(&self, name: &Symbol) -> Option<TraitMetadata> {
-        if let Some(found) = self.symbols.get_trait_metadata(name) {
-            Some(found.clone())
-        } else {
-            for dep in &self.dependencies {
-                if let Some(found) = dep.trait_metadata_symbol(name) {
-                    return Some(found);
-                }
-            }
-            None
-        }
+    pub fn trait_metadata_symbol(&self, name: &Symbol) -> Option<&TraitMetadata> {
+        self.deep_search(&|l| l.symbols.get_trait_metadata(name))
     }
 
-    pub fn symbol_span(&self, symbol: &Symbol) -> Option<Span> {
-        if let Some(found) = self.symbols.span_map.get(symbol) {
-            Some(found.clone())
-        } else {
-            for dep in &self.dependencies {
-                if let Some(found) = dep.symbol_span(symbol) {
-                    return Some(found);
-                }
-            }
-            None
-        }
+    pub fn symbol_span(&self, symbol: &Symbol) -> Option<&Span> {
+        self.deep_search(&|l| l.symbols.span_map.get(symbol))
     }
 }

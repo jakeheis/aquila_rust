@@ -129,15 +129,14 @@ impl ContextTracker {
 
     fn push_type_scope(&mut self, name: &ResolvedToken) -> (Symbol, TypeMetadata) {
         let symbol = Symbol::new(self.current_symbol(), &name.token);
-        let metadata = self.lib.type_metadata(&symbol).unwrap();
+        let metadata = self.lib.type_metadata_ref(&symbol).unwrap().clone();
         self.push_scope(symbol.clone(), ScopeType::InsideType(metadata.clone()));
         (symbol, metadata)
     }
 
     fn push_function_scope(&mut self, name: &ResolvedToken) -> (Symbol, FunctionMetadata) {
         let symbol = Symbol::new(self.current_symbol(), &name.token);
-        // println!("getting metadatat for {}", symbo)
-        let metadata = self.lib.function_metadata(&symbol).unwrap();
+        let metadata = self.lib.function_metadata(&symbol).unwrap().clone();
         self.push_scope(symbol.clone(), ScopeType::InsideFunction(metadata.clone()));
         (symbol, metadata)
     }
