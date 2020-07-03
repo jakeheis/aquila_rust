@@ -162,6 +162,11 @@ impl TypeChecker {
             self.context.put_in_scope(symbol, param_type);
         }
 
+        if decl.include_caller {
+            let symbol  = Symbol::new_str(&func_symbol, "caller");
+            self.context.put_in_scope(&symbol, &NodeType::pointer_to(NodeType::Byte));
+        }
+
         for (index, param_type) in metadata.parameter_types.iter().enumerate() {
             if let NodeType::Array(_, 0) = param_type {
                 self.report_error(Diagnostic::error(

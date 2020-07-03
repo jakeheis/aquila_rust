@@ -135,6 +135,7 @@ impl SymbolTableBuilder {
                     parameter_types: type_metadata.field_types.clone(),
                     return_type: instance_type,
                     is_public: !any_private_fields,
+                    include_caller: false,
                 },
             )
         }
@@ -200,6 +201,7 @@ impl SymbolTableBuilder {
             parameter_types: param_types,
             return_type: return_type,
             is_public: decl.is_public,
+            include_caller: decl.include_caller
         };
         self.insert_func_metadata(function_symbol.clone(), function_metadata);
 

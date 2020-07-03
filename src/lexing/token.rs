@@ -58,6 +58,7 @@ pub enum TokenKind {
     SelfKeyword,
     Pub,
     Impl,
+    Caller,
 
     // Other
     Comma,

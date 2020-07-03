@@ -74,7 +74,11 @@ impl IRExpr {
     }
 
     pub fn string_literal(slice: &str) -> Self {
-        IRExpr::literal(slice, NodeType::pointer_to(NodeType::Byte))
+        let string = format!("\"{}\"", slice);
+        IRExpr {
+            kind: IRExprKind::Literal(string),
+            expr_type: NodeType::pointer_to(NodeType::Byte)
+        }
     }
 
     pub fn literal(slice: &str, expr_type: NodeType) -> Self {

@@ -48,6 +48,7 @@ pub struct FunctionDecl {
     pub is_meta: bool,
     pub is_public: bool,
     pub is_builtin: bool,
+    pub include_caller: bool,
 }
 
 impl FunctionDecl {
@@ -60,6 +61,7 @@ impl FunctionDecl {
         is_meta: bool,
         is_builtin: bool,
         is_public: bool,
+        include_caller: bool,
     ) -> Self {
         let generics: Vec<_> = generics
             .into_iter()
@@ -74,6 +76,7 @@ impl FunctionDecl {
             is_meta,
             is_public,
             is_builtin,
+            include_caller,
         }
     }
 }

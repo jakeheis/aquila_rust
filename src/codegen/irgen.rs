@@ -145,7 +145,13 @@ impl IRGen {
         let spec_map = Rc::clone(&self.spec_map);
         let specs = spec_map.specs_for(&func_symbol);
 
-        let func_metadata = self.lib.function_metadata(&func_symbol).unwrap().clone();
+        let mut func_metadata = self.lib.function_metadata(&func_symbol).unwrap().clone();
+
+        if decl.include_caller {
+            let caller_symbol = Symbol::new_str(&func_symbol, "caller");
+            func_metadata.parameter_symbols.push(caller_symbol);
+            func_metadata.parameter_types.push(NodeType::pointer_to(NodeType::Byte));
+        }
 
         if let Some(specs) = specs {
             for specialization in specs {
@@ -480,6 +486,12 @@ impl ExprVisitor for IRGen {
                     },
                 );
             }
+        }
+
+        let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
+        if function_metadata.include_caller {
+            let location = expr.span.location();
+            arg_exprs.push(IRExpr::string_literal(&location));
         }
 
         if let Some(special) =

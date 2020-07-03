@@ -273,9 +273,15 @@ impl Parser {
         };
 
         let mut params: Vec<StructuralVariableDecl> = Vec::new();
+        let mut include_caller = false;
+
         self.consume(TokenKind::LeftParen, "Expect '(' after function name")?;
         while !self.is_at_end() && self.peek() != TokenKind::RightParen {
-            params.push(self.structural_variable_decl(false)?);
+            if self.matches(TokenKind::Caller) {
+                include_caller = true;
+            } else {
+                params.push(self.structural_variable_decl(false)?);
+            }
             if self.peek() != TokenKind::RightParen {
                 self.consume(TokenKind::Comma, "Expect ',' separating parameters")?;
             }
@@ -317,6 +323,7 @@ impl Parser {
             meta,
             builtin,
             public,
+            include_caller,
         ))
     }
 

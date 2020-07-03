@@ -11,11 +11,13 @@
 // }
 
 let is = [1, 2, 3];
-print is.[4];
+// print is.[4];
 
 let vector = Vec[int].new();
 vector.insert(2);
 vector.insert(4);
+
+print *vector.get(4);
 
 // let a = 4 + 5;
 // print a;

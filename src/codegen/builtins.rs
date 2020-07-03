@@ -12,7 +12,6 @@ struct Builtin {
 impl Builtin {
     fn all() -> Vec<Builtin> {
         vec![
-            Builtin::fatal_error(),
             Builtin::size(),
             Builtin::ptr_offset(),
             Builtin::read_line(),
@@ -21,23 +20,10 @@ impl Builtin {
 
     fn named(symbol: &Symbol) -> Option<Builtin> {
         match symbol.id.as_str() {
-            "stdlib$fatal_error" => Some(Builtin::fatal_error()),
             "stdlib$Memory$Meta$size" => Some(Builtin::size()),
             "stdlib$ptr_offset" => Some(Builtin::ptr_offset()),
             "stdlib$_read_line" => Some(Builtin::read_line()),
             _ => None,
-        }
-    }
-
-    fn fatal_error() -> Self {
-        Builtin {
-            name: "fatal_error",
-            implicit_calls: vec![Symbol::new_str(
-                &Symbol::stdlib_root(),
-                "fatal_error_location",
-            )],
-            write: None,
-            special_call: Some(fatal_error_call),
         }
     }
 
@@ -179,13 +165,6 @@ fn write_read_line(writer: &mut IRWriter, _func_symbol: &Symbol) {
 }
 
 // Call impls
-
-fn fatal_error_call(_symbol: &Symbol, args: &[IRExpr], _spec: &GenericSpecialization) -> IRExpr {
-    let message = args[0].clone();
-    let location = IRExpr::string_literal("\"<unknown>\"");
-    let callee = Symbol::new_str(&Symbol::stdlib_root(), "fatal_error_location");
-    IRExpr::call(&callee.mangled(), vec![message, location], NodeType::Void)
-}
 
 fn size_call(symbol: &Symbol, _args: &[IRExpr], spec: &GenericSpecialization) -> IRExpr {
     let mem_type = Symbol::new_str(symbol, "T");

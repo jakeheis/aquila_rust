@@ -71,6 +71,15 @@ impl Lexer {
             ')' => self.make_token(TokenKind::RightParen),
             '[' => self.make_token(TokenKind::LeftBracket),
             ']' => self.make_token(TokenKind::RightBracket),
+            '#' => {
+                self.identifier();
+                if self.current_span().lexeme() == "#caller" {
+                    self.make_token(TokenKind::Caller)
+                } else {
+                    self.error("unrecognized compiler directive");
+                    None
+                }
+            }
             '0'..='9' => self.number(),
             'a'..='z' | 'A'..='Z' | '_' => self.identifier(),
             '"' => self.string(),

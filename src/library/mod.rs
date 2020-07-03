@@ -49,7 +49,7 @@ impl Lib {
         reporter: Rc<dyn Reporter>,
         link_stdlib: bool,
     ) -> Result<Lib, &'static str> {
-        let name = source.name().to_string();
+        let name = source.short_name().to_string();
         Lib::build_lib(source, &name, link_stdlib, reporter)
     }
 

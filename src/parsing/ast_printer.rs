@@ -162,12 +162,13 @@ impl ASTPrinter {
         let generics: Vec<_> = decl.generics.iter().map(|g| g.span().lexeme()).collect();
         let generics = format!("<{}>", generics.join(","));
         self.write_ln(&format!(
-            "FunctionDecl(name: {}, generics: {}, symbol: {}, meta: {}, pub: {})",
+            "FunctionDecl(name: {}, generics: {}, symbol: {}, meta: {}, pub: {}, include_caller: {})",
             decl.name.span().lexeme(),
             generics,
             symbol,
             decl.is_meta,
             decl.is_public,
+            decl.include_caller,
         ));
         self.indent(|visitor| {
             if let Some(return_type) = decl.return_type.as_ref() {

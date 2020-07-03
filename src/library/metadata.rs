@@ -191,6 +191,7 @@ pub struct FunctionMetadata {
     pub parameter_types: Vec<NodeType>,
     pub return_type: NodeType,
     pub is_public: bool,
+    pub include_caller: bool,
 }
 
 impl FunctionMetadata {
@@ -203,6 +204,7 @@ impl FunctionMetadata {
             parameter_types: Vec::new(),
             return_type: NodeType::Int,
             is_public: false,
+            include_caller: false,
         }
     }
 

@@ -46,7 +46,9 @@ pub def read_line(): String {
     return String.from(_read_line());
 }
 
-pub builtin def fatal_error(message: ptr byte) {}
+pub def fatal_error(message: ptr byte, #caller) {
+    fatal_error_location(message, caller);
+}
 
 pub def fatal_error_location(message: ptr byte, location: ptr byte) {
     print String.from("Fatal error: ").append_literal(message).storage;
@@ -118,16 +120,16 @@ pub type Vec[T] {
         count = count + 1;
     }
 
-    pub def get(index: int): ptr T {
+    pub def get(index: int, #caller): ptr T {
         if index >= count {
             fatal_error("Index out of bounds");
         }
         return Memory.offset[T](storage, index);
     }
 
-    pub def replace(index: int, object: T) {
+    pub def replace(index: int, object: T, #caller) {
         if index > count {
-            fatal_error("Index out of bounds");
+            fatal_error_location("Index out of bounds", caller);
         }
         if index == count {
             insert(object);
@@ -136,9 +138,9 @@ pub type Vec[T] {
         }
     }
 
-    pub def pop(): T {
+    pub def pop(#caller): T {
         if count == 0 {
-            fatal_error("can't pop from empty vector");
+            fatal_error_location("can't pop from empty vector", caller);
         }
         count = count - 1;
         return *Memory.offset[T](storage, count);

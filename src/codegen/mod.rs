@@ -44,7 +44,7 @@ pub fn generate(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static
         .unwrap();
 
     if !status.success() {
-        reporter.report(Diagnostic::error(&Span::empty(), "C build failed"));
+        reporter.report(Diagnostic::error(&Span::unknown(), "C build failed"));
         Err("C build failed")
     } else {
         Ok(())

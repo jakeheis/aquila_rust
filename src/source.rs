@@ -5,35 +5,39 @@ pub type Source = Rc<SourceImpl>;
 
 pub fn file(file: &str) -> Source {
     let content = fs::read_to_string(file).unwrap();
+    let path = fs::canonicalize(file).unwrap();
+    let full_name = path.to_str().unwrap();
+    let short_name = path.file_stem().unwrap().to_str().unwrap();
+    
     Rc::new(SourceImpl {
-        name: String::from(
-            fs::canonicalize(file)
-                .unwrap()
-                .file_stem()
-                .unwrap()
-                .to_str()
-                .unwrap(),
-        ),
+        full_name: String::from(full_name),
+        short_name: String::from(short_name),
         content,
     })
 }
 
 pub fn text(text: &str) -> Source {
     Rc::new(SourceImpl {
-        name: String::from("<stdin>"),
+        full_name: String::from("<stdin>"),
+        short_name: String::from("<stdin>"),
         content: String::from(text),
     })
 }
 
 #[derive(Debug)]
 pub struct SourceImpl {
-    pub name: String,
+    pub full_name: String,
+    pub short_name: String,
     pub content: String,
 }
 
 impl SourceImpl {
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn full_name(&self) -> &str {
+        &self.full_name
+    }
+
+    pub fn short_name(&self) -> &str {
+        &self.short_name
     }
 
     pub fn character(&self, number: usize) -> char {
@@ -68,9 +72,11 @@ impl Span {
         }
     }
 
-    pub fn empty() -> Self {
+    pub fn unknown() -> Self {
+        let name = String::from("<unknown>");
         let source = SourceImpl {
-            name: String::from("<none>"),
+            full_name: name.clone(),
+            short_name: name,
             content: String::from(""),
         };
         Span {
@@ -109,7 +115,7 @@ impl Span {
     }
 
     pub fn location(&self) -> String {
-        format!("{}:{}", self.source.name(), self.line)
+        format!("{}:{}", self.source.full_name(), self.line)
     }
 
     pub fn lexeme(&self) -> &str {
@@ -135,7 +141,7 @@ impl std::fmt::Display for Span {
         write!(
             f,
             "Span(in: {}, index: {}, length: {}, line: {})",
-            self.source.name(),
+            self.source.short_name(),
             self.index,
             self.length,
             self.line
@@ -145,7 +151,7 @@ impl std::fmt::Display for Span {
 
 impl PartialEq for Span {
     fn eq(&self, other: &Span) -> bool {
-        self.source.name() == other.source.name()
+        self.source.full_name() == other.source.full_name()
             && self.index == other.index
             && self.length == other.length
             && self.line == other.line
