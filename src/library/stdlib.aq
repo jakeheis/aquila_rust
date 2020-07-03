@@ -122,14 +122,14 @@ pub type Vec[T] {
 
     pub def get(index: int, #caller): ptr T {
         if index >= count {
-            fatal_error("Index out of bounds");
+            fatal_error_location("index out of bounds", caller);
         }
         return Memory.offset[T](storage, index);
     }
 
     pub def replace(index: int, object: T, #caller) {
         if index > count {
-            fatal_error_location("Index out of bounds", caller);
+            fatal_error_location("index out of bounds", caller);
         }
         if index == count {
             insert(object);
@@ -175,9 +175,9 @@ pub type Optional[T] {
         return !_is_some;
     }
 
-    pub def unwrap(): ptr T {
+    pub def unwrap(#caller): ptr T {
         if _is_some == false {
-            fatal_error("unwrapped a nil value");
+            fatal_error_location("unwrapped a nil value", caller);
         }
         return object;
     }

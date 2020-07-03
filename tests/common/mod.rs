@@ -6,34 +6,13 @@ use std::rc::Rc;
 pub type TestResult = std::result::Result<(), String>;
 
 #[allow(dead_code)]
-pub mod test_source {
-
-    use aquila::source::{Source, SourceImpl};
-
-    pub fn new() -> Source {
-        std::rc::Rc::new(SourceImpl {
-            name: String::from("<test>"),
-            content: String::new(),
-        })
-    }
-
-    pub fn new_text(text: &str) -> Source {
-        std::rc::Rc::new(SourceImpl {
-            name: String::from("<test>"),
-            content: String::from(text),
-        })
-    }
-}
-
-#[allow(dead_code)]
 pub mod test_span {
 
-    use super::test_source;
-    use aquila::source::*;
+    use aquila::source::{self, Span};
 
     pub fn new(index: usize, length: usize) -> Span {
         Span {
-            source: test_source::new(),
+            source: source::text(""),
             index,
             length,
             line: 1,
@@ -44,12 +23,11 @@ pub mod test_span {
 #[allow(dead_code)]
 pub mod test_token {
 
-    use super::test_source;
     use aquila::lexing::*;
-    use aquila::source::{Source, Span};
+    use aquila::source::{self, Source, Span};
 
     pub fn test(kind: TokenKind, text: &str) -> Token {
-        let span = Span::new(&test_source::new_text(text), 0, text.chars().count(), 1);
+        let span = Span::new(&source::text(text), 0, text.chars().count(), 1);
         Token::new(kind, span)
     }
 
@@ -166,7 +144,7 @@ pub mod test_token {
             .iter()
             .map(|t| &t.span.source.content)
             .fold(String::new(), |acc, c| acc + c);
-        let new_source = test_source::new_text(&combined);
+        let new_source = source::text(&combined);
         let mut index = 0;
         let mut tokens: Vec<Token> = tokens
             .iter()

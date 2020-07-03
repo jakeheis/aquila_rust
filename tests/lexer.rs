@@ -1,5 +1,6 @@
 use aquila::diagnostic::*;
 use aquila::lexing::*;
+use aquila::source;
 
 mod common;
 use common::*;
@@ -74,7 +75,7 @@ fn assert_failure(text: &str, expected: &[Diagnostic]) -> TestResult {
 }
 
 fn test_lex(text: &str) -> (Vec<Token>, Vec<Diagnostic>) {
-    let test_source = test_source::new_text(text);
+    let test_source = source::text(text);
 
     let (reporter, mut diagnostics) = TestReporter::new();
 
