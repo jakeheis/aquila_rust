@@ -6,7 +6,7 @@ struct Builtin {
     name: &'static str,
     implicit_calls: Vec<Symbol>,
     write: Option<fn(&mut IRWriter, &Symbol) -> ()>,
-    special_call: Option<fn(&Symbol, &[IRExpr], &GenericSpecialization) -> IRExpr>,
+    special_call: Option<fn(&Lib, &Symbol, Vec<IRExpr>, &GenericSpecialization) -> IRExpr>,
 }
 
 impl Builtin {
@@ -23,6 +23,7 @@ impl Builtin {
             "stdlib$Memory$Meta$size" => Some(Builtin::size()),
             "stdlib$ptr_offset" => Some(Builtin::ptr_offset()),
             "stdlib$_read_line" => Some(Builtin::read_line()),
+            "stdlib$print" => Some(Builtin::print()),
             _ => None,
         }
     }
@@ -54,6 +55,15 @@ impl Builtin {
         }
     }
 
+    fn print() -> Self {
+        Builtin {
+            name: "print",
+            implicit_calls: Vec::new(),
+            write: None,
+            special_call: Some(print_call),
+        }
+    }
+
     fn symbol(&self) -> Symbol {
         Symbol::new_str(&Symbol::stdlib_root(), self.name)
     }
@@ -82,17 +92,27 @@ pub fn record_implicit_calls(lib: &mut Lib) {
     }
 }
 
-pub fn write_special_call(
-    symbol: &Symbol,
-    args: &[IRExpr],
-    spec: &GenericSpecialization,
-) -> Option<IRExpr> {
+pub fn can_write_special_call(symbol: &Symbol) -> bool {
     if let Some(builtin) = Builtin::named(&symbol) {
-        if let Some(call) = &builtin.special_call {
-            return Some(call(symbol, args, spec));
+        if builtin.special_call.is_some() {
+            return true;
         }
     }
-    None
+    false
+}
+
+pub fn write_special_call(
+    lib: &Lib,
+    symbol: &Symbol,
+    args: Vec<IRExpr>,
+    spec: &GenericSpecialization,
+) -> IRExpr {
+    if let Some(builtin) = Builtin::named(&symbol) {
+        if let Some(call) = &builtin.special_call {
+            return call(lib, symbol, args, spec);
+        }
+    }
+    panic!()
 }
 
 pub fn write_special_function(
@@ -166,7 +186,7 @@ fn write_read_line(writer: &mut IRWriter, _func_symbol: &Symbol) {
 
 // Call impls
 
-fn size_call(symbol: &Symbol, _args: &[IRExpr], spec: &GenericSpecialization) -> IRExpr {
+fn size_call(_lib: &Lib, symbol: &Symbol, _args: Vec<IRExpr>, spec: &GenericSpecialization) -> IRExpr {
     let mem_type = Symbol::new_str(symbol, "T");
     let mem_type = spec.type_for(&mem_type).unwrap();
 
@@ -175,4 +195,37 @@ fn size_call(symbol: &Symbol, _args: &[IRExpr], spec: &GenericSpecialization) ->
         expr_type: mem_type.clone(),
     };
     IRExpr::call("sizeof", vec![arg], NodeType::Double)
+}
+
+fn print_call(lib: &Lib, _symbol: &Symbol, mut args: Vec<IRExpr>, _spec: &GenericSpecialization) -> IRExpr {
+    let node_type = args[0].expr_type.clone();
+    if let NodeType::Instance(type_symbol, spec) = &node_type {
+        let full_symbol = Symbol::new_str(&type_symbol, "write");
+        let metadata = lib.function_metadata(&full_symbol).unwrap();
+        let function_name = metadata.function_name(lib, &spec);
+
+        let arg = IRExpr {
+            kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(args.remove(0))),
+            expr_type: node_type,
+        };
+        IRExpr::call(&function_name, vec![arg], NodeType::Void)
+    } else {
+        let format_specificer = match node_type {
+            NodeType::Int | NodeType::Bool => "%i",
+            NodeType::Double => "%f",
+            node_type if node_type.is_pointer_to(NodeType::Byte) => "%s",
+            _ => unreachable!(),
+        };
+
+        let format_line = format!("\"{}\\n\"", format_specificer);
+        let format_expr = IRExpr {
+            kind: IRExprKind::Literal(format_line),
+            expr_type: NodeType::pointer_to(NodeType::Byte),
+        };
+        IRExpr::call(
+            "printf",
+            vec![format_expr, args.remove(0)],
+            NodeType::Void,
+        )
+    }
 }

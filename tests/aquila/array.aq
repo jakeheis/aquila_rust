@@ -4,12 +4,12 @@ let nums = [1, 2, 3];
 /// -> 2
 /// -> 3
 for num in nums {
-    print *num;
+    print(*num);
 }
 
 /// -> 2
 def take_array(ar: [int; 3]) {
-    print ar.[1];
+    print(ar.[1]);
 }
 
 take_array(nums);

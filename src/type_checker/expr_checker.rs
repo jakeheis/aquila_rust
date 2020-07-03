@@ -93,6 +93,38 @@ impl ExprChecker {
             _ => Err(Diagnostic::error(function.span(), "Undefined function")),
         }
     }
+
+    fn visit_print(&self, arg: &Expr, arg_type: &NodeType, context_spec: &GenericSpecialization) -> DiagnosticResult<()> {
+        match arg_type {
+            NodeType::Int | NodeType::Double | NodeType::Bool => (),
+            arg_type if arg_type.is_pointer_to(NodeType::Byte) => (),
+            NodeType::Instance(sym, spec) => {
+                let metadata = self.lib.type_metadata_ref(&sym).unwrap();
+                if metadata.conforms_to(&Symbol::writable_symbol()) {
+                    let write_sym = Symbol::new_str(&sym, "write");
+                    let enclosing_func = self
+                        .context
+                        .enclosing_function()
+                        .map(|e| e.symbol.clone())
+                        .unwrap_or(Symbol::main_symbol(self.lib.as_ref()));
+                    self.lib.specialization_tracker.add_call(
+                        enclosing_func,
+                        write_sym,
+                        spec.resolve_generics_using(self.lib.as_ref(), context_spec),
+                    );
+                } else {
+                    let message = format!("Can't print object of type {}", sym.mangled());
+                    return Err(Diagnostic::error(arg, &message));
+                }
+            }
+            _ => {
+                let message = format!("Can't print object of type {}", arg_type);
+                return Err(Diagnostic::error(arg, &message));
+            }
+        }
+        
+        Ok(())
+    }
 }
 
 impl ExprVisitor for ExprChecker {
@@ -260,17 +292,21 @@ impl ExprVisitor for ExprChecker {
         let full_call_specialization =
             function_specialization.merge(self.lib.as_ref(), &target_specialization);
 
-        let enclosing_func = self
-            .context
-            .enclosing_function()
-            .map(|e| e.symbol.clone())
-            .unwrap_or(Symbol::main_symbol(self.lib.as_ref()));
-        trace!(target: "type_checker", "Adding call from {} to {} with {}", enclosing_func, metadata.symbol, full_call_specialization);
-        self.lib.specialization_tracker.add_call(
-            enclosing_func,
-            metadata.symbol.clone(),
-            full_call_specialization.clone(),
-        );
+        if metadata.symbol == Symbol::stdlib("print") {
+            self.visit_print(&args[0], &arg_types[0], &full_call_specialization)?;
+        } else {
+            let enclosing_func = self
+                .context
+                .enclosing_function()
+                .map(|e| e.symbol.clone())
+                .unwrap_or(Symbol::main_symbol(self.lib.as_ref()));
+            trace!(target: "type_checker", "Adding call from {} to {} with {}", enclosing_func, metadata.symbol, full_call_specialization);
+            self.lib.specialization_tracker.add_call(
+                enclosing_func,
+                metadata.symbol.clone(),
+                full_call_specialization.clone(),
+            );
+        }
 
         let function_type = metadata
             .full_type()

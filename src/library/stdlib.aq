@@ -7,6 +7,7 @@ builtin def exit(code: int) {}
 
 builtin def ptr_offset(pointer: ptr any, distance: int): ptr any {}
 builtin def _read_line(): ptr byte {}
+pub builtin def print(obj: any) {}
 
 type Memory {
 
@@ -51,9 +52,9 @@ pub def fatal_error(message: ptr byte, #caller) {
 }
 
 pub def fatal_error_location(message: ptr byte, location: ptr byte) {
-    print String.from("Fatal error: ").append_literal(message).storage;
-    print;
-    print location;
+    print(String.from("Fatal error: ").append_literal(message).storage);
+    print("");
+    print(location);
     exit(1);
 }
 
@@ -91,10 +92,6 @@ pub type String {
         return append_literal(string.storage);
     }
 
-    pub def print_str() {
-        print storage;
-    }
-
 }
 
 pub type Vec[T] {
@@ -125,6 +122,14 @@ pub type Vec[T] {
             fatal_error_location("index out of bounds", caller);
         }
         return Memory.offset[T](storage, index);
+    }
+
+    pub def first(): Optional[ptr T] {
+        if count > 0 {
+            return Optional[ptr T].some(storage);
+        } else {
+            return Optional[ptr T].none();
+        }
     }
 
     pub def replace(index: int, object: T, #caller) {
@@ -189,7 +194,17 @@ trait Writable {
 
 impl String: Writable {
     def write() {
-        print storage;
+        print(storage);
+    }
+}
+
+impl Optional: Writable {
+    def write() {
+        if _is_some {
+            print("Some");
+        } else {
+            print("None");
+        }
     }
 }
 

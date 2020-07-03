@@ -34,8 +34,9 @@ impl IRGen {
         for t in &lib.type_decls {
             self.visit_type_decl(t);
         }
-        for f in &lib.function_decls {
-            self.visit_function_decl(f);
+        self.gen_function_decls(&lib.function_decls);
+        for c in &lib.conformance_decls {
+            self.conformance_decl(c);
         }
 
         if !lib.main.is_empty() {
@@ -59,7 +60,7 @@ impl IRGen {
 
     fn gen_function_decls(&mut self, decls: &[FunctionDecl]) {
         for decl in decls {
-            self.visit_function_decl(decl);
+            self.gen_function_decl(decl);
         }
     }
 
@@ -139,7 +140,7 @@ impl IRGen {
         trace!(target: "codegen", "Finished methods for {}", type_symbol);
     }
 
-    fn visit_function_decl(&mut self, decl: &FunctionDecl) {
+    fn gen_function_decl(&mut self, decl: &FunctionDecl) {
         let func_symbol = decl.name.get_symbol().unwrap();
 
         let spec_map = Rc::clone(&self.spec_map);
@@ -180,6 +181,15 @@ impl IRGen {
                 self.func_specialization = None;
             }
         }
+    }
+
+    fn conformance_decl(&mut self, decl: &ConformanceDecl) {
+        let type_symbol = decl.target.get_symbol().unwrap();
+        let type_metadata = self.lib.type_metadata_ref(&type_symbol).unwrap();
+
+        self.current_type = Some(type_metadata.clone());
+        self.gen_function_decls(&decl.implementations);
+        self.current_type = None;
     }
 }
 
@@ -293,46 +303,6 @@ impl StmtVisitor for IRGen {
     fn visit_return_stmt(&mut self, _stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult {
         let ret = expr.as_ref().map(|e| e.accept(self));
         self.writer.return_opt(ret);
-    }
-
-    fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Self::StmtResult {
-        if let Some(expr) = expr.as_ref() {
-            let node_type = expr.get_type().unwrap();
-            if let NodeType::Instance(type_symbol, spec) = node_type {
-                let full_symbol = Symbol::new_str(&type_symbol, "write");
-                let metadata = self.lib.function_metadata(&full_symbol).unwrap();
-                let function_name = metadata.function_name(&self.lib, &spec);
-
-                self.writer
-                    .expr(IRExpr::call(&function_name, Vec::new(), NodeType::Void));
-            } else {
-                let format_specificer = match node_type {
-                    NodeType::Int | NodeType::Bool => "%i",
-                    NodeType::Double => "%f",
-                    node_type if node_type.is_pointer_to(NodeType::Byte) => "%s",
-                    _ => unreachable!(),
-                };
-
-                let format_line = format!("\"{}\\n\"", format_specificer);
-                let format_expr = IRExpr {
-                    kind: IRExprKind::Literal(format_line),
-                    expr_type: NodeType::pointer_to(NodeType::Byte),
-                };
-                let expr = expr.accept(self);
-                self.writer.expr(IRExpr::call(
-                    "printf",
-                    vec![format_expr, expr],
-                    NodeType::Void,
-                ));
-            }
-        } else {
-            let empty_line = IRExpr {
-                kind: IRExprKind::Literal(String::from("\"\\n\"")),
-                expr_type: NodeType::pointer_to(NodeType::Byte),
-            };
-            self.writer
-                .expr(IRExpr::call("printf", vec![empty_line], NodeType::Void));
-        }
     }
 
     fn visit_expression_stmt(&mut self, expr: &Expr) -> Self::StmtResult {
@@ -494,10 +464,8 @@ impl ExprVisitor for IRGen {
             arg_exprs.push(IRExpr::string_literal(&location));
         }
 
-        if let Some(special) =
-            builtins::write_special_call(&function_symbol, &arg_exprs, &specialization)
-        {
-            special
+        if builtins::can_write_special_call(&function_symbol) {
+            builtins::write_special_call(self.lib.as_ref(), &function_symbol, arg_exprs, &specialization)
         } else {
             IRExpr {
                 kind: IRExprKind::Call(function_name, arg_exprs),

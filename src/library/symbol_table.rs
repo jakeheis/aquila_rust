@@ -25,6 +25,10 @@ impl Symbol {
         Symbol { id }
     }
 
+    pub fn top_level(lib: &Lib, name: &Token) -> Self {
+        Symbol::new(&Symbol::lib_root(lib), name)
+    }
+
     pub fn meta_symbol(parent: &Symbol) -> Self {
         Symbol::new_str(parent, "Meta")
     }
@@ -47,11 +51,13 @@ impl Symbol {
         }
     }
 
+    pub fn stdlib(name: &str) -> Self {
+        Symbol::new_str(&Symbol::stdlib_root(), name)
+    }
+
     pub fn writable_symbol() -> Self {
         // Temporarily hard coded
-        Symbol {
-            id: String::from("stdlib$Writable"),
-        }
+        Symbol::stdlib("Writable")
     }
 
     pub fn mangled(&self) -> String {

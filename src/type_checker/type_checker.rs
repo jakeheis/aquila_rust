@@ -1,5 +1,4 @@
 use super::expr_checker::*;
-use super::TypeResolutionError;
 use super::{check, ContextTracker, ScopeType};
 use crate::diagnostic::*;
 use crate::library::*;
@@ -193,28 +192,13 @@ impl TypeChecker {
     }
 
     fn visit_conformance_decl(&mut self, decl: &ConformanceDecl) {
-        let type_symbol = match self.context.resolve_token_as_type(&decl.target) {
-            Ok(NodeType::Instance(type_symbol, _)) => type_symbol,
-            Ok(_) => {
-                self.report_error(Diagnostic::error(
-                    &decl.target,
-                    "Can only implement traits on types",
-                ));
-                return;
-            }
-            Err(err) => {
-                let diag = match err {
-                    TypeResolutionError::Inaccessible(diag)
-                    | TypeResolutionError::IncorrectlySpecialized(diag) => diag,
-                    TypeResolutionError::NotFound => {
-                        Diagnostic::error(&decl.target, "Type not found")
-                    }
-                };
-                self.report_error(diag);
-                return;
-            }
-        };
-
+        let type_symbol = Symbol::top_level(self.lib.as_ref(), &decl.target.token);
+        
+        let target_metadata = self.lib.type_metadata_ref(&type_symbol);
+        if target_metadata.is_none() {
+            self.report_error(Diagnostic::error(&decl.target, "Type not found"));
+            return;
+        }
         decl.target.set_symbol(type_symbol.clone());
 
         let trait_metadata = self.lib.trait_metadata(decl.trait_name.token.lexeme());
@@ -418,36 +402,6 @@ impl StmtVisitor for TypeChecker {
 
         Analysis {
             guarantees_return: true,
-        }
-    }
-
-    fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Analysis {
-        if let Some(expr) = expr.as_ref() {
-            if let Some(node_type) = self.check_expr(expr) {
-                match node_type {
-                    NodeType::Int | NodeType::Double | NodeType::Bool => {
-                        let _ = expr.set_type(node_type);
-                    }
-                    node_type if node_type.is_pointer_to(NodeType::Byte) => {
-                        let _ = expr.set_type(node_type);
-                    }
-                    NodeType::Instance(sym, _) => {
-                        let metadata = self.lib.type_metadata_ref(&sym).unwrap();
-                        if !metadata.conforms_to(&Symbol::writable_symbol()) {
-                            let message = format!("Can't print object of type {}", sym.mangled());
-                            self.report_error(Diagnostic::error(expr, &message));
-                        }
-                    }
-                    _ => {
-                        let message = format!("Can't print object of type {}", node_type);
-                        self.report_error(Diagnostic::error(expr, &message));
-                    }
-                }
-            }
-        }
-
-        Analysis {
-            guarantees_return: false,
         }
     }
 

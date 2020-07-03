@@ -3,12 +3,12 @@ let dyn = String.from("hello");
 let combo1 = dyn.append_literal(" world");
 
 /// -> hello world
-combo1.print_str();
+print(combo1);
 
 let combo2 = combo1.append_literal(" ag");
 
 /// -> hello world ag
-combo2.print_str();
+print(combo2);
 
 /// -> hello world again
-dyn.append_literal(" world").append_literal(" again").print_str();
+print(dyn.append_literal(" world").append_literal(" again"));

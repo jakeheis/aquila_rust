@@ -149,7 +149,7 @@ impl Lexer {
         while !self.is_at_end() && self.peek() != '"' {
             self.advance();
         }
-        if self.peek() == '"' {
+        if !self.is_at_end() && self.peek() == '"' {
             self.advance();
         }
         self.make_token(TokenKind::StringLiteral)
@@ -173,7 +173,6 @@ impl Lexer {
             "else" => self.make_token(TokenKind::Else),
             "def" => self.make_token(TokenKind::Def),
             "return" => self.make_token(TokenKind::Return),
-            "print" => self.make_token(TokenKind::Print),
             "ptr" => self.make_token(TokenKind::Ptr),
             "builtin" => self.make_token(TokenKind::Builtin),
             "meta" => self.make_token(TokenKind::Meta),

@@ -2,16 +2,16 @@ let maybe_three = Optional[int].some(3);
 
 /// -> 3
 if maybe_three.is_some() {
-    print *maybe_three.unwrap();
+    print(*maybe_three.unwrap());
 } else {
-    print "Is not any";
+    print("Is not any");
 }
 
 let maybe_four = Optional[int].none();
 
 /// -> <none>
 if maybe_four.is_some() {
-    print *maybe_four.unwrap();
+    print(*maybe_four.unwrap());
 } else {
-    print "<none>";
+    print("<none>");
 }

@@ -168,7 +168,6 @@ pub enum StmtKind {
     WhileStmt(Expr, Vec<Stmt>),
     ForStmt(TypedToken, Expr, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
-    PrintStmt(Option<Expr>),
     ExpressionStmt(Expr),
 }
 
@@ -194,7 +193,6 @@ impl Stmt {
                 visitor.visit_for_stmt(variable, array, &body)
             }
             StmtKind::ReturnStmt(expr) => visitor.visit_return_stmt(&self, expr),
-            StmtKind::PrintStmt(expr) => visitor.visit_print_stmt(expr),
             StmtKind::ExpressionStmt(expr) => visitor.visit_expression_stmt(expr),
         }
     }
@@ -261,11 +259,6 @@ impl Stmt {
         Stmt::new(StmtKind::ReturnStmt(expr), span)
     }
 
-    pub fn print_stmt(print_keyword: Span, expr: Option<Expr>) -> Self {
-        let span = Span::join_opt(&print_keyword, &expr);
-        Stmt::new(StmtKind::PrintStmt(expr), span)
-    }
-
     pub fn expression(expr: Expr) -> Self {
         let span = expr.span.clone();
         Stmt::new(StmtKind::ExpressionStmt(expr), span)
@@ -300,8 +293,6 @@ pub trait StmtVisitor {
     ) -> Self::StmtResult;
 
     fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult;
-
-    fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Self::StmtResult;
 
     fn visit_expression_stmt(&mut self, expr: &Expr) -> Self::StmtResult;
 }

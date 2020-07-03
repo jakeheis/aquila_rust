@@ -152,13 +152,6 @@ impl Parser {
                     "Return statement only allowed inside functions",
                 ))
             }
-        } else if self.matches(TokenKind::Print) {
-            let stmt = self.print_stmt();
-            self.consume(
-                TokenKind::Semicolon,
-                "Expected semicolon after print statement",
-            )?;
-            stmt
         } else {
             let stmt = Stmt::expression(self.parse_precedence(Precedence::Assignment)?);
             self.consume(TokenKind::Semicolon, "Expected semicolon after expression")
@@ -502,16 +495,6 @@ impl Parser {
             Ok(Stmt::return_stmt(ret_keyword, Some(value)))
         } else {
             Ok(Stmt::return_stmt(ret_keyword, None))
-        }
-    }
-
-    fn print_stmt(&mut self) -> DiagnosticResult<Stmt> {
-        let print_keyword = self.previous().span.clone();
-        if self.peek() != TokenKind::Semicolon {
-            let expr = self.expression()?;
-            Ok(Stmt::print_stmt(print_keyword, Some(expr)))
-        } else {
-            Ok(Stmt::print_stmt(print_keyword, None))
         }
     }
 
