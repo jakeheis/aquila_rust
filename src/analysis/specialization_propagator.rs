@@ -62,15 +62,36 @@ impl std::fmt::Display for SpecializationTracker {
     }
 }
 
+pub struct FinalSpecializationMap {
+    map: HashMap<Symbol, HashSet<GenericSpecialization>>
+}
+
+impl FinalSpecializationMap {
+    fn new() -> Self {
+        FinalSpecializationMap {
+            map: HashMap::new()
+        }
+    }
+
+    fn add_spec(&mut self, symbol: Symbol, spec: GenericSpecialization) {
+        self.map.entry(symbol).or_insert(HashSet::new()).insert(spec);
+    }
+
+    pub fn specs_for(&self, symbol: &Symbol) -> Option<&HashSet<GenericSpecialization>> {
+        self.map.get(symbol)
+    }
+}
+
 pub struct SpecializationPropagator<'a> {
     lib: &'a mut Lib,
     call_map: SpecializationTrackerMap,
     explicit_type_map: SpecializationTrackerMap,
     visited: HashSet<String>,
+    map: FinalSpecializationMap,
 }
 
 impl<'a> SpecializationPropagator<'a> {
-    pub fn propogate(lib: &mut Lib) {
+    pub fn propogate(lib: &mut Lib) -> FinalSpecializationMap {
         trace!(target: "spec_propagate", "{}", lib.specialization_tracker);
         for dep in &lib.dependencies {
             trace!(target: "spec_propagate", "{}", dep.specialization_tracker);
@@ -87,11 +108,16 @@ impl<'a> SpecializationPropagator<'a> {
             call_map,
             explicit_type_map,
             visited: HashSet::new(),
+            map: FinalSpecializationMap::new()
         };
         prop.go();
 
+        let map = std::mem::replace(&mut prop.map, FinalSpecializationMap::new());
+
         trace!(target: "spec_propagate", "{}", lib.symbols);
         trace!(target: "spec_propagate", "{}", lib.dependencies[0].symbols);
+
+        map
     }
 
     pub fn flattened_call_map(
@@ -144,9 +170,7 @@ impl<'a> SpecializationPropagator<'a> {
         self.visited.insert(func_id);
 
         trace!(target: "spec_propagate", "Adding function spec {} to {}", current_spec, cur);
-        if let Some(mut_metadata) = self.lib.function_metadata_mut(cur) {
-            mut_metadata.specializations.insert(current_spec.clone());
-        }
+        self.map.add_spec(cur.clone(), current_spec.clone());
 
         // match metadata.map(|m| m.kind) {
         //     Some(FunctionKind::Method(owner)) | Some(FunctionKind::MetaMethod(owner)) => {
@@ -192,9 +216,7 @@ impl<'a> SpecializationPropagator<'a> {
 
         trace!(target: "spec_propagate", "Adding type spec {} to {}", current_spec, cur);
 
-        if let Some(mut_metadata) = self.lib.type_metadata_mut(cur) {
-            mut_metadata.specializations.insert(current_spec.clone());
-        }
+        self.map.add_spec(cur.clone(), current_spec.clone());
 
         let type_metadata = self.lib.type_metadata_ref(cur).unwrap().clone();
         for field_type in &type_metadata.field_types {

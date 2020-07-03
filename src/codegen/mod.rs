@@ -10,7 +10,7 @@ pub use ir::{
 };
 pub use irgen::IRGen;
 
-use crate::analysis::SpecializationPropagator;
+use crate::analysis::{SpecializationPropagator, FinalSpecializationMap};
 use crate::diagnostic::*;
 use crate::library::Lib;
 use std::fs::{self, File};
@@ -19,9 +19,10 @@ use std::rc::Rc;
 
 pub fn generate(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {
     builtins::record_implicit_calls(&mut lib);
-    SpecializationPropagator::propogate(&mut lib);
+    let spec_map = SpecializationPropagator::propogate(&mut lib);
+    let spec_map = Rc::new(spec_map);
 
-    let ir = gen_ir(lib);
+    let ir = gen_ir(lib, spec_map);
 
     fs::create_dir_all("build").unwrap();
     let file = File::create("build/main.c").unwrap();
@@ -50,14 +51,14 @@ pub fn generate(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static
     }
 }
 
-fn gen_ir(lib: Lib) -> IRProgram {
+fn gen_ir(lib: Lib, spec_map: Rc<FinalSpecializationMap>) -> IRProgram {
     let lib = Rc::new(lib);
-    let mut program = IRGen::new(Rc::clone(&lib)).generate();
+    let mut program = IRGen::new(Rc::clone(&lib), Rc::clone(&spec_map)).generate();
     let mut lib = Rc::try_unwrap(lib).ok().unwrap();
 
     let deps = std::mem::replace(&mut lib.dependencies, Vec::new());
     for dep in deps {
-        let mut dep_program = gen_ir(dep);
+        let mut dep_program = gen_ir(dep, Rc::clone(&spec_map));
         program.structures.append(&mut dep_program.structures);
         program.functions.append(&mut dep_program.functions);
     }

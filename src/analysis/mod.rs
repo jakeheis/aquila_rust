@@ -2,4 +2,4 @@ mod cycle_checker;
 mod specialization_propagator;
 
 pub use cycle_checker::CycleChecker;
-pub use specialization_propagator::{SpecializationPropagator, SpecializationTracker};
+pub use specialization_propagator::{SpecializationPropagator, SpecializationTracker, FinalSpecializationMap};

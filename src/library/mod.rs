@@ -124,19 +124,6 @@ impl Lib {
         self.deep_search(&|l: &Lib| l.symbols.get_type_metadata(symbol))
     }
 
-    pub fn type_metadata_mut(&mut self, symbol: &Symbol) -> Option<&mut TypeMetadata> {
-        if let Some(found) = self.symbols.get_type_metadata_mut(symbol) {
-            Some(found)
-        } else {
-            for dep in &mut self.dependencies {
-                if let Some(found) = dep.type_metadata_mut(symbol) {
-                    return Some(found);
-                }
-            }
-            None
-        }
-    }
-
     pub fn top_level_function_named(&self, name: &str) -> Option<&FunctionMetadata> {
         self.deep_search(&|lib: &Lib| {
             let func_symbol = Symbol::new_str(&Symbol::lib_root(lib), name);
@@ -146,19 +133,6 @@ impl Lib {
 
     pub fn function_metadata(&self, symbol: &Symbol) -> Option<&FunctionMetadata> {
         self.deep_search(&|l| l.symbols.get_func_metadata(symbol))
-    }
-
-    pub fn function_metadata_mut(&mut self, symbol: &Symbol) -> Option<&mut FunctionMetadata> {
-        if let Some(found) = self.symbols.get_func_metadata_mut(symbol) {
-            Some(found)
-        } else {
-            for dep in &mut self.dependencies {
-                if let Some(found) = dep.function_metadata_mut(symbol) {
-                    return Some(found);
-                }
-            }
-            None
-        }
     }
 
     pub fn trait_metadata(&self, name: &str) -> Option<&TraitMetadata> {

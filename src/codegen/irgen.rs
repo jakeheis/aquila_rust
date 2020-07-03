@@ -4,21 +4,24 @@ use super::irwriter::IRWriter;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
+use crate::analysis::FinalSpecializationMap;
 use log::trace;
 use std::rc::Rc;
 
 pub struct IRGen {
     lib: Rc<Lib>,
+    spec_map: Rc<FinalSpecializationMap>,
     writer: IRWriter,
     current_type: Option<TypeMetadata>,
     func_specialization: Option<GenericSpecialization>,
 }
 
 impl IRGen {
-    pub fn new(lib: Rc<Lib>) -> Self {
+    pub fn new(lib: Rc<Lib>, spec_map: Rc<FinalSpecializationMap>) -> Self {
         let lib_copy = Rc::clone(&lib);
         IRGen {
             lib,
+            spec_map,
             writer: IRWriter::new(lib_copy),
             current_type: None,
             func_specialization: None,
@@ -91,39 +94,43 @@ impl StmtVisitor for IRGen {
 
     fn visit_type_decl(&mut self, decl: &TypeDecl) -> Self::StmtResult {
         let type_symbol = decl.name.get_symbol().unwrap();
+        let specs = self.spec_map.specs_for(&type_symbol);
+
         let type_metadata = self.lib.type_metadata_ref(&type_symbol).unwrap();
 
-        for spec in &type_metadata.specializations {
-            trace!("Writing type {} with specialization {}", type_symbol, spec);
-
-            self.writer.declare_struct(&type_metadata, spec);
-
-            let meta_symbol = Symbol::meta_symbol(&type_symbol);
-            let init_symbol = Symbol::init_symbol(&meta_symbol);
-            let init_metadata = self.lib.function_metadata(&init_symbol).unwrap();
-
-            let instance_type = init_metadata
-                .return_type
-                .specialize(self.lib.as_ref(), &spec);
-
-            let new_item = IRVariable::new("new_item", instance_type.clone());
-
-            self.writer.start_block();
-            self.writer.declare_var(&new_item);
-
-            for (field, field_type) in type_metadata
-                .field_symbols
-                .iter()
-                .zip(&type_metadata.field_types)
-            {
-                let field_expr = IRExpr::field(&new_item, &field.mangled(), field_type.clone());
-                let param = IRVariable::new_sym(&field, field_type.clone());
-                self.writer.assign(field_expr, IRExpr::variable(&param));
+        if let Some(specs) = specs {
+            for spec in specs {
+                trace!("Writing type {} with specialization {}", type_symbol, spec);
+    
+                self.writer.declare_struct(&type_metadata, spec);
+    
+                let meta_symbol = Symbol::meta_symbol(&type_symbol);
+                let init_symbol = Symbol::init_symbol(&meta_symbol);
+                let init_metadata = self.lib.function_metadata(&init_symbol).unwrap();
+    
+                let instance_type = init_metadata
+                    .return_type
+                    .specialize(self.lib.as_ref(), &spec);
+    
+                let new_item = IRVariable::new("new_item", instance_type.clone());
+    
+                self.writer.start_block();
+                self.writer.declare_var(&new_item);
+    
+                for (field, field_type) in type_metadata
+                    .field_symbols
+                    .iter()
+                    .zip(&type_metadata.field_types)
+                {
+                    let field_expr = IRExpr::field(&new_item, &field.mangled(), field_type.clone());
+                    let param = IRVariable::new_sym(&field, field_type.clone());
+                    self.writer.assign(field_expr, IRExpr::variable(&param));
+                }
+                self.writer.return_value(IRExpr::variable(&new_item));
+                self.writer.end_decl_func(&init_metadata, &spec);
+    
+                trace!("Finished type {} with specialization {}", type_symbol, spec);
             }
-            self.writer.return_value(IRExpr::variable(&new_item));
-            self.writer.end_decl_func(&init_metadata, &spec);
-
-            trace!("Finished type {} with specialization {}", type_symbol, spec);
         }
 
         trace!("Writing methods for {}", type_symbol);
@@ -139,28 +146,33 @@ impl StmtVisitor for IRGen {
     fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Self::StmtResult {
         let func_symbol = decl.name.get_symbol().unwrap();
 
+        let spec_map = Rc::clone(&self.spec_map);
+        let specs = spec_map.specs_for(&func_symbol);
+
         let func_metadata = self.lib.function_metadata(&func_symbol).unwrap().clone();
 
-        for specialization in &func_metadata.specializations {
-            trace!(
-                "Writing function {} with specialization {}",
-                func_symbol,
-                specialization
-            );
-
-            self.func_specialization = Some(specialization.clone());
-
-            if decl.is_builtin {
-                builtins::write_special_function(&mut self.writer, &func_metadata, specialization)
-            } else {
-                self.writer.start_block();
-                self.gen_stmts(&decl.body);
-                self.writer.end_decl_func(&func_metadata, specialization);
+        if let Some(specs) = specs {
+            for specialization in specs {
+                trace!(
+                    "Writing function {} with specialization {}",
+                    func_symbol,
+                    specialization
+                );
+    
+                self.func_specialization = Some(specialization.clone());
+    
+                if decl.is_builtin {
+                    builtins::write_special_function(&mut self.writer, &func_metadata, specialization)
+                } else {
+                    self.writer.start_block();
+                    self.gen_stmts(&decl.body);
+                    self.writer.end_decl_func(&func_metadata, specialization);
+                }
+    
+                trace!(target: "codegen", "Finished function {} with specialization {}", func_symbol, specialization);
+    
+                self.func_specialization = None;
             }
-
-            trace!(target: "codegen", "Finished function {} with specialization {}", func_symbol, specialization);
-
-            self.func_specialization = None;
         }
     }
 

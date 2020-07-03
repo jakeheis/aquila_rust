@@ -1,6 +1,6 @@
 use super::{FunctionType, Lib, NodeType, Symbol};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Clone, Debug)]
@@ -13,7 +13,6 @@ pub struct TypeMetadata {
     pub methods: Vec<Symbol>,
     pub meta_methods: Vec<Symbol>,
     pub trait_impls: RefCell<Vec<Symbol>>,
-    pub specializations: HashSet<GenericSpecialization>,
     pub is_public: bool,
 }
 
@@ -28,7 +27,6 @@ impl TypeMetadata {
             methods: Vec::new(),
             meta_methods: Vec::new(),
             trait_impls: RefCell::new(Vec::new()),
-            specializations: HashSet::new(),
             is_public: is_public,
         }
     }
@@ -43,7 +41,6 @@ impl TypeMetadata {
             methods: Vec::new(),
             meta_methods: Vec::new(),
             trait_impls: RefCell::new(Vec::new()),
-            specializations: HashSet::new(),
             is_public: false,
         }
     }
@@ -174,12 +171,6 @@ impl std::fmt::Display for TypeMetadata {
             .join(",");
         write!(f, "  trait impls: {}", trait_impls)?;
 
-        if !self.specializations.is_empty() {
-            for spec in &self.specializations {
-                write!(f, "\n  {}", spec)?;
-            }
-        }
-
         Ok(())
     }
 }
@@ -199,7 +190,6 @@ pub struct FunctionMetadata {
     pub parameter_symbols: Vec<Symbol>,
     pub parameter_types: Vec<NodeType>,
     pub return_type: NodeType,
-    pub specializations: HashSet<GenericSpecialization>,
     pub is_public: bool,
 }
 
@@ -212,7 +202,6 @@ impl FunctionMetadata {
             parameter_symbols: Vec::new(),
             parameter_types: Vec::new(),
             return_type: NodeType::Int,
-            specializations: HashSet::new(),
             is_public: false,
         }
     }
@@ -297,12 +286,6 @@ impl fmt::Display for FunctionMetadata {
             parameters,
             self.return_type
         )?;
-
-        if !self.specializations.is_empty() {
-            for spec in &self.specializations {
-                write!(f, "\n  {}", spec)?;
-            }
-        }
 
         Ok(())
     }

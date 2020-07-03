@@ -4,7 +4,6 @@ use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::*;
 use log::trace;
-use std::collections::HashSet;
 use std::rc::Rc;
 
 pub struct SymbolTableBuilder {
@@ -135,7 +134,6 @@ impl SymbolTableBuilder {
                     parameter_symbols: type_metadata.field_symbols.clone(),
                     parameter_types: type_metadata.field_types.clone(),
                     return_type: instance_type,
-                    specializations: HashSet::new(),
                     is_public: !any_private_fields,
                 },
             )
@@ -201,7 +199,6 @@ impl SymbolTableBuilder {
             parameter_symbols: param_symbols,
             parameter_types: param_types,
             return_type: return_type,
-            specializations: HashSet::new(),
             is_public: decl.is_public,
         };
         self.insert_func_metadata(function_symbol.clone(), function_metadata);
