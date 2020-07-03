@@ -129,7 +129,7 @@ impl IRWriter {
 
     pub fn declare_temp(&mut self, expr: IRExpr) -> IRVariable {
         let var = IRVariable {
-            name: format!("ir_tmp_{}", self.temp_count),
+            name: format!("_ir_tmp_{}", self.temp_count),
             var_type: expr.expr_type.clone(),
         };
         self.temp_count = self.temp_count + 1;

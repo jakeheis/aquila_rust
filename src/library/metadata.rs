@@ -32,17 +32,7 @@ impl TypeMetadata {
     }
 
     pub fn generic(owner: &Symbol, name: &str) -> Self {
-        TypeMetadata {
-            symbol: Symbol::new_str(owner, name),
-            generics: Vec::new(),
-            field_symbols: Vec::new(),
-            field_types: Vec::new(),
-            field_visibilities: Vec::new(),
-            methods: Vec::new(),
-            meta_methods: Vec::new(),
-            trait_impls: RefCell::new(Vec::new()),
-            is_public: false,
-        }
+        TypeMetadata::new(Symbol::new_str(owner, name), false)
     }
 
     pub fn type_name(&self, specialization: &GenericSpecialization) -> String {

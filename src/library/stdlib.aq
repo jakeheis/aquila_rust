@@ -1,17 +1,16 @@
-builtin def malloc(count: int): ptr any {}
-builtin def realloc(location: ptr any, count: int): ptr any {}
-builtin def strlen(location: ptr byte): int {}
-builtin def memcpy(to: ptr any, from: ptr any, length: int): int {}
-builtin def sizeof(object: any): int {}
-builtin def exit(code: int) {}
+builtin def malloc(count: int): ptr any;
+builtin def realloc(location: ptr any, count: int): ptr any;
+builtin def strlen(location: ptr byte): int;
+builtin def memcpy(to: ptr any, from: ptr any, length: int): int;
+builtin def sizeof(object: any): int;
+builtin def exit(code: int);
 
-builtin def ptr_offset(pointer: ptr any, distance: int): ptr any {}
-builtin def _read_line(): ptr byte {}
-pub builtin def print(obj: any) {}
+builtin def ptr_offset(pointer: ptr any, distance: int): ptr any;
+builtin def _read_line(): ptr byte;
 
 type Memory {
 
-    builtin meta def size[T](): int {}
+    builtin meta def size[T](): int;
 
     meta def size_instance[T](instance: T): int {
         return sizeof(instance);
@@ -42,6 +41,8 @@ type Memory {
     }
 
 }
+
+pub builtin def print(obj: any);
 
 pub def read_line(): String {
     return String.from(_read_line());

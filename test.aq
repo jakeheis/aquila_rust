@@ -1,14 +1,25 @@
 // print 4;
 
-// type Adder {
-//     let lhs: int;
-//     let rhs: int;
+type Adder {
+    let lhs: int;
+    let rhs: int;
 
-//     def sum(hi: bool, yo: int, third: int): int {
-//         return self.lhs + rhs;
-//     }
+    def sum(hi: bool, yo: int, third: int): int {
+        return self.lhs + rhs;
+    }
+}
 
-// }
+trait Act {
+    def act(): int;
+}
+
+impl Adder: Act {
+    def act(): int {
+        return 4 + 5;
+    }
+}
+
+pub def hi() {}
 
 let is = [1, 2, 3];
 // print is.[4];

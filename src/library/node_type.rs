@@ -1,5 +1,5 @@
-use super::metadata::*;
-use super::symbol_table::*;
+use super::metadata::GenericSpecialization;
+use super::symbol_table::Symbol;
 use super::Lib;
 
 #[derive(Clone, Debug)]
@@ -14,7 +14,6 @@ pub enum NodeType {
     Pointer(Box<NodeType>),
     Array(Box<NodeType>, usize),
     Function(Box<FunctionType>),
-    // FlexibleFunction(fn(&[NodeType]) -> bool),
     Ambiguous,
     Any,
 }

@@ -49,29 +49,24 @@ impl Parser {
     }
 
     fn top_level(&mut self, public: bool) -> DiagnosticResult<ASTNode> {
-        if self.matches(TokenKind::Pub) {
-            return self.top_level(true);
-        }
-
         if self.should_parse_function() {
             let decl = self.parse_function(public)?;
             if decl.is_meta {
-                return Err(Diagnostic::error(&decl.name, "Meta function not allowed"));
+                Err(Diagnostic::error(&decl.name, "Meta function not allowed"))
+            } else {
+                Ok(ASTNode::FunctionDecl(decl))
             }
-            return Ok(ASTNode::FunctionDecl(decl));
         } else if self.matches(TokenKind::Type) {
             let decl = self.type_decl(public)?;
-            return Ok(ASTNode::TypeDecl(decl));
-        }
-
-        if public {
-            return Err(Diagnostic::error(
+            Ok(ASTNode::TypeDecl(decl))
+        } else if public {
+            Err(Diagnostic::error(
                 self.previous(),
                 "Pub can only modify types declarations, function declarations, or type fields",
-            ));
-        }
-
-        if self.matches(TokenKind::Trait) {
+            ))
+        } else if self.matches(TokenKind::Pub) {
+            self.top_level(true)
+        } else if self.matches(TokenKind::Trait) {
             let decl = self.trait_decl()?;
             Ok(ASTNode::TraitDecl(decl))
         } else if self.matches(TokenKind::Impl) {
@@ -93,10 +88,10 @@ impl Parser {
     fn parse_function(&mut self, public: bool) -> DiagnosticResult<FunctionDecl> {
         if self.matches(TokenKind::Builtin) {
             let mut decl = if self.matches(TokenKind::Meta) {
-                self.function_decl(true, true, true, public)?
+                self.function_decl(true, false, true, public)?
             } else {
                 self.consume(TokenKind::Def, "Expect 'def' after 'builtin'")?;
-                self.function_decl(false, true, true, public)?
+                self.function_decl(false, false, true, public)?
             };
             decl.is_builtin = true;
             Ok(decl)
