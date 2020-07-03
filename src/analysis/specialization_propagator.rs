@@ -63,18 +63,21 @@ impl std::fmt::Display for SpecializationTracker {
 }
 
 pub struct FinalSpecializationMap {
-    map: HashMap<Symbol, HashSet<GenericSpecialization>>
+    map: HashMap<Symbol, HashSet<GenericSpecialization>>,
 }
 
 impl FinalSpecializationMap {
     fn new() -> Self {
         FinalSpecializationMap {
-            map: HashMap::new()
+            map: HashMap::new(),
         }
     }
 
     fn add_spec(&mut self, symbol: Symbol, spec: GenericSpecialization) {
-        self.map.entry(symbol).or_insert(HashSet::new()).insert(spec);
+        self.map
+            .entry(symbol)
+            .or_insert(HashSet::new())
+            .insert(spec);
     }
 
     pub fn specs_for(&self, symbol: &Symbol) -> Option<&HashSet<GenericSpecialization>> {
@@ -108,7 +111,7 @@ impl<'a> SpecializationPropagator<'a> {
             call_map,
             explicit_type_map,
             visited: HashSet::new(),
-            map: FinalSpecializationMap::new()
+            map: FinalSpecializationMap::new(),
         };
         prop.go();
 

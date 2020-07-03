@@ -86,10 +86,6 @@ impl TypeChecker {
     fn report_error(&self, diag: Diagnostic) {
         self.reporter.report(diag);
     }
-}
-
-impl StmtVisitor for TypeChecker {
-    type StmtResult = Analysis;
 
     fn visit_type_decl(&mut self, decl: &TypeDecl) -> Analysis {
         let (type_symbol, metadata) = self.context.push_type_scope(&decl.name);
@@ -191,6 +187,94 @@ impl StmtVisitor for TypeChecker {
         }
     }
 
+    fn visit_conformance_decl(&mut self, decl: &ConformanceDecl) {
+        let type_symbol = match self.context.resolve_token_as_type(&decl.target) {
+            Ok(NodeType::Instance(type_symbol, _)) => type_symbol,
+            Ok(_) => {
+                self.report_error(Diagnostic::error(
+                    &decl.target,
+                    "Can only implement traits on types",
+                ));
+                return;
+            }
+            Err(err) => {
+                let diag = match err {
+                    TypeResolutionError::Inaccessible(diag)
+                    | TypeResolutionError::IncorrectlySpecialized(diag) => diag,
+                    TypeResolutionError::NotFound => {
+                        Diagnostic::error(&decl.target, "Type not found")
+                    }
+                };
+                self.report_error(diag);
+                return;
+            }
+        };
+
+        decl.target.set_symbol(type_symbol.clone());
+
+        let trait_metadata = self.lib.trait_metadata(decl.trait_name.token.lexeme());
+        if trait_metadata.is_none() {
+            self.report_error(Diagnostic::error(&decl.trait_name, "Trait not found"));
+            return;
+        }
+        let trait_metadata = trait_metadata.unwrap();
+
+        let type_metadata = self.lib.type_metadata_ref(&type_symbol).unwrap();
+        type_metadata.add_trait_impl(&trait_metadata.symbol);
+        let type_metadata = type_metadata.clone();
+
+        self.context.push_scope(
+            type_metadata.symbol.clone(),
+            ScopeType::InsideType(type_metadata.clone()),
+        );
+
+        for (symbol, field_type) in type_metadata
+            .field_symbols
+            .iter()
+            .zip(&type_metadata.field_types)
+        {
+            self.context.put_in_scope(symbol, field_type);
+        }
+
+        for function in &decl.implementations {
+            self.visit_function_decl(function);
+        }
+
+        self.context.pop_scope();
+
+        let trait_metadata = self
+            .lib
+            .trait_metadata(decl.trait_name.token.lexeme())
+            .unwrap();
+        for requirement in &trait_metadata.function_requirements {
+            let requirement_metadata = self.lib.function_metadata(&requirement).unwrap();
+            let impl_symbol = Symbol::new_str(&type_metadata.symbol, requirement.last_component());
+            let impl_metadata = self.lib.function_metadata(&impl_symbol);
+            if let Some(impl_metadata) = impl_metadata {
+                if !impl_metadata
+                    .node_type()
+                    .matches(&requirement_metadata.node_type())
+                {
+                    let message = format!(
+                        "Type implements requirement '{}' but with wrong signature",
+                        requirement.last_component()
+                    );
+                    self.report_error(Diagnostic::error(&decl.target, &message));
+                }
+            } else {
+                let message = format!(
+                    "Type doesn't implement requirement '{}'",
+                    requirement.last_component()
+                );
+                self.report_error(Diagnostic::error(&decl.target, &message));
+            }
+        }
+    }
+}
+
+impl StmtVisitor for TypeChecker {
+    type StmtResult = Analysis;
+
     fn visit_local_variable_decl(&mut self, decl: &LocalVariableDecl) -> Analysis {
         let explicit_type =
             decl.explicit_type
@@ -228,103 +312,6 @@ impl StmtVisitor for TypeChecker {
             }
             _ => {
                 self.report_error(Diagnostic::error(&decl.name, "Can't infer type"));
-            }
-        }
-
-        Analysis {
-            guarantees_return: false,
-        }
-    }
-
-    fn visit_trait_decl(&mut self, _decl: &TraitDecl) -> Analysis {
-        Analysis {
-            guarantees_return: false,
-        }
-    }
-
-    fn visit_conformance_decl(&mut self, decl: &ConformanceDecl) -> Analysis {
-        let type_symbol = match self.context.resolve_token_as_type(&decl.target) {
-            Ok(NodeType::Instance(type_symbol, _)) => type_symbol,
-            Ok(_) => {
-                self.report_error(Diagnostic::error(
-                    &decl.target,
-                    "Can only implement traits on types",
-                ));
-                return Analysis {
-                    guarantees_return: false,
-                };
-            }
-            Err(err) => {
-                let diag = match err {
-                    TypeResolutionError::Inaccessible(diag)
-                    | TypeResolutionError::IncorrectlySpecialized(diag) => diag,
-                    TypeResolutionError::NotFound => {
-                        Diagnostic::error(&decl.target, "Type not found")
-                    }
-                };
-                self.report_error(diag);
-                return Analysis {
-                    guarantees_return: false,
-                };
-            }
-        };
-
-        decl.target.set_symbol(type_symbol.clone());
-
-        let trait_metadata = self.lib.trait_metadata(decl.trait_name.token.lexeme());
-        if trait_metadata.is_none() {
-            self.report_error(Diagnostic::error(&decl.trait_name, "Trait not found"));
-            return Analysis {
-                guarantees_return: false,
-            };
-        }
-        let trait_metadata = trait_metadata.unwrap();
-
-        let type_metadata = self.lib.type_metadata_ref(&type_symbol).unwrap();
-        type_metadata.add_trait_impl(&trait_metadata.symbol);
-        let type_metadata = type_metadata.clone();
-
-        self.context.push_scope(
-            type_metadata.symbol.clone(),
-            ScopeType::InsideType(type_metadata.clone()),
-        );
-
-        for (symbol, field_type) in type_metadata
-            .field_symbols
-            .iter()
-            .zip(&type_metadata.field_types)
-        {
-            self.context.put_in_scope(symbol, field_type);
-        }
-
-        for function in &decl.implementations {
-            self.visit_function_decl(function);
-        }
-
-        self.context.pop_scope();
-
-        let trait_metadata = self.lib.trait_metadata(decl.trait_name.token.lexeme()).unwrap();
-        for requirement in &trait_metadata.function_requirements {
-            let requirement_metadata = self.lib.function_metadata(&requirement).unwrap();
-            let impl_symbol = Symbol::new_str(&type_metadata.symbol, requirement.last_component());
-            let impl_metadata = self.lib.function_metadata(&impl_symbol);
-            if let Some(impl_metadata) = impl_metadata {
-                if !impl_metadata
-                    .node_type()
-                    .matches(&requirement_metadata.node_type())
-                {
-                    let message = format!(
-                        "Type implements requirement '{}' but with wrong signature",
-                        requirement.last_component()
-                    );
-                    self.report_error(Diagnostic::error(&decl.target, &message));
-                }
-            } else {
-                let message = format!(
-                    "Type doesn't implement requirement '{}'",
-                    requirement.last_component()
-                );
-                self.report_error(Diagnostic::error(&decl.target, &message));
             }
         }
 

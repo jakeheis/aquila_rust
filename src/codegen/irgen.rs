@@ -1,10 +1,10 @@
 use super::builtins;
 use super::ir::*;
 use super::irwriter::IRWriter;
+use crate::analysis::FinalSpecializationMap;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
-use crate::analysis::FinalSpecializationMap;
 use log::trace;
 use std::rc::Rc;
 
@@ -87,12 +87,8 @@ impl IRGen {
             .unwrap()
             .specialize_opt(self.lib.as_ref(), self.func_specialization.as_ref())
     }
-}
 
-impl StmtVisitor for IRGen {
-    type StmtResult = ();
-
-    fn visit_type_decl(&mut self, decl: &TypeDecl) -> Self::StmtResult {
+    fn visit_type_decl(&mut self, decl: &TypeDecl) {
         let type_symbol = decl.name.get_symbol().unwrap();
         let specs = self.spec_map.specs_for(&type_symbol);
 
@@ -101,22 +97,22 @@ impl StmtVisitor for IRGen {
         if let Some(specs) = specs {
             for spec in specs {
                 trace!("Writing type {} with specialization {}", type_symbol, spec);
-    
+
                 self.writer.declare_struct(&type_metadata, spec);
-    
+
                 let meta_symbol = Symbol::meta_symbol(&type_symbol);
                 let init_symbol = Symbol::init_symbol(&meta_symbol);
                 let init_metadata = self.lib.function_metadata(&init_symbol).unwrap();
-    
+
                 let instance_type = init_metadata
                     .return_type
                     .specialize(self.lib.as_ref(), &spec);
-    
+
                 let new_item = IRVariable::new("new_item", instance_type.clone());
-    
+
                 self.writer.start_block();
                 self.writer.declare_var(&new_item);
-    
+
                 for (field, field_type) in type_metadata
                     .field_symbols
                     .iter()
@@ -128,7 +124,7 @@ impl StmtVisitor for IRGen {
                 }
                 self.writer.return_value(IRExpr::variable(&new_item));
                 self.writer.end_decl_func(&init_metadata, &spec);
-    
+
                 trace!("Finished type {} with specialization {}", type_symbol, spec);
             }
         }
@@ -143,7 +139,7 @@ impl StmtVisitor for IRGen {
         trace!(target: "codegen", "Finished methods for {}", type_symbol);
     }
 
-    fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Self::StmtResult {
+    fn visit_function_decl(&mut self, decl: &FunctionDecl) {
         let func_symbol = decl.name.get_symbol().unwrap();
 
         let spec_map = Rc::clone(&self.spec_map);
@@ -158,23 +154,31 @@ impl StmtVisitor for IRGen {
                     func_symbol,
                     specialization
                 );
-    
+
                 self.func_specialization = Some(specialization.clone());
-    
+
                 if decl.is_builtin {
-                    builtins::write_special_function(&mut self.writer, &func_metadata, specialization)
+                    builtins::write_special_function(
+                        &mut self.writer,
+                        &func_metadata,
+                        specialization,
+                    )
                 } else {
                     self.writer.start_block();
                     self.gen_stmts(&decl.body);
                     self.writer.end_decl_func(&func_metadata, specialization);
                 }
-    
+
                 trace!(target: "codegen", "Finished function {} with specialization {}", func_symbol, specialization);
-    
+
                 self.func_specialization = None;
             }
         }
     }
+}
+
+impl StmtVisitor for IRGen {
+    type StmtResult = ();
 
     fn visit_local_variable_decl(&mut self, decl: &LocalVariableDecl) -> Self::StmtResult {
         let var_symbol = decl.name.get_symbol().unwrap();
@@ -194,10 +198,6 @@ impl StmtVisitor for IRGen {
             self.writer.assign(IRExpr::variable(&local), init_value);
         }
     }
-
-    fn visit_trait_decl(&mut self, _decl: &TraitDecl) {}
-
-    fn visit_conformance_decl(&mut self, _decl: &ConformanceDecl) {}
 
     fn visit_if_stmt(
         &mut self,
@@ -290,8 +290,6 @@ impl StmtVisitor for IRGen {
     }
 
     fn visit_print_stmt(&mut self, expr: &Option<Expr>) -> Self::StmtResult {
-        let function = String::from("printf");
-
         if let Some(expr) = expr.as_ref() {
             let node_type = expr.get_type().unwrap();
             if let NodeType::Instance(type_symbol, spec) = node_type {
@@ -299,10 +297,8 @@ impl StmtVisitor for IRGen {
                 let metadata = self.lib.function_metadata(&full_symbol).unwrap();
                 let function_name = metadata.function_name(&self.lib, &spec);
 
-                self.writer.expr(IRExpr {
-                    kind: IRExprKind::Call(function_name, Vec::new()),
-                    expr_type: NodeType::Void,
-                });
+                self.writer
+                    .expr(IRExpr::call(&function_name, Vec::new(), NodeType::Void));
             } else {
                 let format_specificer = match node_type {
                     NodeType::Int | NodeType::Bool => "%i",
@@ -317,20 +313,19 @@ impl StmtVisitor for IRGen {
                     expr_type: NodeType::pointer_to(NodeType::Byte),
                 };
                 let expr = expr.accept(self);
-                self.writer.expr(IRExpr {
-                    kind: IRExprKind::Call(function, vec![format_expr, expr]),
-                    expr_type: NodeType::Void,
-                });
+                self.writer.expr(IRExpr::call(
+                    "printf",
+                    vec![format_expr, expr],
+                    NodeType::Void,
+                ));
             }
         } else {
             let empty_line = IRExpr {
                 kind: IRExprKind::Literal(String::from("\"\\n\"")),
                 expr_type: NodeType::pointer_to(NodeType::Byte),
             };
-            self.writer.expr(IRExpr {
-                kind: IRExprKind::Call(function, vec![empty_line]),
-                expr_type: NodeType::Void,
-            });
+            self.writer
+                .expr(IRExpr::call("printf", vec![empty_line], NodeType::Void));
         }
     }
 

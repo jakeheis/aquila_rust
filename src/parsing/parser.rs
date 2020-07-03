@@ -44,7 +44,7 @@ impl Parser {
                 }
             }
         }
-        
+
         lib
     }
 
@@ -56,14 +56,14 @@ impl Parser {
         if self.should_parse_function() {
             let decl = self.parse_function(public)?;
             if decl.is_meta {
-                return Err(Diagnostic::error(&decl.name, "Meta function not allowed"))
+                return Err(Diagnostic::error(&decl.name, "Meta function not allowed"));
             }
             return Ok(ASTNode::FunctionDecl(decl));
         } else if self.matches(TokenKind::Type) {
             let decl = self.type_decl(public)?;
             return Ok(ASTNode::TypeDecl(decl));
         }
-        
+
         if public {
             return Err(Diagnostic::error(
                 self.previous(),
@@ -161,7 +161,8 @@ impl Parser {
             stmt
         } else {
             let stmt = Stmt::expression(self.parse_precedence(Precedence::Assignment)?);
-            self.consume(TokenKind::Semicolon, "Expected semicolon after expression").replace_span(&stmt)?;
+            self.consume(TokenKind::Semicolon, "Expected semicolon after expression")
+                .replace_span(&stmt)?;
             Ok(stmt)
         }
     }
@@ -224,24 +225,39 @@ impl Parser {
             } else if self.matches(TokenKind::Let) {
                 let result = self.structural_variable_decl(public);
                 if let Some(field) = self.success_or_report_and_sync(result) {
-                    let semicolon = self.consume(TokenKind::Semicolon, "Expect ';' after field declaration");
+                    let semicolon =
+                        self.consume(TokenKind::Semicolon, "Expect ';' after field declaration");
                     if let Err(diag) = semicolon {
                         self.reporter.report(diag);
                     }
                     fields.push(field);
                 }
             } else {
-                self.reporter.report(Diagnostic::error(self.current(), "Expression not allowed"));
+                self.reporter
+                    .report(Diagnostic::error(self.current(), "Expression not allowed"));
                 self.synchronize();
             }
         }
 
         self.consume(TokenKind::RightBrace, "Expect '}' after type body")?;
 
-        Ok(TypeDecl::new(name, generics, fields, methods, meta_methods, public))
+        Ok(TypeDecl::new(
+            name,
+            generics,
+            fields,
+            methods,
+            meta_methods,
+            public,
+        ))
     }
 
-    fn function_decl(&mut self, meta: bool, parse_body: bool, builtin: bool, public: bool) -> DiagnosticResult<FunctionDecl> {
+    fn function_decl(
+        &mut self,
+        meta: bool,
+        parse_body: bool,
+        builtin: bool,
+        public: bool,
+    ) -> DiagnosticResult<FunctionDecl> {
         if meta {
             self.consume(TokenKind::Def, "Expect def after meta")?;
         }
@@ -292,11 +308,25 @@ impl Parser {
             Vec::new()
         };
 
-        Ok(FunctionDecl::new(name, generics, params, return_type, body, meta, builtin, public))
+        Ok(FunctionDecl::new(
+            name,
+            generics,
+            params,
+            return_type,
+            body,
+            meta,
+            builtin,
+            public,
+        ))
     }
 
-    fn structural_variable_decl(&mut self, public: bool) -> DiagnosticResult<StructuralVariableDecl> {
-        let var_name = self.consume(TokenKind::Identifier, "Expected variable name")?.clone();
+    fn structural_variable_decl(
+        &mut self,
+        public: bool,
+    ) -> DiagnosticResult<StructuralVariableDecl> {
+        let var_name = self
+            .consume(TokenKind::Identifier, "Expected variable name")?
+            .clone();
         self.consume(TokenKind::Colon, "Exepct ':' after variable name")?;
         let explicit_type = self.parse_explicit_type()?;
 
@@ -304,7 +334,9 @@ impl Parser {
     }
 
     fn local_variable_decl(&mut self) -> DiagnosticResult<Stmt> {
-        let name = self.consume(TokenKind::Identifier, "Expected variable name")?.clone();
+        let name = self
+            .consume(TokenKind::Identifier, "Expected variable name")?
+            .clone();
 
         let explicit_type = if self.matches(TokenKind::Colon) {
             Some(self.parse_explicit_type()?)

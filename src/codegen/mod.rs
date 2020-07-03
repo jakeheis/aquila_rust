@@ -10,7 +10,7 @@ pub use ir::{
 };
 pub use irgen::IRGen;
 
-use crate::analysis::{SpecializationPropagator, FinalSpecializationMap};
+use crate::analysis::{FinalSpecializationMap, SpecializationPropagator};
 use crate::diagnostic::*;
 use crate::library::Lib;
 use std::fs::{self, File};

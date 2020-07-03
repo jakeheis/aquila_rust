@@ -21,7 +21,7 @@ impl TypeDecl {
         fields: Vec<StructuralVariableDecl>,
         methods: Vec<FunctionDecl>,
         meta_methods: Vec<FunctionDecl>,
-        public: bool
+        public: bool,
     ) -> Self {
         let generics: Vec<_> = generics
             .into_iter()
@@ -59,7 +59,7 @@ impl FunctionDecl {
         body: Vec<Stmt>,
         is_meta: bool,
         is_builtin: bool,
-        is_public: bool
+        is_public: bool,
     ) -> Self {
         let generics: Vec<_> = generics
             .into_iter()
@@ -141,7 +141,7 @@ pub enum ASTNode {
     FunctionDecl(FunctionDecl),
     TraitDecl(TraitDecl),
     ConformanceDecl(ConformanceDecl),
-    Stmt(Stmt)
+    Stmt(Stmt),
 }
 
 #[derive(Debug)]
@@ -278,15 +278,7 @@ impl ContainsSpan for Stmt {
 pub trait StmtVisitor {
     type StmtResult;
 
-    fn visit_type_decl(&mut self, decl: &TypeDecl) -> Self::StmtResult;
-
-    fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Self::StmtResult;
-
     fn visit_local_variable_decl(&mut self, decl: &LocalVariableDecl) -> Self::StmtResult;
-
-    fn visit_trait_decl(&mut self, decl: &TraitDecl) -> Self::StmtResult;
-
-    fn visit_conformance_decl(&mut self, decl: &ConformanceDecl) -> Self::StmtResult;
 
     fn visit_if_stmt(
         &mut self,

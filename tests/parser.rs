@@ -1,7 +1,7 @@
 use aquila::diagnostic::*;
 use aquila::lexing::*;
-use aquila::parsing::*;
 use aquila::library::Lib;
+use aquila::parsing::*;
 
 mod common;
 use common::*;

@@ -63,7 +63,7 @@ impl SymbolTableBuilder {
         self.context.push(new_symbol.clone());
         metadata.generics = self.insert_generics(&new_symbol, &decl.generics);
         self.context.pop();
-        
+
         self.symbols
             .insert_type_metadata(new_symbol.clone(), metadata);
 

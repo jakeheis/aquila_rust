@@ -188,7 +188,8 @@ impl ExprVisitor for ExprChecker {
         function: &ResolvedToken,
         args: &[Expr],
     ) -> Self::ExprResult {
-        let arg_types: DiagnosticResult<Vec<NodeType>> = args.iter().map(|a| a.accept(self)).collect();
+        let arg_types: DiagnosticResult<Vec<NodeType>> =
+            args.iter().map(|a| a.accept(self)).collect();
         let arg_types = arg_types?;
 
         let function_name = function.token.lexeme();
