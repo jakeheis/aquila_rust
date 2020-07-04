@@ -194,7 +194,7 @@ impl TypeChecker {
     fn visit_conformance_decl(&mut self, decl: &ConformanceDecl) {
         let type_symbol = Symbol::top_level(self.lib.as_ref(), &decl.target.token);
         
-        let target_metadata = self.lib.type_metadata_ref(&type_symbol);
+        let target_metadata = self.lib.type_metadata(&type_symbol);
         if target_metadata.is_none() {
             self.report_error(Diagnostic::error(&decl.target, "Type not found"));
             return;
@@ -208,7 +208,7 @@ impl TypeChecker {
         }
         let trait_metadata = trait_metadata.unwrap();
 
-        let type_metadata = self.lib.type_metadata_ref(&type_symbol).unwrap();
+        let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
         type_metadata.add_trait_impl(&trait_metadata.symbol);
         let type_metadata = type_metadata.clone();
 

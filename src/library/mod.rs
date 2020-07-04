@@ -104,7 +104,7 @@ impl Lib {
         Ok(lib)
     }
 
-    pub fn deep_search<'a, F, U>(&'a self, search: &F) -> Option<&U>
+    fn deep_search<'a, F, U>(&'a self, search: &F) -> Option<&U>
     where
         F: Fn(&'a Lib) -> Option<&'a U>,
     {
@@ -120,8 +120,15 @@ impl Lib {
         }
     }
 
-    pub fn type_metadata_ref(&self, symbol: &Symbol) -> Option<&TypeMetadata> {
-        self.deep_search(&|l: &Lib| l.symbols.get_type_metadata(symbol))
+    pub fn type_metadata(&self, symbol: &Symbol) -> Option<&TypeMetadata> {
+        self.deep_search(&|lib| lib.symbols.get_type_metadata(symbol))
+    }
+
+    pub fn type_metadata_named(&self, name: &str) -> Option<&TypeMetadata> {
+        self.deep_search(&|lib| {
+            let type_symbol = Symbol::new_str(&Symbol::lib_root(lib), name);
+            lib.symbols.get_type_metadata(&type_symbol)
+        })
     }
 
     pub fn top_level_function_named(&self, name: &str) -> Option<&FunctionMetadata> {
@@ -147,6 +154,6 @@ impl Lib {
     }
 
     pub fn symbol_span(&self, symbol: &Symbol) -> Option<&Span> {
-        self.deep_search(&|l| l.symbols.span_map.get(symbol))
+        self.deep_search(&|l| l.symbols.get_span(symbol))
     }
 }

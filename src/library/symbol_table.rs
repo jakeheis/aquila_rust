@@ -116,9 +116,9 @@ impl std::fmt::Display for Symbol {
 #[derive(Clone)]
 pub struct SymbolTable {
     pub type_metadata: HashMap<Symbol, TypeMetadata>,
-    pub function_metadata: HashMap<Symbol, FunctionMetadata>,
-    pub trait_metadata: HashMap<Symbol, TraitMetadata>,
-    pub span_map: HashMap<Symbol, Span>,
+    function_metadata: HashMap<Symbol, FunctionMetadata>,
+    trait_metadata: HashMap<Symbol, TraitMetadata>,
+    span_map: HashMap<Symbol, Span>,
 }
 
 impl SymbolTable {
@@ -139,10 +139,6 @@ impl SymbolTable {
         self.type_metadata.get(symbol)
     }
 
-    pub fn get_type_metadata_mut(&mut self, symbol: &Symbol) -> Option<&mut TypeMetadata> {
-        self.type_metadata.get_mut(symbol)
-    }
-
     pub fn insert_func_metadata(&mut self, symbol: Symbol, metadata: FunctionMetadata) {
         self.function_metadata.insert(symbol, metadata);
     }
@@ -151,16 +147,16 @@ impl SymbolTable {
         self.function_metadata.get(symbol)
     }
 
-    pub fn get_func_metadata_mut(&mut self, symbol: &Symbol) -> Option<&mut FunctionMetadata> {
-        self.function_metadata.get_mut(symbol)
-    }
-
     pub fn insert_trait_metadata(&mut self, symbol: Symbol, metadata: TraitMetadata) {
         self.trait_metadata.insert(symbol, metadata);
     }
 
     pub fn get_trait_metadata(&self, symbol: &Symbol) -> Option<&TraitMetadata> {
         self.trait_metadata.get(symbol)
+    }
+
+    pub fn get_span(&self, symbol: &Symbol) -> Option<&Span> {
+        self.span_map.get(symbol)
     }
 }
 

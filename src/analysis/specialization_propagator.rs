@@ -210,7 +210,7 @@ impl<'a> SpecializationPropagator<'a> {
     }
 
     fn propagate_through_type(&mut self, cur: &Symbol, current_spec: &GenericSpecialization) {
-        let metadata = self.lib.type_metadata_ref(cur).unwrap();
+        let metadata = self.lib.type_metadata(cur).unwrap();
         let type_id = metadata.type_name(current_spec);
 
         if self.visited.insert(type_id) == false {
@@ -221,7 +221,7 @@ impl<'a> SpecializationPropagator<'a> {
 
         self.map.add_spec(cur.clone(), current_spec.clone());
 
-        let type_metadata = self.lib.type_metadata_ref(cur).unwrap().clone();
+        let type_metadata = self.lib.type_metadata(cur).unwrap().clone();
         for field_type in &type_metadata.field_types {
             if let NodeType::Instance(target, field_spec) = field_type {
                 let field_spec = field_spec.resolve_generics_using(self.lib, &current_spec);

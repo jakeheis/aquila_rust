@@ -208,7 +208,7 @@ impl FunctionMetadata {
 
         match &self.kind {
             FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
-                let type_meta = lib.type_metadata_ref(&owner).unwrap();
+                let type_meta = lib.type_metadata(&owner).unwrap();
                 format!(
                     "{}__{}__{}",
                     type_meta.type_name(specialization),

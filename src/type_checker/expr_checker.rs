@@ -35,7 +35,7 @@ impl ExprChecker {
             }
         };
 
-        let target_metadata = self.lib.type_metadata_ref(target_symbol).unwrap();
+        let target_metadata = self.lib.type_metadata(target_symbol).unwrap();
 
         let method_metadata = if is_meta {
             target_metadata.meta_method_named(method)
@@ -62,7 +62,7 @@ impl ExprChecker {
                 let func_metadata = self.lib.function_metadata(&found_symbol).unwrap();
                 match &func_metadata.kind {
                     FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
-                        let implicit_self = self.lib.type_metadata_ref(owner).unwrap();
+                        let implicit_self = self.lib.type_metadata(owner).unwrap();
                         let implicit_spec = implicit_self.dummy_specialization();
                         return Ok((func_metadata, implicit_spec, false));
                     }
@@ -99,7 +99,7 @@ impl ExprChecker {
             NodeType::Int | NodeType::Double | NodeType::Bool => (),
             arg_type if arg_type.is_pointer_to(NodeType::Byte) => (),
             NodeType::Instance(sym, spec) => {
-                let metadata = self.lib.type_metadata_ref(&sym).unwrap();
+                let metadata = self.lib.type_metadata(&sym).unwrap();
                 if metadata.conforms_to(&Symbol::writable_symbol()) {
                     let write_sym = Symbol::new_str(&sym, "write");
                     let enclosing_func = self
@@ -336,7 +336,7 @@ impl ExprVisitor for ExprChecker {
 
         match target_type {
             NodeType::Instance(type_symbol, specialization) => {
-                let type_metadata = self.lib.type_metadata_ref(&type_symbol).unwrap();
+                let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
                 if let Some((field_symbol, field_type, is_public)) =
                     type_metadata.field_named(field_name)
                 {

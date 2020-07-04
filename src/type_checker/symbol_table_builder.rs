@@ -144,9 +144,7 @@ impl SymbolTableBuilder {
 
         self.context.pop(); // Type pop
 
-        self.symbols
-            .type_metadata
-            .insert(type_symbol, type_metadata);
+        self.symbols.insert_type_metadata(type_symbol, type_metadata);
 
         trace!(target: "symbol_table", "Finished building type {}", decl.name.token.lexeme());
     }
@@ -236,9 +234,7 @@ impl SymbolTableBuilder {
         for generic in generics {
             let generic_symbol = Symbol::new(self.current_symbol(), &generic.token);
             let generic_type = TypeMetadata::generic(owner, generic.token.lexeme());
-            self.symbols
-                .type_metadata
-                .insert(generic_symbol.clone(), generic_type);
+            self.symbols.insert_type_metadata(generic_symbol.clone(), generic_type);
 
             trace!(target: "symbol_table", "Inserting generic {} (symbol = {})", generic.token.lexeme(), generic_symbol);
             generic_symbols.push(generic_symbol);

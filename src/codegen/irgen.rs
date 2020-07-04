@@ -93,7 +93,7 @@ impl IRGen {
         let type_symbol = decl.name.get_symbol().unwrap();
         let specs = self.spec_map.specs_for(&type_symbol);
 
-        let type_metadata = self.lib.type_metadata_ref(&type_symbol).unwrap();
+        let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
 
         if let Some(specs) = specs {
             for spec in specs {
@@ -185,7 +185,7 @@ impl IRGen {
 
     fn conformance_decl(&mut self, decl: &ConformanceDecl) {
         let type_symbol = decl.target.get_symbol().unwrap();
-        let type_metadata = self.lib.type_metadata_ref(&type_symbol).unwrap();
+        let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
 
         self.current_type = Some(type_metadata.clone());
         self.gen_function_decls(&decl.implementations);
@@ -402,7 +402,7 @@ impl ExprVisitor for IRGen {
 
             match &function_metadata.kind {
                 FunctionKind::MetaMethod(owner) if function_symbol.is_init() => {
-                    let type_init = self.lib.type_metadata_ref(&owner).unwrap();
+                    let type_init = self.lib.type_metadata(&owner).unwrap();
                     GenericSpecialization::new(&type_init.generics, explicit_types)
                 }
                 _ => GenericSpecialization::new(&function_metadata.generics, explicit_types),

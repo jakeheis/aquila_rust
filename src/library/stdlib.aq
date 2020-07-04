@@ -125,11 +125,11 @@ pub type Vec[T] {
         return Memory.offset[T](storage, index);
     }
 
-    pub def first(): Optional[ptr T] {
+    pub def first(): Optional[T] {
         if count > 0 {
-            return Optional[ptr T].some(storage);
+            return Optional[T].some_unowned(storage);
         } else {
-            return Optional[ptr T].none();
+            return Optional[T].none();
         }
     }
 
@@ -160,6 +160,7 @@ pub type Vec[T] {
 }
 
 pub type Optional[T] {
+
     let _is_some: bool;
     let object: ptr T;
 
@@ -167,6 +168,10 @@ pub type Optional[T] {
         let location = Memory.allocate[T]();
         Memory.copy[T](&object, location);
         return Optional[T](true, location);
+    }
+
+    pub meta def some_unowned(object: ptr T): Optional[T] {
+        return Optional[T](true, object);
     }
 
     pub meta def none(): Optional[T] {
