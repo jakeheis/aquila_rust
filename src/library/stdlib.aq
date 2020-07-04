@@ -8,7 +8,7 @@ builtin def exit(code: int);
 builtin def ptr_offset(pointer: ptr any, distance: int): ptr any;
 builtin def _read_line(): ptr byte;
 
-type Memory {
+pub type Memory {
 
     builtin meta def size[T](): int;
 

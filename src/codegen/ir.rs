@@ -13,12 +13,38 @@ impl IRProgram {
             functions: Vec::new(),
         }
     }
+
+    pub fn dump(&self) {
+        println!("Structures:");
+        for structure in &self.structures {
+            println!("  {}", structure.name);
+            for field in &structure.fields {
+                println!("    {}: {}", field.name, field.var_type);
+            }
+            for spec in &structure.specializations {
+                println!("    spec: {}", spec);
+            }
+        }
+
+        println!("Functions:");
+        for func in &self.functions {
+            println!("  {}", func.name);
+            for param in &func.parameters {
+                println!("    param: {}: {}", param.name, param.var_type);
+            }
+            println!("    ret: {}", func.return_type);
+            for spec in &func.specializations {
+                println!("    spec: {}", spec);
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct IRStructure {
     pub name: String,
     pub fields: Vec<IRVariable>,
+    pub specializations: Vec<GenericSpecialization>,
 }
 
 #[derive(Debug)]
@@ -27,6 +53,7 @@ pub struct IRFunction {
     pub parameters: Vec<IRVariable>,
     pub return_type: NodeType,
     pub statements: Vec<IRStatement>,
+    pub specializations: Vec<GenericSpecialization>
 }
 
 #[derive(Clone, Debug)]
@@ -103,9 +130,16 @@ impl IRExpr {
         }
     }
 
-    pub fn call(func: &str, args: Vec<IRExpr>, ret_type: NodeType) -> Self {
+    pub fn call_generic(func: &str, spec: GenericSpecialization, args: Vec<IRExpr>, ret_type: NodeType) -> Self {
         IRExpr {
-            kind: IRExprKind::Call(String::from(func), args),
+            kind: IRExprKind::Call(String::from(func), spec, args),
+            expr_type: ret_type,
+        }
+    }
+
+    pub fn call_nongenric(func: &str, args: Vec<IRExpr>, ret_type: NodeType) -> Self {
+        IRExpr {
+            kind: IRExprKind::Call(String::from(func), GenericSpecialization::empty(), args),
             expr_type: ret_type,
         }
     }
@@ -166,7 +200,7 @@ pub enum IRUnaryOperator {
 pub enum IRExprKind {
     FieldAccess(Box<IRExpr>, String),
     DerefFieldAccess(Box<IRExpr>, String),
-    Call(String, Vec<IRExpr>),
+    Call(String, GenericSpecialization, Vec<IRExpr>),
     Array(Vec<IRExpr>),
     Subscript(Box<IRExpr>, Box<IRExpr>),
     Binary(Box<IRExpr>, IRBinaryOperator, Box<IRExpr>),

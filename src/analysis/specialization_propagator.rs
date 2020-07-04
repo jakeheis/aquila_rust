@@ -189,7 +189,7 @@ impl<'a> SpecializationPropagator<'a> {
         if let Some(calls) = self.call_map.get(cur) {
             let calls = calls.clone();
             for (callee_function_symbol, call_spec) in calls {
-                let call_spec = call_spec.resolve_generics_using(self.lib, current_spec);
+                let call_spec = call_spec.resolve_generics_using(current_spec);
                 self.propagate(&callee_function_symbol, &call_spec);
             }
         }
@@ -198,7 +198,7 @@ impl<'a> SpecializationPropagator<'a> {
             let explicit_types = explicit_types.clone();
             for (explicit_type_symbol, explicit_type_spec) in explicit_types {
                 let explicit_type_spec =
-                    explicit_type_spec.resolve_generics_using(self.lib, current_spec);
+                    explicit_type_spec.resolve_generics_using(current_spec);
 
                 trace!(target: "spec_propagate", "in func {} Propping from type spec {} to {}", cur, explicit_type_spec, explicit_type_symbol);
 
@@ -224,7 +224,7 @@ impl<'a> SpecializationPropagator<'a> {
         let type_metadata = self.lib.type_metadata(cur).unwrap().clone();
         for field_type in &type_metadata.field_types {
             if let NodeType::Instance(target, field_spec) = field_type {
-                let field_spec = field_spec.resolve_generics_using(self.lib, &current_spec);
+                let field_spec = field_spec.resolve_generics_using(&current_spec);
                 self.propagate_through_type(target, &field_spec);
             }
         }

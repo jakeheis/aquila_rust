@@ -1,36 +1,29 @@
-// print 4;
+// def add[T](lhs: T, rhs: T): T {
+//     return rhs;
+// }
 
-type Adder {
-    let lhs: int;
-    let rhs: int;
+// let num = add[int](3, 4);
 
-    def sum(hi: bool, yo: int, third: int): int {
-        return self.lhs + rhs;
+// let str = add[ptr byte]("hi", "byte");
+
+type Adder[T] {
+    let lhs: T;
+    let rhs: T;
+
+    def pick(): T {
+      return rhs;
     }
 }
 
-trait Act {
-    def act(): int;
-}
+let a = Adder[int](3, 4);
 
-impl Adder: Act {
-    def act(): int {
-        return 4 + 5;
-    }
-}
+let hi = a.pick();
 
-pub def hi() {}
-
-let is = [1, 2, 3];
-// print is.[4];
+let b = Adder[ptr byte]("hi", "byte");
 
 let vector = Vec[int].new();
-print(vector.first());
-
 vector.insert(2);
 vector.insert(4);
-
-print(vector.first());
 
 // print(vector);
 

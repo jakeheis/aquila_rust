@@ -6,7 +6,7 @@ struct Builtin {
     name: &'static str,
     implicit_calls: Vec<Symbol>,
     write: Option<fn(&mut IRWriter, &Symbol) -> ()>,
-    special_call: Option<fn(&Lib, &Symbol, Vec<IRExpr>, &GenericSpecialization) -> IRExpr>,
+    special_call: Option<fn(&Symbol, &GenericSpecialization, Vec<IRExpr>) -> IRExpr>,
 }
 
 impl Builtin {
@@ -102,14 +102,13 @@ pub fn can_write_special_call(symbol: &Symbol) -> bool {
 }
 
 pub fn write_special_call(
-    lib: &Lib,
     symbol: &Symbol,
-    args: Vec<IRExpr>,
     spec: &GenericSpecialization,
+    args: Vec<IRExpr>,
 ) -> IRExpr {
     if let Some(builtin) = Builtin::named(&symbol) {
         if let Some(call) = &builtin.special_call {
-            return call(lib, symbol, args, spec);
+            return call(symbol, spec, args);
         }
     }
     panic!()
@@ -118,7 +117,7 @@ pub fn write_special_call(
 pub fn write_special_function(
     writer: &mut IRWriter,
     metadata: &FunctionMetadata,
-    spec: &GenericSpecialization,
+    specs: Vec<GenericSpecialization>,
 ) {
     if is_direct_c_binding(&metadata.symbol) {
         return;
@@ -128,7 +127,7 @@ pub fn write_special_function(
         if let Some(write) = builtin.write {
             writer.start_block();
             write(writer, &metadata.symbol);
-            writer.end_decl_func(metadata, spec);
+            writer.end_decl_func(metadata, specs);
         }
     } else {
         panic!("Builtin not handled: {}", metadata.symbol)
@@ -178,7 +177,7 @@ fn write_read_line(writer: &mut IRWriter, _func_symbol: &Symbol) {
         IRExpr::literal("stdin", NodeType::Void),
     ];
 
-    let call = IRExpr::call("getline", args, NodeType::Void);
+    let call = IRExpr::call_nongenric("getline", args, NodeType::Void);
     writer.expr(call);
 
     writer.return_var(&line);
@@ -186,29 +185,25 @@ fn write_read_line(writer: &mut IRWriter, _func_symbol: &Symbol) {
 
 // Call impls
 
-fn size_call(_lib: &Lib, symbol: &Symbol, _args: Vec<IRExpr>, spec: &GenericSpecialization) -> IRExpr {
+fn size_call(symbol: &Symbol, spec: &GenericSpecialization, _args: Vec<IRExpr>) -> IRExpr {
     let mem_type = Symbol::new_str(symbol, "T");
-    let mem_type = spec.type_for(&mem_type).unwrap();
-
+    let expr_type = spec.type_for(&mem_type).unwrap().clone();
     let arg = IRExpr {
         kind: IRExprKind::ExplicitType,
-        expr_type: mem_type.clone(),
+        expr_type: expr_type,
     };
-    IRExpr::call("sizeof", vec![arg], NodeType::Double)
+    IRExpr::call_nongenric("sizeof", vec![arg], NodeType::Double)
 }
 
-fn print_call(lib: &Lib, _symbol: &Symbol, mut args: Vec<IRExpr>, _spec: &GenericSpecialization) -> IRExpr {
+fn print_call(_symbol: &Symbol, _spec: &GenericSpecialization, mut args: Vec<IRExpr>) -> IRExpr {
     let node_type = args[0].expr_type.clone();
     if let NodeType::Instance(type_symbol, spec) = &node_type {
         let full_symbol = Symbol::new_str(&type_symbol, "write");
-        let metadata = lib.function_metadata(&full_symbol).unwrap();
-        let function_name = metadata.function_name(lib, &spec);
-
         let arg = IRExpr {
             kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(args.remove(0))),
-            expr_type: node_type,
+            expr_type: node_type.clone(),
         };
-        IRExpr::call(&function_name, vec![arg], NodeType::Void)
+        IRExpr::call_generic(&full_symbol.mangled(), spec.clone(), vec![arg], NodeType::Void)
     } else {
         let format_specificer = match node_type {
             NodeType::Int | NodeType::Bool => "%i",
@@ -222,7 +217,7 @@ fn print_call(lib: &Lib, _symbol: &Symbol, mut args: Vec<IRExpr>, _spec: &Generi
             kind: IRExprKind::Literal(format_line),
             expr_type: NodeType::pointer_to(NodeType::Byte),
         };
-        IRExpr::call(
+        IRExpr::call_nongenric(
             "printf",
             vec![format_expr, args.remove(0)],
             NodeType::Void,

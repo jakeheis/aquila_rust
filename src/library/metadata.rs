@@ -347,24 +347,22 @@ impl GenericSpecialization {
 
     pub fn resolve_generics_using(
         &self,
-        lib: &Lib,
         specialization: &GenericSpecialization,
     ) -> GenericSpecialization {
         GenericSpecialization {
             map: self
                 .map
                 .iter()
-                .map(|(key, value)| (key.clone(), value.specialize(lib, specialization)))
+                .map(|(key, value)| (key.clone(), value.specialize(specialization)))
                 .collect(),
         }
     }
 
     pub fn merge(
         &self,
-        lib: &Lib,
         specialization: &GenericSpecialization,
     ) -> GenericSpecialization {
-        let mut resolved_self = self.resolve_generics_using(lib, specialization);
+        let mut resolved_self = self.resolve_generics_using(specialization);
         for (symbol, node_type) in &specialization.map {
             if !self.map.contains_key(symbol) {
                 resolved_self.map.insert(symbol.clone(), node_type.clone());

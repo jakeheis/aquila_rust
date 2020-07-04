@@ -23,21 +23,23 @@ impl IRWriter {
     pub fn declare_struct(
         &mut self,
         type_metadata: &TypeMetadata,
-        specialization: &GenericSpecialization,
+        specializations: Vec<GenericSpecialization>,
     ) {
-        let name = type_metadata.type_name(specialization);
-
         let fields: Vec<_> = type_metadata
             .field_types
             .iter()
             .zip(&type_metadata.field_symbols)
             .map(|(node_type, symbol)| IRVariable {
                 name: symbol.mangled(),
-                var_type: node_type.specialize(self.lib.as_ref(), specialization),
+                var_type: node_type.clone(),
             })
             .collect();
 
-        let structure = IRStructure { name, fields };
+        let structure = IRStructure { 
+            name: type_metadata.symbol.mangled(), 
+            fields, 
+            specializations: specializations
+        };
         self.program.structures.push(structure);
     }
 
@@ -51,6 +53,7 @@ impl IRWriter {
             parameters: Vec::new(),
             return_type: NodeType::Int,
             statements: self.blocks.pop().unwrap(),
+            specializations: vec![GenericSpecialization::empty()],
         };
         self.program.functions.push(main);
     }
@@ -58,7 +61,7 @@ impl IRWriter {
     pub fn end_decl_func(
         &mut self,
         function: &FunctionMetadata,
-        specialization: &GenericSpecialization,
+        specializations: Vec<GenericSpecialization>,
     ) {
         let mut parameters: Vec<_> = function
             .parameter_types
@@ -66,13 +69,13 @@ impl IRWriter {
             .zip(&function.parameter_symbols)
             .map(|(param_type, symbol)| IRVariable {
                 name: symbol.mangled(),
-                var_type: param_type.specialize(self.lib.as_ref(), specialization),
+                var_type: param_type.clone(),
             })
             .collect();
 
         if let FunctionKind::Method(owner) = &function.kind {
-            let self_instance = NodeType::Instance(owner.clone(), specialization.subset(owner));
-            let self_type = NodeType::pointer_to(self_instance);
+            let owner_metadata = self.lib.type_metadata(owner).unwrap();
+            let self_type = NodeType::pointer_to(owner_metadata.unspecialized_type());
             parameters.insert(
                 0,
                 IRVariable {
@@ -83,12 +86,11 @@ impl IRWriter {
         }
 
         let function = IRFunction {
-            name: function.function_name(self.lib.as_ref(), specialization),
+            name: function.symbol.mangled(),
             parameters,
-            return_type: function
-                .return_type
-                .specialize(self.lib.as_ref(), specialization),
+            return_type: function.return_type.clone(),
             statements: self.blocks.pop().unwrap(),
+            specializations: specializations.to_owned(),
         };
 
         self.program.functions.push(function);
@@ -184,25 +186,14 @@ impl IRWriter {
         self.start_block();
 
         let message = format!(
-            "\"\\nFatal error: {}\\n\\n{}\\n\"",
+            "\\nFatal error: {}\\n\\n{}\\n",
             message,
             span.location(),
         );
 
-        let arg = IRExpr {
-            kind: IRExprKind::Literal(message),
-            expr_type: NodeType::pointer_to(NodeType::Byte),
-        };
-        self.expr(IRExpr {
-            kind: IRExprKind::Call(String::from("printf"), vec![arg]),
-            expr_type: NodeType::Void,
-        });
-
-        self.expr(IRExpr {
-            kind: IRExprKind::Call(String::from("exit"), vec![IRExpr::int_literal("1")]),
-            expr_type: NodeType::Void,
-        });
-
+        let arg = IRExpr::string_literal(&message);
+        self.expr(IRExpr::call_nongenric("printf", vec![arg], NodeType::Void));
+        self.expr(IRExpr::call_nongenric("exit", vec![IRExpr::int_literal("1")], NodeType::Void));
         self.end_if_block(guard);
     }
 }

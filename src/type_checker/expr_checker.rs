@@ -110,7 +110,7 @@ impl ExprChecker {
                     self.lib.specialization_tracker.add_call(
                         enclosing_func,
                         write_sym,
-                        spec.resolve_generics_using(self.lib.as_ref(), context_spec),
+                        spec.resolve_generics_using(context_spec),
                     );
                 } else {
                     let message = format!("Can't print object of type {}", sym.mangled());
@@ -290,7 +290,7 @@ impl ExprVisitor for ExprChecker {
         };
 
         let full_call_specialization =
-            function_specialization.merge(self.lib.as_ref(), &target_specialization);
+            function_specialization.merge(&target_specialization);
 
         if metadata.symbol == Symbol::stdlib("print") {
             self.visit_print(&args[0], &arg_types[0], &full_call_specialization)?;
@@ -310,7 +310,7 @@ impl ExprVisitor for ExprChecker {
 
         let function_type = metadata
             .full_type()
-            .specialize(self.lib.as_ref(), &full_call_specialization);
+            .specialize(&full_call_specialization);
 
         for ((index, param), arg) in function_type
             .parameters
@@ -346,7 +346,7 @@ impl ExprVisitor for ExprChecker {
                         return Err(Diagnostic::error(field, "Field is private"));
                     }
                     field.set_symbol(field_symbol);
-                    expr.set_type(field_type.specialize(self.lib.as_ref(), &specialization))
+                    expr.set_type(field_type.specialize(&specialization))
                 } else {
                     Err(Diagnostic::error(
                         &Span::join(target, field.span()),

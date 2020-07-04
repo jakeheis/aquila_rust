@@ -23,6 +23,8 @@ pub fn generate(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static
     let spec_map = Rc::new(spec_map);
 
     let ir = gen_ir(lib, spec_map);
+    // println!("{:#?}", ir);
+    ir.dump();
 
     fs::create_dir_all("build").unwrap();
     let file = File::create("build/main.c").unwrap();

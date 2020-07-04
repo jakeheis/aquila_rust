@@ -104,23 +104,22 @@ impl NodeType {
 
     pub fn specialize_opt(
         &self,
-        lib: &Lib,
         specialization: Option<&GenericSpecialization>,
     ) -> NodeType {
         match specialization {
-            Some(spec) => self.specialize(lib, spec),
+            Some(spec) => self.specialize(spec),
             None => self.clone(),
         }
     }
 
-    pub fn specialize(&self, lib: &Lib, specialization: &GenericSpecialization) -> NodeType {
+    pub fn specialize(&self, specialization: &GenericSpecialization) -> NodeType {
         match self {
             NodeType::Instance(symbol, spec) => {
                 if let Some(specialized_type) = specialization.type_for(symbol) {
                     // spec will be empty; generic parameters aren't specialized themselves, so it can be ignored
                     specialized_type.clone()
                 } else {
-                    let new_spec = spec.resolve_generics_using(lib, specialization);
+                    let new_spec = spec.resolve_generics_using(specialization);
                     NodeType::Instance(symbol.clone(), new_spec)
                 }
             }
@@ -129,17 +128,17 @@ impl NodeType {
                     // spec will be empty; generic parameters aren't specialized themselves, so it can be ignored
                     specialized_type.clone()
                 } else {
-                    let new_spec = spec.resolve_generics_using(lib, specialization);
+                    let new_spec = spec.resolve_generics_using(specialization);
                     NodeType::Metatype(symbol.clone(), new_spec)
                 }
             }
-            NodeType::Pointer(to) => NodeType::pointer_to(to.specialize(lib, specialization)),
+            NodeType::Pointer(to) => NodeType::pointer_to(to.specialize(specialization)),
             NodeType::Array(of, size) => {
-                let specialized = of.specialize(lib, specialization);
+                let specialized = of.specialize(specialization);
                 NodeType::Array(Box::new(specialized), *size)
             }
             NodeType::Function(func_type) => {
-                NodeType::Function(Box::new(func_type.specialize(lib, specialization)))
+                NodeType::Function(Box::new(func_type.specialize(specialization)))
             }
             _ => self.clone(),
         }
@@ -240,14 +239,14 @@ impl FunctionType {
         }
     }
 
-    pub fn specialize(&self, lib: &Lib, spec: &GenericSpecialization) -> Self {
+    pub fn specialize(&self, spec: &GenericSpecialization) -> Self {
         FunctionType {
             parameters: self
                 .parameters
                 .iter()
-                .map(|p| p.specialize(lib, spec))
+                .map(|p| p.specialize(spec))
                 .collect(),
-            return_type: self.return_type.specialize(lib, spec),
+            return_type: self.return_type.specialize(spec),
         }
     }
 }
