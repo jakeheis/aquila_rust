@@ -344,30 +344,29 @@ impl ExprVisitor for ASTPrinter {
     fn visit_function_call_expr(
         &mut self,
         _expr: &Expr,
-        target: Option<&Expr>,
-        function: &ResolvedToken,
-        args: &[Expr],
+        call: &FunctionCall,
     ) -> Self::ExprResult {
-        let symbol = function
+        let symbol = call
+            .name
             .get_symbol()
             .map(|s| s.id.clone())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "FunctionCall(name: {}, symbol: {})",
-            function.token.lexeme(),
+            call.name.token.lexeme(),
             symbol
         ));
         self.indent(|visitor| {
-            if let Some(target) = target {
+            if let Some(target) = &call.target {
                 visitor.write_ln("Target");
                 visitor.indent(|visitor| {
                     target.accept(visitor);
                 });
             }
-            if function.specialization.len() > 0 {
+            if call.name.specialization.len() > 0 {
                 visitor.write_ln("Specializations");
                 visitor.indent(|visitor| {
-                    function
+                    call.name
                         .specialization
                         .iter()
                         .for_each(|a| visitor.write_explicit_type(a));
@@ -375,7 +374,7 @@ impl ExprVisitor for ASTPrinter {
             }
             visitor.write_ln("Arguments");
             visitor.indent(|visitor| {
-                args.iter().for_each(|a| a.accept(visitor));
+                call.arguments.iter().for_each(|a| a.accept(visitor));
             });
         })
     }

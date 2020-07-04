@@ -9,5 +9,5 @@ pub use ast::{
     TypedToken,
 };
 pub use ast_printer::ASTPrinter;
-pub use expr::{Expr, ExprKind, ExprVisitor};
+pub use expr::{Expr, ExprKind, ExprVisitor, FunctionCall};
 pub use parser::Parser;

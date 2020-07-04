@@ -216,17 +216,15 @@ impl ExprVisitor for ExprChecker {
     fn visit_function_call_expr(
         &mut self,
         expr: &Expr,
-        target: Option<&Expr>,
-        function: &ResolvedToken,
-        args: &[Expr],
+        call: &FunctionCall,
     ) -> Self::ExprResult {
         let arg_types: DiagnosticResult<Vec<NodeType>> =
-            args.iter().map(|a| a.accept(self)).collect();
+            call.arguments.iter().map(|a| a.accept(self)).collect();
         let arg_types = arg_types?;
 
-        let function_name = function.token.lexeme();
+        let function_name = call.name.token.lexeme();
 
-        let (metadata, target_specialization, is_init) = if let Some(target) = target {
+        let (metadata, target_specialization, is_init) = if let Some(target) = &call.target {
             let target_type = target.accept(self)?;
             let (method, target_specialization) =
                 self.retrieve_method(expr, &target_type, function_name)?;
@@ -234,18 +232,18 @@ impl ExprVisitor for ExprChecker {
             let method_metadata = self.lib.function_metadata(&method).unwrap();
             (method_metadata, target_specialization, false)
         } else {
-            self.resolve_function(expr, function)?
+            self.resolve_function(expr, &call.name)?
         };
 
         if check::func_accessible(self.lib.as_ref(), &metadata) == false {
             if is_init {
                 return Err(Diagnostic::error(expr, "Init is private"));
             } else {
-                return Err(Diagnostic::error(function, "Function is private"));
+                return Err(Diagnostic::error(&call.name, "Function is private"));
             }
         }
 
-        function.set_symbol(metadata.symbol.clone());
+        call.name.set_symbol(metadata.symbol.clone());
 
         trace!(target: "type_checker", "Callee metadata: {}", metadata);
 
@@ -273,15 +271,15 @@ impl ExprVisitor for ExprChecker {
         let function_specialization = if is_init {
             GenericSpecialization::empty()
         } else {
-            if function.specialization.len() != metadata.generics.len() {
+            if call.name.specialization.len() != metadata.generics.len() {
                 let message = format!(
                     "Expected {} specializations, got {}",
                     metadata.generics.len(),
-                    function.specialization.len()
+                    call.name.specialization.len()
                 );
-                return Err(Diagnostic::error(function.span(), &message));
+                return Err(Diagnostic::error(call.name.span(), &message));
             }
-            let specialization: std::result::Result<Vec<NodeType>, _> = function
+            let specialization: std::result::Result<Vec<NodeType>, _> = call.name
                 .specialization
                 .iter()
                 .map(|s| self.context.resolve_type(s))
@@ -292,8 +290,10 @@ impl ExprVisitor for ExprChecker {
         let full_call_specialization =
             function_specialization.merge(&target_specialization);
 
+        call.set_specialization(full_call_specialization.clone());
+
         if metadata.symbol == Symbol::stdlib("print") {
-            self.visit_print(&args[0], &arg_types[0], &full_call_specialization)?;
+            self.visit_print(&call.arguments[0], &arg_types[0], &full_call_specialization)?;
         } else {
             let enclosing_func = self
                 .context
@@ -318,8 +318,8 @@ impl ExprVisitor for ExprChecker {
             .enumerate()
             .zip(arg_types)
         {
-            check::ensure_no_amibguity(&args[index], &arg)?;
-            check::check_type_match(&args[index], &arg, &param)?;
+            check::ensure_no_amibguity(&call.arguments[index], &arg)?;
+            check::check_type_match(&call.arguments[index], &arg, &param)?;
         }
 
         expr.set_type(function_type.return_type)

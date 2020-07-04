@@ -346,48 +346,18 @@ impl ExprVisitor for IRGen {
     fn visit_function_call_expr(
         &mut self,
         expr: &Expr,
-        target: Option<&Expr>,
-        function: &ResolvedToken,
-        args: &[Expr],
+        call: &FunctionCall,
     ) -> Self::ExprResult {
-        let mut arg_exprs: Vec<_> = args.iter().map(|a| a.accept(self)).collect();
+        let mut arg_exprs: Vec<_> = call.arguments.iter().map(|a| a.accept(self)).collect();
 
-        let function_symbol = function.get_symbol().unwrap();
+        let function_symbol = call.name.get_symbol().unwrap();
         let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
 
         trace!("Writing call to {}", function_symbol);
 
-        let mut specialization = if function.specialization.is_empty() {
-            let arg_types: Vec<_> = args.iter().map(|a| a.get_type().unwrap()).collect();
-            GenericSpecialization::infer(self.lib.as_ref(), &function_metadata, &arg_types)
-                .ok()
-                .unwrap()
-        } else {
-            let explicit_types: Vec<_> = function
-                .specialization
-                .iter()
-                .map(|s| s.guarantee_resolved())
-                .collect();
+        let specialization = call.get_specialization().unwrap();
 
-            match &function_metadata.kind {
-                FunctionKind::MetaMethod(owner) if function_symbol.is_init() => {
-                    let type_init = self.lib.type_metadata(&owner).unwrap();
-                    GenericSpecialization::new(&type_init.generics, explicit_types)
-                }
-                _ => GenericSpecialization::new(&function_metadata.generics, explicit_types),
-            }
-        };
-
-        if let Some(target) = target {
-            match target.get_type().unwrap() {
-                NodeType::Instance(_, specs) | NodeType::Metatype(_, specs) => {
-                    specialization = specialization.merge(&specs);
-                }
-                _ => (),
-            }
-        }
-
-        if let Some(target) = target {
+        if let Some(target) = &call.target {
             if let FunctionKind::Method(..) = function_metadata.kind {
                 let target_expr = target.accept(self);
                 let target_expr = match &target_expr.kind {

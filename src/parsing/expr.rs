@@ -1,15 +1,33 @@
 use super::{ExplicitType, ResolvedToken};
 use crate::diagnostic::*;
 use crate::lexing::Token;
-use crate::library::NodeType;
+use crate::library::{NodeType, GenericSpecialization};
 use std::cell::RefCell;
+
+#[derive(Debug)]
+pub struct FunctionCall {
+    pub target: Option<Box<Expr>>,
+    pub name: ResolvedToken,
+    pub specialization: RefCell<Option<GenericSpecialization>>,
+    pub arguments: Vec<Expr>,
+}
+
+impl FunctionCall {
+    pub fn get_specialization(&self) -> Option<GenericSpecialization> {
+        self.specialization.borrow().clone()
+    }
+
+    pub fn set_specialization(&self, spec: GenericSpecialization) {
+        self.specialization.borrow_mut().replace(spec);
+    }
+}
 
 #[derive(Debug)]
 pub enum ExprKind {
     Assignment(Box<Expr>, Box<Expr>),
     Binary(Box<Expr>, Token, Box<Expr>),
     Unary(Token, Box<Expr>),
-    FunctionCall(Option<Box<Expr>>, ResolvedToken, Vec<Expr>),
+    FunctionCall(FunctionCall),
     Field(Box<Expr>, ResolvedToken),
     Literal(Token),
     Variable(ResolvedToken),
@@ -50,9 +68,8 @@ impl Expr {
             }
             ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&self, &lhs, &op, &rhs),
             ExprKind::Unary(op, expr) => visitor.visit_unary_expr(&self, &op, &expr),
-            ExprKind::FunctionCall(target, function, args) => {
-                let target: Option<&Expr> = target.as_ref().map(|t| t.as_ref());
-                visitor.visit_function_call_expr(&self, target, &function, &args)
+            ExprKind::FunctionCall(call) => {
+                visitor.visit_function_call_expr(&self, call)
             }
             ExprKind::Field(target, field) => visitor.visit_field_expr(&self, &target, &field),
             ExprKind::Literal(token) => visitor.visit_literal_expr(&self, &token),
@@ -91,7 +108,13 @@ impl Expr {
         right_paren: &Token,
     ) -> Self {
         let span = Span::join(function.span(), right_paren);
-        Expr::new(ExprKind::FunctionCall(target, function, args), span)
+        let function_call = FunctionCall {
+            target,
+            name: function,
+            specialization: RefCell::new(None),
+            arguments: args,
+        };
+        Expr::new(ExprKind::FunctionCall(function_call), span)
     }
 
     pub fn field(target: Expr, name: Token, specialization: Vec<ExplicitType>) -> Self {
@@ -168,9 +191,7 @@ pub trait ExprVisitor {
     fn visit_function_call_expr(
         &mut self,
         expr: &Expr,
-        target: Option<&Expr>,
-        function: &ResolvedToken,
-        args: &[Expr],
+        call: &FunctionCall,
     ) -> Self::ExprResult;
     fn visit_field_expr(
         &mut self,
