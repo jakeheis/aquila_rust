@@ -274,29 +274,20 @@ impl StmtVisitor for IRGen {
         self.writer.return_opt(ret);
     }
 
+    fn visit_assignment_stmt(&mut self, target: &Expr, value: &Expr) -> Self::StmtResult {
+        let target = target.accept(self);
+        let value = value.accept(self);
+        self.writer.assign(target, value);
+    }
+
     fn visit_expression_stmt(&mut self, expr: &Expr) -> Self::StmtResult {
-        if let ExprKind::Assignment(target, value) = &expr.kind {
-            let target = target.accept(self);
-            let value = value.accept(self);
-            self.writer.assign(target, value);
-        } else {
-            let expr = expr.accept(self);
-            self.writer.expr(expr);
-        }
+        let expr = expr.accept(self);
+        self.writer.expr(expr);
     }
 }
 
 impl ExprVisitor for IRGen {
     type ExprResult = IRExpr;
-
-    fn visit_assignment_expr(
-        &mut self,
-        _expr: &Expr,
-        _target: &Expr,
-        _value: &Expr,
-    ) -> Self::ExprResult {
-        unreachable!()
-    }
 
     fn visit_binary_expr(
         &mut self,

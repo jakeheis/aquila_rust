@@ -148,10 +148,12 @@ impl Parser {
                 ))
             }
         } else {
-            let stmt = Stmt::expression(self.parse_precedence(Precedence::Assignment)?);
-            self.consume(TokenKind::Semicolon, "Expected semicolon after expression")
-                .replace_span(&stmt)?;
-            Ok(stmt)
+            let expr = self.parse_precedence(Precedence::Assignment)?;
+            self.consume(TokenKind::Semicolon, "Expected semicolon after expression").replace_span(&expr)?;
+            if let ExprKind::Assignment(target, value) = expr.kind {
+                return Ok(Stmt::assign(target, value));
+            }
+            Ok(Stmt::expression(expr))
         }
     }
 

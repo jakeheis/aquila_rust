@@ -164,6 +164,7 @@ impl ContainsSpan for LocalVariableDecl {
 #[derive(Debug)]
 pub enum StmtKind {
     LocalVariableDecl(LocalVariableDecl),
+    Assignment(Box<Expr>, Box<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     WhileStmt(Expr, Vec<Stmt>),
     ForStmt(TypedToken, Expr, Vec<Stmt>),
@@ -185,6 +186,7 @@ impl Stmt {
     pub fn accept<V: StmtVisitor>(&self, visitor: &mut V) -> V::StmtResult {
         match &self.kind {
             StmtKind::LocalVariableDecl(decl) => visitor.visit_local_variable_decl(decl),
+            StmtKind::Assignment(target, value) => visitor.visit_assignment_stmt(target, value),
             StmtKind::IfStmt(condition, body, else_body) => {
                 visitor.visit_if_stmt(&condition, &body, &else_body)
             }
@@ -259,6 +261,11 @@ impl Stmt {
         Stmt::new(StmtKind::ReturnStmt(expr), span)
     }
 
+    pub fn assign(target: Box<Expr>, value: Box<Expr>) -> Self {
+        let span = Span::join(target.as_ref(), value.as_ref());
+        Stmt::new(StmtKind::Assignment(target, value), span)
+    }
+
     pub fn expression(expr: Expr) -> Self {
         let span = expr.span.clone();
         Stmt::new(StmtKind::ExpressionStmt(expr), span)
@@ -275,6 +282,12 @@ pub trait StmtVisitor {
     type StmtResult;
 
     fn visit_local_variable_decl(&mut self, decl: &LocalVariableDecl) -> Self::StmtResult;
+
+    fn visit_assignment_stmt(
+        &mut self,
+        target: &Expr,
+        value: &Expr,
+    ) -> Self::StmtResult;
 
     fn visit_if_stmt(
         &mut self,

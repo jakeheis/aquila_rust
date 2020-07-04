@@ -130,19 +130,6 @@ impl ExprChecker {
 impl ExprVisitor for ExprChecker {
     type ExprResult = DiagnosticResult<NodeType>;
 
-    fn visit_assignment_expr(
-        &mut self,
-        expr: &Expr,
-        target: &Expr,
-        value: &Expr,
-    ) -> Self::ExprResult {
-        let target_type = target.accept(self)?;
-        let value_type = value.accept(self)?;
-        check::check_type_match(value, &value_type, &target_type)?;
-        let _ = value.set_type(target_type);
-        expr.set_type(NodeType::Void)
-    }
-
     fn visit_binary_expr(
         &mut self,
         expr: &Expr,

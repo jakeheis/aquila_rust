@@ -264,6 +264,23 @@ impl TypeChecker {
 impl StmtVisitor for TypeChecker {
     type StmtResult = Analysis;
 
+    fn visit_assignment_stmt(
+        &mut self,
+        target: &Expr,
+        value: &Expr,
+    ) -> Analysis {
+        let target_type = self.check_expr(target);
+        let value_type = self.check_expr(value);
+
+        if let (Some(target_type), Some(value_type)) = (target_type, value_type) {
+            if let Err(diag) = check::check_type_match(value, &value_type, &target_type) {
+                self.report_error(diag);
+            }
+        }
+        
+        Analysis { guarantees_return: false }
+    }
+
     fn visit_local_variable_decl(&mut self, decl: &LocalVariableDecl) -> Analysis {
         let explicit_type =
             decl.explicit_type
@@ -317,23 +334,16 @@ impl StmtVisitor for TypeChecker {
             let _ = condition.set_type(NodeType::Bool);
         }
 
-        let mut guarantees_return = true;
-
         self.context.push_scope_named("if");
         let body_analysis = self.check_list(body);
-        if body_analysis.guarantees_return == false {
-            guarantees_return = false;
-        }
         self.context.pop_scope();
 
         self.context.push_scope_named("else");
         let else_analysis = self.check_list(else_body);
-        if else_analysis.guarantees_return == false {
-            guarantees_return = false;
-        }
         self.context.pop_scope();
 
-        Analysis { guarantees_return }
+        let guarantees_return = body_analysis.guarantees_return && else_analysis.guarantees_return;
+        Analysis {  guarantees_return }
     }
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) -> Analysis {

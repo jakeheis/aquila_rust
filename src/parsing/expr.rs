@@ -63,9 +63,6 @@ impl Expr {
 
     pub fn accept<V: ExprVisitor>(&self, visitor: &mut V) -> V::ExprResult {
         match &self.kind {
-            ExprKind::Assignment(target, value) => {
-                visitor.visit_assignment_expr(&self, &target, &value)
-            }
             ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&self, &lhs, &op, &rhs),
             ExprKind::Unary(op, expr) => visitor.visit_unary_expr(&self, &op, &expr),
             ExprKind::FunctionCall(call) => {
@@ -77,6 +74,7 @@ impl Expr {
             ExprKind::Array(elements) => visitor.visit_array_expr(&self, elements),
             ExprKind::Subscript(target, arg) => visitor.visit_subscript_expr(&self, target, arg),
             ExprKind::Cast(exp_type, value) => visitor.visit_cast_expr(&self, &exp_type, &value),
+            ExprKind::Assignment(..) => panic!()
         }
     }
 
@@ -174,12 +172,6 @@ impl ContainsSpan for Expr {
 pub trait ExprVisitor {
     type ExprResult;
 
-    fn visit_assignment_expr(
-        &mut self,
-        expr: &Expr,
-        target: &Expr,
-        value: &Expr,
-    ) -> Self::ExprResult;
     fn visit_binary_expr(
         &mut self,
         expr: &Expr,

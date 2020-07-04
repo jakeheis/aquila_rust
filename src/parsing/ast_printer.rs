@@ -252,6 +252,15 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
+
+    fn visit_assignment_stmt(&mut self, target: &Expr, value: &Expr) {
+        self.write_ln("Assign");
+        self.indent(|visitor| {
+            target.accept(visitor);
+            value.accept(visitor);
+        })
+    }
+
     fn visit_if_stmt(&mut self, condition: &Expr, body: &[Stmt], else_body: &[Stmt]) {
         self.write_ln("If");
         self.indent(|visitor| {
@@ -317,14 +326,6 @@ impl StmtVisitor for ASTPrinter {
 
 impl ExprVisitor for ASTPrinter {
     type ExprResult = ();
-
-    fn visit_assignment_expr(&mut self, _expr: &Expr, target: &Expr, value: &Expr) {
-        self.write_ln("Assign");
-        self.indent(|visitor| {
-            target.accept(visitor);
-            value.accept(visitor);
-        })
-    }
 
     fn visit_binary_expr(&mut self, _expr: &Expr, lhs: &Expr, op: &Token, rhs: &Expr) {
         self.write_ln(&format!("Binary({})", op.lexeme()));
