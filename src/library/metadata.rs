@@ -185,9 +185,9 @@ pub struct FunctionMetadata {
 }
 
 impl FunctionMetadata {
-    pub fn main(lib: &Lib) -> Self {
+    pub fn main() -> Self {
         FunctionMetadata {
-            symbol: Symbol::main_symbol(lib),
+            symbol: Symbol::main_symbol(),
             kind: FunctionKind::TopLevel,
             generics: Vec::new(),
             parameter_symbols: Vec::new(),

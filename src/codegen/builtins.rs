@@ -117,7 +117,6 @@ pub fn write_special_call(
 pub fn write_special_function(
     writer: &mut IRWriter,
     metadata: &FunctionMetadata,
-    specs: Vec<GenericSpecialization>,
 ) {
     if is_direct_c_binding(&metadata.symbol) {
         return;
@@ -127,7 +126,7 @@ pub fn write_special_function(
         if let Some(write) = builtin.write {
             writer.start_block();
             write(writer, &metadata.symbol);
-            writer.end_decl_func(metadata, specs);
+            writer.end_decl_func(metadata);
         }
     } else {
         panic!("Builtin not handled: {}", metadata.symbol)

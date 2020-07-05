@@ -10,7 +10,7 @@ pub use ir::{
 };
 pub use irgen::IRGen;
 
-use crate::analysis::{FinalSpecializationMap, SpecializationPropagator};
+use crate::analysis::SpecializationPropagator;
 use crate::diagnostic::*;
 use crate::library::Lib;
 use std::fs::{self, File};
@@ -19,16 +19,15 @@ use std::rc::Rc;
 
 pub fn generate(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {
     builtins::record_implicit_calls(&mut lib);
-    let spec_map = SpecializationPropagator::propogate(&mut lib);
-    let spec_map = Rc::new(spec_map);
+    
+    let (mut lib, ir) = gen_ir(lib);
+    // ir.dump();
 
-    let ir = gen_ir(lib, spec_map);
-    // println!("{:#?}", ir);
-    ir.dump();
+    let spec_map = SpecializationPropagator::propogate(&mut lib);
 
     fs::create_dir_all("build").unwrap();
     let file = File::create("build/main.c").unwrap();
-    let code_writer = codewriter::CodeWriter::new(ir, file);
+    let code_writer = codewriter::CodeWriter::new(ir, file, spec_map);
     code_writer.write();
 
     let status = Command::new("/usr/local/opt/llvm/bin/clang")
@@ -53,17 +52,21 @@ pub fn generate(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static
     }
 }
 
-fn gen_ir(lib: Lib, spec_map: Rc<FinalSpecializationMap>) -> IRProgram {
+fn gen_ir(lib: Lib) -> (Lib, IRProgram) {
     let lib = Rc::new(lib);
-    let mut program = IRGen::new(Rc::clone(&lib), Rc::clone(&spec_map)).generate();
+    let mut program = IRGen::new(Rc::clone(&lib)).generate();
     let mut lib = Rc::try_unwrap(lib).ok().unwrap();
 
     let deps = std::mem::replace(&mut lib.dependencies, Vec::new());
+    let mut restored_deps: Vec<Lib> = Vec::new();
+
     for dep in deps {
-        let mut dep_program = gen_ir(dep, Rc::clone(&spec_map));
+        let (dep, mut dep_program) = gen_ir(dep);
         program.structures.append(&mut dep_program.structures);
         program.functions.append(&mut dep_program.functions);
+        restored_deps.push(dep);
     }
+    std::mem::replace(&mut lib.dependencies, restored_deps);
 
-    program
+    (lib, program)
 }

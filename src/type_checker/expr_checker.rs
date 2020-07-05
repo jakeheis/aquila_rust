@@ -1,6 +1,4 @@
-use super::check;
-use super::ContextTracker;
-use super::NodeType;
+use super::{check, ContextTracker};
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::library::*;
@@ -106,7 +104,7 @@ impl ExprChecker {
                         .context
                         .enclosing_function()
                         .map(|e| e.symbol.clone())
-                        .unwrap_or(Symbol::main_symbol(self.lib.as_ref()));
+                        .unwrap_or(Symbol::main_symbol());
                     self.lib.specialization_tracker.add_call(
                         enclosing_func,
                         write_sym,
@@ -286,7 +284,7 @@ impl ExprVisitor for ExprChecker {
                 .context
                 .enclosing_function()
                 .map(|e| e.symbol.clone())
-                .unwrap_or(Symbol::main_symbol(self.lib.as_ref()));
+                .unwrap_or(Symbol::main_symbol());
             trace!(target: "type_checker", "Adding call from {} to {} with {}", enclosing_func, metadata.symbol, full_call_specialization);
             self.lib.specialization_tracker.add_call(
                 enclosing_func,

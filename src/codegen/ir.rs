@@ -21,9 +21,6 @@ impl IRProgram {
             for field in &structure.fields {
                 println!("    {}: {}", field.name, field.var_type);
             }
-            for spec in &structure.specializations {
-                println!("    spec: {}", spec);
-            }
         }
 
         println!("Functions:");
@@ -33,27 +30,22 @@ impl IRProgram {
                 println!("    param: {}: {}", param.name, param.var_type);
             }
             println!("    ret: {}", func.return_type);
-            for spec in &func.specializations {
-                println!("    spec: {}", spec);
-            }
         }
     }
 }
 
 #[derive(Debug)]
 pub struct IRStructure {
-    pub name: String,
+    pub name: Symbol,
     pub fields: Vec<IRVariable>,
-    pub specializations: Vec<GenericSpecialization>,
 }
 
 #[derive(Debug)]
 pub struct IRFunction {
-    pub name: String,
+    pub name: Symbol,
     pub parameters: Vec<IRVariable>,
     pub return_type: NodeType,
     pub statements: Vec<IRStatement>,
-    pub specializations: Vec<GenericSpecialization>
 }
 
 #[derive(Clone, Debug)]

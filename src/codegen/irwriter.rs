@@ -23,7 +23,6 @@ impl IRWriter {
     pub fn declare_struct(
         &mut self,
         type_metadata: &TypeMetadata,
-        specializations: Vec<GenericSpecialization>,
     ) {
         let fields: Vec<_> = type_metadata
             .field_types
@@ -36,9 +35,8 @@ impl IRWriter {
             .collect();
 
         let structure = IRStructure { 
-            name: type_metadata.symbol.mangled(), 
+            name: type_metadata.symbol.clone(), 
             fields, 
-            specializations: specializations
         };
         self.program.structures.push(structure);
     }
@@ -49,11 +47,10 @@ impl IRWriter {
 
     pub fn end_decl_main(&mut self) {
         let main = IRFunction {
-            name: String::from("main"),
+            name: Symbol::main_symbol(),
             parameters: Vec::new(),
             return_type: NodeType::Int,
             statements: self.blocks.pop().unwrap(),
-            specializations: vec![GenericSpecialization::empty()],
         };
         self.program.functions.push(main);
     }
@@ -61,7 +58,6 @@ impl IRWriter {
     pub fn end_decl_func(
         &mut self,
         function: &FunctionMetadata,
-        specializations: Vec<GenericSpecialization>,
     ) {
         let mut parameters: Vec<_> = function
             .parameter_types
@@ -86,11 +82,10 @@ impl IRWriter {
         }
 
         let function = IRFunction {
-            name: function.symbol.mangled(),
+            name: function.symbol.clone(),
             parameters,
             return_type: function.return_type.clone(),
             statements: self.blocks.pop().unwrap(),
-            specializations: specializations.to_owned(),
         };
 
         self.program.functions.push(function);

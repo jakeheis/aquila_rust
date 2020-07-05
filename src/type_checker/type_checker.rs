@@ -35,7 +35,7 @@ impl TypeChecker {
             checker.visit_conformance_decl(decl);
         }
 
-        let main_func = FunctionMetadata::main(lib.as_ref());
+        let main_func = FunctionMetadata::main();
         checker.context.push_scope(
             main_func.symbol.clone(),
             ScopeType::InsideFunction(main_func),

@@ -15,15 +15,28 @@ type Adder[T] {
     }
 }
 
-let a = Adder[int](3, 4);
+// let heap = box Adder[int](3, 4);
+// let stack = Adder[ptr byte]("hi", "byte");
 
-let hi = a.pick();
+// def add_one(i: ref Adder[int], r: ref Adder[int]): int {
+//     return i.pick() + r.pick();
+// }
 
-let b = Adder[ptr byte]("hi", "byte");
+// add_one(heap, ref stack);
+
+// def keep_one(i: box Adder[int], r: box Adder[int]): int {
+//     return i.pick() + r.pick();
+// }
+
+// let uno = box 1;
+// let duo = box 2;
 
 let vector = Vec[int].new();
 vector.insert(2);
 vector.insert(4);
+
+// let vec = Vec[int].heap();
+
 
 // print(vector);
 

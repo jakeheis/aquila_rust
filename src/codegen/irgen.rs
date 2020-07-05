@@ -1,7 +1,6 @@
 use super::builtins;
 use super::ir::*;
 use super::irwriter::IRWriter;
-use crate::analysis::FinalSpecializationMap;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
@@ -10,17 +9,15 @@ use std::rc::Rc;
 
 pub struct IRGen {
     lib: Rc<Lib>,
-    spec_map: Rc<FinalSpecializationMap>,
     writer: IRWriter,
     current_type: Option<TypeMetadata>,
 }
 
 impl IRGen {
-    pub fn new(lib: Rc<Lib>, spec_map: Rc<FinalSpecializationMap>) -> Self {
+    pub fn new(lib: Rc<Lib>) -> Self {
         let lib_copy = Rc::clone(&lib);
         IRGen {
             lib,
-            spec_map,
             writer: IRWriter::new(lib_copy),
             current_type: None,
         }
@@ -84,36 +81,31 @@ impl IRGen {
 
     fn visit_type_decl(&mut self, decl: &TypeDecl) {
         let type_symbol = decl.name.get_symbol().unwrap();
-        let specs = self.spec_map.specs_for(&type_symbol);
 
         let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
 
-        if let Some(specs) = specs {
-            let specs: Vec<_> = specs.iter().map(|s| s.clone()).collect();
+        self.writer.declare_struct(&type_metadata);
 
-            self.writer.declare_struct(&type_metadata, specs.clone());
+        let meta_symbol = Symbol::meta_symbol(&type_symbol);
+        let init_symbol = Symbol::init_symbol(&meta_symbol);
+        let init_metadata = self.lib.function_metadata(&init_symbol).unwrap();
 
-            let meta_symbol = Symbol::meta_symbol(&type_symbol);
-            let init_symbol = Symbol::init_symbol(&meta_symbol);
-            let init_metadata = self.lib.function_metadata(&init_symbol).unwrap();
+        let new_item = IRVariable::new("new_item", init_metadata.return_type.clone());
 
-            let new_item = IRVariable::new("new_item", init_metadata.return_type.clone());
+        self.writer.start_block();
+        self.writer.declare_var(&new_item);
 
-            self.writer.start_block();
-            self.writer.declare_var(&new_item);
-
-            for (field, field_type) in type_metadata
-                .field_symbols
-                .iter()
-                .zip(&type_metadata.field_types)
-            {
-                let field_expr = IRExpr::field(&new_item, &field.mangled(), field_type.clone());
-                let param = IRVariable::new_sym(&field, field_type.clone());
-                self.writer.assign(field_expr, IRExpr::variable(&param));
-            }
-            self.writer.return_value(IRExpr::variable(&new_item));
-            self.writer.end_decl_func(&init_metadata, specs);
+        for (field, field_type) in type_metadata
+            .field_symbols
+            .iter()
+            .zip(&type_metadata.field_types)
+        {
+            let field_expr = IRExpr::field(&new_item, &field.mangled(), field_type.clone());
+            let param = IRVariable::new_sym(&field, field_type.clone());
+            self.writer.assign(field_expr, IRExpr::variable(&param));
         }
+        self.writer.return_value(IRExpr::variable(&new_item));
+        self.writer.end_decl_func(&init_metadata);
 
         trace!("Writing methods for {}", type_symbol);
 
@@ -128,9 +120,6 @@ impl IRGen {
     fn gen_function_decl(&mut self, decl: &FunctionDecl) {
         let func_symbol = decl.name.get_symbol().unwrap();
 
-        let spec_map = Rc::clone(&self.spec_map);
-        let specs = spec_map.specs_for(&func_symbol);
-
         let mut func_metadata = self.lib.function_metadata(&func_symbol).unwrap().clone();
 
         if decl.include_caller {
@@ -139,19 +128,15 @@ impl IRGen {
             func_metadata.parameter_types.push(NodeType::pointer_to(NodeType::Byte));
         }
 
-        if let Some(specs) = specs {
-            let specs: Vec<_> = specs.iter().map(|s| s.clone()).collect();
-            if decl.is_builtin {
-                builtins::write_special_function(
-                    &mut self.writer,
-                    &func_metadata,
-                    specs
-                )
-            } else {
-                self.writer.start_block();
-                self.gen_stmts(&decl.body);
-                self.writer.end_decl_func(&func_metadata, specs);
-            }
+        if decl.is_builtin {
+            builtins::write_special_function(
+                &mut self.writer,
+                &func_metadata,
+            )
+        } else {
+            self.writer.start_block();
+            self.gen_stmts(&decl.body);
+            self.writer.end_decl_func(&func_metadata);
         }
     }
 

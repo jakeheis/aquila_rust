@@ -83,7 +83,17 @@ impl FinalSpecializationMap {
     pub fn specs_for(&self, symbol: &Symbol) -> Option<&HashSet<GenericSpecialization>> {
         self.map.get(symbol)
     }
-}
+
+    pub fn dump(&self) {
+        println!("FinalSpecializationMap");
+        for (symbol, specs) in &self.map {
+            println!("  {}", symbol);
+            for spec in specs {
+                println!("    {}", spec);
+            }
+        }
+    }
+ }
 
 pub struct SpecializationPropagator<'a> {
     lib: &'a mut Lib,
@@ -154,7 +164,7 @@ impl<'a> SpecializationPropagator<'a> {
     }
 
     pub fn go(&mut self) {
-        let main_symbol = Symbol::main_symbol(self.lib);
+        let main_symbol = Symbol::main_symbol();
         self.propagate(&main_symbol, &GenericSpecialization::empty());
     }
 

@@ -1,5 +1,6 @@
 use super::ir::*;
 use crate::library::{NodeType, GenericSpecialization};
+use crate::analysis::FinalSpecializationMap;
 use std::cell::{Cell, RefCell};
 use std::fs::File;
 use std::io::Write;
@@ -9,15 +10,17 @@ pub struct CodeWriter {
     file: RefCell<File>,
     indent: Cell<u32>,
     temp_count: Cell<u32>,
+    spec_map: FinalSpecializationMap,
 }
 
 impl CodeWriter {
-    pub fn new(program: IRProgram, file: File) -> Self {
+    pub fn new(program: IRProgram, file: File, spec_map: FinalSpecializationMap) -> Self {
         CodeWriter {
             program,
             file: RefCell::new(file),
             indent: Cell::new(0),
             temp_count: Cell::new(0),
+            spec_map
         }
     }
 
@@ -40,50 +43,58 @@ impl CodeWriter {
 
     fn write_struct_prototypes(&self) {
         for struct_def in &self.program.structures {
-            for spec in &struct_def.specializations {
-                let struct_name = self.specialized_name(&struct_def.name, spec);
-                self.writeln("");
-                self.writeln(&format!("struct {};", struct_name));
+            if let Some(specs) = self.spec_map.specs_for(&struct_def.name) {
+                for spec in specs {
+                    let struct_name = self.specialized_name(&struct_def.name.mangled(), spec);
+                    self.writeln("");
+                    self.writeln(&format!("struct {};", struct_name));
+                }
             }
         }
     }
 
     fn write_struct_bodies(&self) {
         for struct_def in &self.program.structures {
-            for spec in &struct_def.specializations {
-                let struct_name = self.specialized_name(&struct_def.name, spec);
-                self.writeln("");
-                self.writeln(&format!("typedef struct {} {{", struct_name));
-                self.increase_indent();
-    
-                for field in &struct_def.fields {
-                    let field_type = field.var_type.specialize(spec);
-                    let (c_type, name) = self.convert_type(&field_type, field.name.clone(), true);
-                    self.writeln(&format!("{} {};", c_type, name));
+            if let Some(specs) = self.spec_map.specs_for(&struct_def.name) {
+                for spec in specs {
+                    let struct_name = self.specialized_name(&struct_def.name.mangled(), spec);
+                    self.writeln("");
+                    self.writeln(&format!("typedef struct {} {{", struct_name));
+                    self.increase_indent();
+        
+                    for field in &struct_def.fields {
+                        let field_type = field.var_type.specialize(spec);
+                        let (c_type, name) = self.convert_type(&field_type, field.name.clone(), true);
+                        self.writeln(&format!("{} {};", c_type, name));
+                    }
+        
+                    self.decrease_indent();
+                    self.writeln(&format!("}} {};", struct_name));
                 }
-    
-                self.decrease_indent();
-                self.writeln(&format!("}} {};", struct_name));
             }
         }
     }
 
     fn write_function_prototypes(&self) {
         for func in &self.program.functions {
-            for spec in &func.specializations {
-                self.write_function_header(func, spec, ";");
+            if let Some(specs) = self.spec_map.specs_for(&func.name) {
+                for spec in specs {
+                    self.write_function_header(func, spec, ";");
+                }
             }
         }
     }
 
     fn write_function_bodies(&self) {
         for func in &self.program.functions {
-            for spec in &func.specializations {
-                self.write_function_header(func, spec, " {");
-                self.increase_indent();
-                self.write_block(&func.statements, spec);
-                self.decrease_indent();
-                self.writeln("}");
+            if let Some(specs) = self.spec_map.specs_for(&func.name) {
+                for spec in specs {
+                    self.write_function_header(func, spec, " {");
+                    self.increase_indent();
+                    self.write_block(&func.statements, spec);
+                    self.decrease_indent();
+                    self.writeln("}");
+                }
             }
         }
     }
@@ -243,7 +254,7 @@ impl CodeWriter {
             .map(|param| self.type_and_name(&param.var_type.specialize(spec), &param.name))
             .collect();
 
-        let function_name = self.specialized_name(&function.name, spec);
+        let function_name = self.specialized_name(&function.name.mangled(), spec);
         let param_str = param_str.join(",");
 
         self.writeln("");

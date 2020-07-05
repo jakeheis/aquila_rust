@@ -41,8 +41,10 @@ impl Symbol {
         Symbol::new_str(parent, "self")
     }
 
-    pub fn main_symbol(lib: &Lib) -> Self {
-        Symbol::new_str(&Symbol::lib_root(lib), "main")
+    pub fn main_symbol() -> Self {
+        Symbol {
+            id: String::from("main"),
+        }
     }
 
     pub fn stdlib_root() -> Self {
