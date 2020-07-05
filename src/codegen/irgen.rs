@@ -170,11 +170,8 @@ impl StmtVisitor for IRGen {
 
     fn visit_local_variable_decl(&mut self, decl: &LocalVariableDecl) -> Self::StmtResult {
         let var_symbol = decl.name.get_symbol().unwrap();
-        let mut var_type = decl.name.get_type().unwrap();
-
-        if let NodeType::Array(of, _) = var_type {
-            var_type = NodeType::Pointer(of.clone());
-        }
+        let mut var_type = decl.get_type().unwrap();
+        var_type = var_type.coerce_array_to_ptr();
 
         let local = self.writer.declare_local(var_symbol, var_type);
 
@@ -218,7 +215,7 @@ impl StmtVisitor for IRGen {
         self.writer.end_loop();
     }
 
-    fn visit_for_stmt(&mut self, variable: &TypedToken, array_expr: &Expr, body: &[Stmt]) {
+    fn visit_for_stmt(&mut self, variable: &SymbolicToken, array_expr: &Expr, body: &[Stmt]) {
         let array = array_expr.accept(self);
         let limit = self.array_count(array_expr);
 
@@ -237,7 +234,8 @@ impl StmtVisitor for IRGen {
             expr_type: NodeType::Bool,
         });
 
-        let var_type = variable.get_type().unwrap();
+        let var_type = array_expr.get_type().unwrap().coerce_array_to_ptr();
+        
         let local = self
             .writer
             .declare_local(variable.get_symbol().unwrap(), var_type.clone());

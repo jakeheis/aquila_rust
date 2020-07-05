@@ -215,7 +215,7 @@ impl ContextTracker {
             .insert(symbol.clone(), var_type.clone());
     }
 
-    pub fn define_var(&mut self, name: &TypedToken, var_type: &NodeType) {
+    pub fn define_var(&mut self, name: &SymbolicToken, var_type: &NodeType) {
         if var_type.contains_ambiguity() {
             panic!("Should never define var as ambiguous");
         }
@@ -229,7 +229,6 @@ impl ContextTracker {
             .insert(new_symbol.clone(), var_type.clone());
 
         name.set_symbol(new_symbol);
-        name.set_type(var_type.clone());
     }
 
     pub fn resolve_var(&self, name: &str) -> Option<(Symbol, NodeType)> {

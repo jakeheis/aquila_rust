@@ -287,7 +287,7 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
-    fn visit_for_stmt(&mut self, variable: &TypedToken, array: &Expr, body: &[Stmt]) {
+    fn visit_for_stmt(&mut self, variable: &SymbolicToken, array: &Expr, body: &[Stmt]) {
         self.write_ln(&format!("For({})", variable.token.lexeme()));
         self.indent(|visitor| {
             visitor.write_ln("Array");

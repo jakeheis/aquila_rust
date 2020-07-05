@@ -295,10 +295,8 @@ impl StmtVisitor for TypeChecker {
 
         let implicit_type = decl.initial_value.as_ref().and_then(|v| self.check_expr(v));
 
-        match (explicit_type, implicit_type) {
+        let var_type = match (explicit_type, implicit_type) {
             (Some(explicit), Some(implicit)) => {
-                self.context.define_var(&decl.name, &explicit);
-
                 if let Err(diag) = check::check_type_match(
                     decl.initial_value.as_ref().unwrap(),
                     &implicit,
@@ -306,20 +304,18 @@ impl StmtVisitor for TypeChecker {
                 ) {
                     self.report_error(diag);
                 }
-                let _ = decl
-                    .initial_value
-                    .as_ref()
-                    .unwrap()
-                    .set_type(explicit.clone());
+                explicit
             }
-            (Some(explicit), None) => self.context.define_var(&decl.name, &explicit),
-            (None, Some(implicit)) if !implicit.contains_ambiguity() => {
-                self.context.define_var(&decl.name, &implicit)
-            }
+            (Some(explicit), None) => explicit,
+            (None, Some(implicit)) if !implicit.contains_ambiguity() => implicit,
             _ => {
                 self.report_error(Diagnostic::error(&decl.name, "Can't infer type"));
+                NodeType::Ambiguous
             }
-        }
+        };
+
+        self.context.define_var(&decl.name, &var_type);
+        decl.set_type(var_type);
 
         Analysis {
             guarantees_return: false,
@@ -361,7 +357,7 @@ impl StmtVisitor for TypeChecker {
         body_analysis
     }
 
-    fn visit_for_stmt(&mut self, variable: &TypedToken, array: &Expr, body: &[Stmt]) -> Analysis {
+    fn visit_for_stmt(&mut self, variable: &SymbolicToken, array: &Expr, body: &[Stmt]) -> Analysis {
         let array_element_type = match self.check_expr(array) {
             Some(NodeType::Array(of, _)) => of,
             None => {

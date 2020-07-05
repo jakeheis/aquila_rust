@@ -141,10 +141,21 @@ pub enum ASTNode {
 
 #[derive(Debug)]
 pub struct LocalVariableDecl {
-    pub name: TypedToken,
+    pub name: SymbolicToken,
     pub explicit_type: Option<ExplicitType>,
     pub initial_value: Option<Expr>,
+    pub var_type: RefCell<Option<NodeType>>,
     pub span: Span,
+}
+
+impl LocalVariableDecl {
+    pub fn get_type(&self) -> Option<NodeType> {
+        self.var_type.borrow().as_ref().map(|s| s.clone())
+    }
+
+    pub fn set_type(&self, var_type: NodeType) {
+        self.var_type.replace(Some(var_type));
+    }
 }
 
 impl ContainsSpan for LocalVariableDecl {
@@ -159,7 +170,7 @@ pub enum StmtKind {
     Assignment(Box<Expr>, Box<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
     WhileStmt(Expr, Vec<Stmt>),
-    ForStmt(TypedToken, Expr, Vec<Stmt>),
+    ForStmt(SymbolicToken, Expr, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
     ExpressionStmt(Expr),
 }
@@ -205,9 +216,10 @@ impl Stmt {
         };
         let span = Span::join(&name, end_span);
         let decl = LocalVariableDecl {
-            name: TypedToken::new(name),
+            name: SymbolicToken::new(name),
             explicit_type,
             initial_value: value,
+            var_type: RefCell::new(None),
             span: span.clone(),
         };
         Stmt::new(StmtKind::LocalVariableDecl(decl), span)
@@ -243,7 +255,7 @@ impl Stmt {
     ) -> Self {
         let span = Span::join(&for_span, end_brace_span);
         Stmt::new(
-            StmtKind::ForStmt(TypedToken::new(new_var), array, body),
+            StmtKind::ForStmt(SymbolicToken::new(new_var), array, body),
             span,
         )
     }
@@ -292,7 +304,7 @@ pub trait StmtVisitor {
 
     fn visit_for_stmt(
         &mut self,
-        variable: &TypedToken,
+        variable: &SymbolicToken,
         array: &Expr,
         body: &[Stmt],
     ) -> Self::StmtResult;
@@ -303,45 +315,6 @@ pub trait StmtVisitor {
 }
 
 // Tokens
-
-#[derive(Debug)]
-pub struct TypedToken {
-    pub token: Token,
-    symbol: RefCell<Option<Symbol>>,
-    token_type: RefCell<Option<NodeType>>,
-}
-
-impl TypedToken {
-    fn new(token: Token) -> Self {
-        TypedToken {
-            token,
-            symbol: RefCell::new(None),
-            token_type: RefCell::new(None),
-        }
-    }
-
-    pub fn set_symbol(&self, symbol: Symbol) {
-        self.symbol.replace(Some(symbol));
-    }
-
-    pub fn get_symbol(&self) -> Option<Symbol> {
-        self.symbol.borrow().as_ref().map(|s| s.clone())
-    }
-
-    pub fn set_type(&self, token_type: NodeType) {
-        self.token_type.replace(Some(token_type));
-    }
-
-    pub fn get_type(&self) -> Option<NodeType> {
-        self.token_type.borrow().as_ref().map(|s| s.clone())
-    }
-}
-
-impl ContainsSpan for TypedToken {
-    fn span(&self) -> &Span {
-        &self.token.span
-    }
-}
 
 #[derive(Debug)]
 pub struct SymbolicToken {
