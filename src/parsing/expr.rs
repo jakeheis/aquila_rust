@@ -1,4 +1,4 @@
-use super::{ExplicitType, ResolvedToken};
+use super::{ExplicitType, SpecializedToken};
 use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::library::{NodeType, GenericSpecialization};
@@ -7,7 +7,7 @@ use std::cell::RefCell;
 #[derive(Debug)]
 pub struct FunctionCall {
     pub target: Option<Box<Expr>>,
-    pub name: ResolvedToken,
+    pub name: SpecializedToken,
     pub specialization: RefCell<Option<GenericSpecialization>>,
     pub arguments: Vec<Expr>,
 }
@@ -28,9 +28,9 @@ pub enum ExprKind {
     Binary(Box<Expr>, Token, Box<Expr>),
     Unary(Token, Box<Expr>),
     FunctionCall(FunctionCall),
-    Field(Box<Expr>, ResolvedToken),
+    Field(Box<Expr>, SpecializedToken),
     Literal(Token),
-    Variable(ResolvedToken),
+    Variable(SpecializedToken),
     Array(Vec<Expr>),
     Subscript(Box<Expr>, Box<Expr>),
     Cast(Box<ExplicitType>, Box<Expr>),
@@ -101,7 +101,7 @@ impl Expr {
 
     pub fn function_call(
         target: Option<Box<Expr>>,
-        function: ResolvedToken,
+        function: SpecializedToken,
         args: Vec<Expr>,
         right_paren: &Token,
     ) -> Self {
@@ -118,7 +118,7 @@ impl Expr {
     pub fn field(target: Expr, name: Token, specialization: Vec<ExplicitType>) -> Self {
         let span = Span::join(&target, &name);
         Expr::new(
-            ExprKind::Field(Box::new(target), ResolvedToken::new(name, specialization)),
+            ExprKind::Field(Box::new(target), SpecializedToken::new(name, specialization)),
             span,
         )
     }
@@ -130,7 +130,7 @@ impl Expr {
     pub fn variable(name: Token, specialization: Vec<ExplicitType>) -> Self {
         let span = name.span().clone();
         Expr::new(
-            ExprKind::Variable(ResolvedToken::new(name, specialization)),
+            ExprKind::Variable(SpecializedToken::new(name, specialization)),
             span,
         )
     }
@@ -189,10 +189,10 @@ pub trait ExprVisitor {
         &mut self,
         expr: &Expr,
         target: &Expr,
-        field: &ResolvedToken,
+        field: &SpecializedToken,
     ) -> Self::ExprResult;
     fn visit_literal_expr(&mut self, expr: &Expr, token: &Token) -> Self::ExprResult;
-    fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult;
+    fn visit_variable_expr(&mut self, expr: &Expr, name: &SpecializedToken) -> Self::ExprResult;
     fn visit_array_expr(&mut self, expr: &Expr, elements: &[Expr]) -> Self::ExprResult;
     fn visit_subscript_expr(&mut self, expr: &Expr, target: &Expr, arg: &Expr) -> Self::ExprResult;
     fn visit_cast_expr(

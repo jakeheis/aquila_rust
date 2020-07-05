@@ -55,7 +55,7 @@ impl ExprChecker {
     fn resolve_function<S: ContainsSpan>(
         &self,
         span: &S,
-        function: &ResolvedToken,
+        function: &SpecializedToken,
     ) -> DiagnosticResult<(&FunctionMetadata, GenericSpecialization, bool)> {
         match self.context.resolve_var(function.token.lexeme()) {
             Some((found_symbol, NodeType::Function(_))) => {
@@ -316,7 +316,7 @@ impl ExprVisitor for ExprChecker {
         &mut self,
         expr: &Expr,
         target: &Expr,
-        field: &ResolvedToken,
+        field: &SpecializedToken,
     ) -> Self::ExprResult {
         let target_type = target.accept(self)?;
         let field_name = field.token.lexeme();
@@ -363,7 +363,7 @@ impl ExprVisitor for ExprChecker {
         expr.set_type(node_type)
     }
 
-    fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
+    fn visit_variable_expr(&mut self, expr: &Expr, name: &SpecializedToken) -> Self::ExprResult {
         if let TokenKind::SelfKeyword = name.token.kind {
             if let Some(enclosing_type) = self.context.enclosing_type() {
                 name.set_symbol(Symbol::self_symbol(&enclosing_type.symbol));

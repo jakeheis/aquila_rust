@@ -209,7 +209,7 @@ impl SymbolTableBuilder {
     }
 
     fn build_trait(&mut self, decl: &TraitDecl) {
-        let trait_symbol = Symbol::new(self.current_symbol(), &decl.name.token);
+        let trait_symbol = Symbol::new(self.current_symbol(), &decl.name);
         let requirements = self.build_functions(&decl.requirements);
         let metadata = TraitMetadata {
             symbol: trait_symbol.clone(),
@@ -229,14 +229,14 @@ impl SymbolTableBuilder {
         self.context.last().unwrap()
     }
 
-    fn insert_generics(&mut self, owner: &Symbol, generics: &[ResolvedToken]) -> Vec<Symbol> {
+    fn insert_generics(&mut self, owner: &Symbol, generics: &[Token]) -> Vec<Symbol> {
         let mut generic_symbols = Vec::new();
         for generic in generics {
-            let generic_symbol = Symbol::new(self.current_symbol(), &generic.token);
-            let generic_type = TypeMetadata::generic(owner, generic.token.lexeme());
+            let generic_symbol = Symbol::new(self.current_symbol(), &generic);
+            let generic_type = TypeMetadata::generic(owner, generic.lexeme());
             self.symbols.insert_type_metadata(generic_symbol.clone(), generic_type);
 
-            trace!(target: "symbol_table", "Inserting generic {} (symbol = {})", generic.token.lexeme(), generic_symbol);
+            trace!(target: "symbol_table", "Inserting generic {} (symbol = {})", generic.lexeme(), generic_symbol);
             generic_symbols.push(generic_symbol);
         }
         generic_symbols
@@ -248,7 +248,7 @@ impl SymbolTableBuilder {
         enclosing_func: Option<&Symbol>,
     ) -> (&'b Token, NodeType) {
         let resolved_type = self.resolve_type(&var_decl.explicit_type, enclosing_func);
-        (&var_decl.name.token, resolved_type)
+        (&var_decl.name, resolved_type)
     }
 
     fn resolve_type(

@@ -736,7 +736,7 @@ impl Parser {
             } else {
                 Vec::new()
             };
-            ExplicitTypeKind::Simple(ResolvedToken::new(name, specialization))
+            ExplicitTypeKind::Simple(SpecializedToken::new(name, specialization))
         };
 
         let end = &self.previous().span;

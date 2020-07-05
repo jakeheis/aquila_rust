@@ -189,15 +189,9 @@ impl ASTPrinter {
     }
 
     fn visit_structural_variable_decl(&mut self, decl: &StructuralVariableDecl) {
-        let symbol = decl
-            .name
-            .get_symbol()
-            .map(|s| s.id.clone())
-            .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
-            "StructuralVariableDecl(name: {}, symbol: {}, pub: {})",
+            "StructuralVariableDecl(name: {}, pub: {})",
             decl.name.span().lexeme(),
-            symbol,
             decl.is_public,
         ));
         self.indent(|visitor| {
@@ -380,7 +374,7 @@ impl ExprVisitor for ASTPrinter {
         })
     }
 
-    fn visit_field_expr(&mut self, _expr: &Expr, target: &Expr, field: &ResolvedToken) {
+    fn visit_field_expr(&mut self, _expr: &Expr, target: &Expr, field: &SpecializedToken) {
         let symbol = field
             .get_symbol()
             .map(|s| s.id.clone())
@@ -399,7 +393,7 @@ impl ExprVisitor for ASTPrinter {
         self.write_ln(&format!("Literal({})", token.lexeme()))
     }
 
-    fn visit_variable_expr(&mut self, _expr: &Expr, name: &ResolvedToken) {
+    fn visit_variable_expr(&mut self, _expr: &Expr, name: &SpecializedToken) {
         let symbol = name
             .get_symbol()
             .map(|s| s.id.clone())

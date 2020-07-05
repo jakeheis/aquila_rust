@@ -2,7 +2,7 @@ use super::check;
 use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::library::*;
-use crate::parsing::{ExplicitType, ExplicitTypeKind, ResolvedToken};
+use crate::parsing::{ExplicitType, ExplicitTypeKind, SpecializedToken};
 use log::trace;
 
 pub enum TypeResolutionError {
@@ -53,7 +53,7 @@ impl<'a> TypeResolution<'a> {
         Ok(node_type)
     }
 
-    pub fn resolve_simple(&self, token: &ResolvedToken) -> TypeResolutionResult {
+    pub fn resolve_simple(&self, token: &SpecializedToken) -> TypeResolutionResult {
         let mut resolved_spec = Vec::new();
         for explicit_spec in &token.specialization {
             resolved_spec.push(self.resolve(explicit_spec)?);

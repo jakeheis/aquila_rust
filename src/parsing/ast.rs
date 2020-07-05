@@ -6,8 +6,8 @@ use std::cell::RefCell;
 
 #[derive(Debug)]
 pub struct TypeDecl {
-    pub name: ResolvedToken,
-    pub generics: Vec<ResolvedToken>,
+    pub name: SymbolicToken,
+    pub generics: Vec<Token>,
     pub fields: Vec<StructuralVariableDecl>,
     pub methods: Vec<FunctionDecl>,
     pub meta_methods: Vec<FunctionDecl>,
@@ -23,12 +23,8 @@ impl TypeDecl {
         meta_methods: Vec<FunctionDecl>,
         public: bool,
     ) -> Self {
-        let generics: Vec<_> = generics
-            .into_iter()
-            .map(|g| ResolvedToken::new_non_specialized(g))
-            .collect();
         TypeDecl {
-            name: ResolvedToken::new_non_specialized(name),
+            name: SymbolicToken::new(name),
             generics,
             fields,
             methods,
@@ -40,8 +36,8 @@ impl TypeDecl {
 
 #[derive(Debug)]
 pub struct FunctionDecl {
-    pub name: ResolvedToken,
-    pub generics: Vec<ResolvedToken>,
+    pub name: SymbolicToken,
+    pub generics: Vec<Token>,
     pub parameters: Vec<StructuralVariableDecl>,
     pub return_type: Option<ExplicitType>,
     pub body: Vec<Stmt>,
@@ -63,12 +59,8 @@ impl FunctionDecl {
         is_public: bool,
         include_caller: bool,
     ) -> Self {
-        let generics: Vec<_> = generics
-            .into_iter()
-            .map(|g| ResolvedToken::new_non_specialized(g))
-            .collect();
         FunctionDecl {
-            name: ResolvedToken::new_non_specialized(name),
+            name: SymbolicToken::new(name),
             generics,
             parameters,
             return_type,
@@ -83,7 +75,7 @@ impl FunctionDecl {
 
 #[derive(Debug)]
 pub struct StructuralVariableDecl {
-    pub name: TypedToken,
+    pub name: Token,
     pub explicit_type: ExplicitType,
     pub span: Span,
     pub is_public: bool,
@@ -93,7 +85,7 @@ impl StructuralVariableDecl {
     pub fn new(name: Token, explicit_type: ExplicitType, public: bool) -> Self {
         let span = Span::join(&name, &explicit_type);
         StructuralVariableDecl {
-            name: TypedToken::new(name),
+            name: name,
             explicit_type,
             span: span.clone(),
             is_public: public,
@@ -109,14 +101,14 @@ impl ContainsSpan for StructuralVariableDecl {
 
 #[derive(Debug)]
 pub struct TraitDecl {
-    pub name: ResolvedToken,
+    pub name: Token,
     pub requirements: Vec<FunctionDecl>,
 }
 
 impl TraitDecl {
     pub fn new(name: Token, requirements: Vec<FunctionDecl>) -> Self {
         TraitDecl {
-            name: ResolvedToken::new(name, Vec::new()),
+            name,
             requirements,
         }
     }
@@ -124,16 +116,16 @@ impl TraitDecl {
 
 #[derive(Debug)]
 pub struct ConformanceDecl {
-    pub target: ResolvedToken,
-    pub trait_name: ResolvedToken,
+    pub target: SymbolicToken,
+    pub trait_name: Token,
     pub implementations: Vec<FunctionDecl>,
 }
 
 impl ConformanceDecl {
     pub fn new(target: Token, trait_name: Token, impls: Vec<FunctionDecl>) -> ConformanceDecl {
         ConformanceDecl {
-            target: ResolvedToken::new_non_specialized(target),
-            trait_name: ResolvedToken::new_non_specialized(trait_name),
+            target: SymbolicToken::new(target),
+            trait_name: trait_name,
             implementations: impls,
         }
     }
@@ -352,31 +344,50 @@ impl ContainsSpan for TypedToken {
 }
 
 #[derive(Debug)]
-pub struct ResolvedToken {
+pub struct SymbolicToken {
+    pub token: Token,
+    symbol: RefCell<Option<Symbol>>,
+}
+
+impl SymbolicToken {
+    pub fn new(token: Token) -> Self {
+        SymbolicToken {
+            token,
+            symbol: RefCell::new(None),
+        }
+    }
+
+    pub fn set_symbol(&self, symbol: Symbol) {
+        self.symbol.replace(Some(symbol));
+    }
+
+    pub fn get_symbol(&self) -> Option<Symbol> {
+        self.symbol.borrow().as_ref().map(|s| s.clone())
+    }
+}
+
+impl ContainsSpan for SymbolicToken {
+    fn span(&self) -> &Span {
+        &self.token.span
+    }
+}
+
+#[derive(Debug)]
+pub struct SpecializedToken {
     pub token: Token,
     symbol: RefCell<Option<Symbol>>,
     pub specialization: Vec<ExplicitType>,
     span: Span,
 }
 
-impl ResolvedToken {
-    pub fn new_non_specialized(token: Token) -> Self {
-        let span = token.span.clone();
-        ResolvedToken {
-            token,
-            symbol: RefCell::new(None),
-            specialization: Vec::new(),
-            span,
-        }
-    }
-
+impl SpecializedToken {
     pub fn new(token: Token, specialization: Vec<ExplicitType>) -> Self {
         let span = if let Some(last) = specialization.last() {
             Span::join(&token.span, last)
         } else {
             token.span.clone()
         };
-        ResolvedToken {
+        SpecializedToken {
             token,
             symbol: RefCell::new(None),
             specialization,
@@ -393,7 +404,7 @@ impl ResolvedToken {
     }
 }
 
-impl ContainsSpan for ResolvedToken {
+impl ContainsSpan for SpecializedToken {
     fn span(&self) -> &Span {
         &self.span
     }
@@ -401,7 +412,7 @@ impl ContainsSpan for ResolvedToken {
 
 #[derive(Debug)]
 pub enum ExplicitTypeKind {
-    Simple(ResolvedToken),
+    Simple(SpecializedToken),
     Array(Box<ExplicitType>, Token),
     Pointer(Box<ExplicitType>),
 }

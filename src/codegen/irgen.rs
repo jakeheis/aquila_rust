@@ -397,7 +397,7 @@ impl ExprVisitor for IRGen {
         &mut self,
         expr: &Expr,
         target: &Expr,
-        field: &ResolvedToken,
+        field: &SpecializedToken,
     ) -> Self::ExprResult {
         let target_expr = target.accept(self);
         let field_symbol = field.get_symbol().unwrap();
@@ -422,7 +422,7 @@ impl ExprVisitor for IRGen {
         }
     }
 
-    fn visit_variable_expr(&mut self, expr: &Expr, name: &ResolvedToken) -> Self::ExprResult {
+    fn visit_variable_expr(&mut self, expr: &Expr, name: &SpecializedToken) -> Self::ExprResult {
         let nonspec_expr_type = expr.get_type().unwrap();
 
         if let NodeType::Metatype(..) = &nonspec_expr_type {

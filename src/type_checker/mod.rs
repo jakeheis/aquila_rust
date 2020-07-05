@@ -127,14 +127,14 @@ impl ContextTracker {
         self.push_scope(symbol, ScopeType::InsideMetatype(type_meta.clone()));
     }
 
-    fn push_type_scope(&mut self, name: &ResolvedToken) -> (Symbol, TypeMetadata) {
+    fn push_type_scope(&mut self, name: &SymbolicToken) -> (Symbol, TypeMetadata) {
         let symbol = Symbol::new(self.current_symbol(), &name.token);
         let metadata = self.lib.type_metadata(&symbol).unwrap().clone();
         self.push_scope(symbol.clone(), ScopeType::InsideType(metadata.clone()));
         (symbol, metadata)
     }
 
-    fn push_function_scope(&mut self, name: &ResolvedToken) -> (Symbol, FunctionMetadata) {
+    fn push_function_scope(&mut self, name: &SymbolicToken) -> (Symbol, FunctionMetadata) {
         let symbol = Symbol::new(self.current_symbol(), &name.token);
         let metadata = self.lib.function_metadata(&symbol).unwrap().clone();
         self.push_scope(symbol.clone(), ScopeType::InsideFunction(metadata.clone()));
@@ -263,7 +263,7 @@ impl ContextTracker {
 
     fn resolve_token_as_type(
         &self,
-        token: &ResolvedToken,
+        token: &SpecializedToken,
     ) -> Result<NodeType, TypeResolutionError> {
         let context = self.symbolic_context();
         let enclosing_func = self.enclosing_function().map(|f| &f.symbol);
