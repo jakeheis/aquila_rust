@@ -1,24 +1,24 @@
 use crate::analysis::*;
+use crate::codegen;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::parsing::*;
 use crate::source;
 use crate::type_checker::*;
-use crate::codegen;
 use log::trace;
 use std::rc::Rc;
 
 mod metadata;
+mod module;
 mod node_type;
 mod symbol_table;
-mod module;
 
 pub use metadata::{
     FunctionKind, FunctionMetadata, GenericSpecialization, TraitMetadata, TypeMetadata,
 };
+pub use module::Module;
 pub use node_type::{FunctionType, NodeType};
 pub use symbol_table::{Symbol, SymbolTable};
-pub use module::Module;
 
 pub struct Lib {
     pub name: String,
@@ -126,7 +126,7 @@ impl Lib {
             None
         }
     }
-    
+
     pub fn type_metadata(&self, symbol: &Symbol) -> Option<&TypeMetadata> {
         self.deep_search(&|_name, sym| sym.get_type_metadata(symbol))
     }
@@ -165,8 +165,8 @@ impl Lib {
     }
 }
 
-use std::collections::HashMap;
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 pub type SpecializationTrackerMap = HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>;
 

@@ -156,7 +156,8 @@ impl Parser {
             Ok(Stmt::new(StmtKind::BreakStmt, self.previous().span.clone()))
         } else {
             let expr = self.parse_precedence(Precedence::Assignment)?;
-            self.consume(TokenKind::Semicolon, "Expected semicolon after expression").replace_span(&expr)?;
+            self.consume(TokenKind::Semicolon, "Expected semicolon after expression")
+                .replace_span(&expr)?;
             if let ExprKind::Assignment(target, value) = expr.kind {
                 return Ok(Stmt::assign(target, value));
             }

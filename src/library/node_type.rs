@@ -102,10 +102,7 @@ impl NodeType {
         }
     }
 
-    pub fn specialize_opt(
-        &self,
-        specialization: Option<&GenericSpecialization>,
-    ) -> NodeType {
+    pub fn specialize_opt(&self, specialization: Option<&GenericSpecialization>) -> NodeType {
         match specialization {
             Some(spec) => self.specialize(spec),
             None => self.clone(),
@@ -241,11 +238,7 @@ impl FunctionType {
 
     pub fn specialize(&self, spec: &GenericSpecialization) -> Self {
         FunctionType {
-            parameters: self
-                .parameters
-                .iter()
-                .map(|p| p.specialize(spec))
-                .collect(),
+            parameters: self.parameters.iter().map(|p| p.specialize(spec)).collect(),
             return_type: self.return_type.specialize(spec),
         }
     }

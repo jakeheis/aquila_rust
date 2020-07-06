@@ -13,8 +13,11 @@ pub struct FreeWriter<'a> {
 }
 
 impl<'a> FreeWriter<'a> {
-
-    pub fn new(tables: &'a [Rc<SymbolTable>], function: &'a mut IRFunction, tracker: &'a SpecializationTracker) -> Self {
+    pub fn new(
+        tables: &'a [Rc<SymbolTable>],
+        function: &'a mut IRFunction,
+        tracker: &'a SpecializationTracker,
+    ) -> Self {
         FreeWriter {
             tables,
             function_sym: &function.name,
@@ -32,7 +35,7 @@ impl<'a> FreeWriter<'a> {
         let mut stop_index: usize = self.lines.len();
         let mut hit_return = false;
         let mut hit_break = false;
-        
+
         let mut return_var: Option<String> = None;
 
         for (index, stmt) in self.lines.iter_mut().enumerate() {
@@ -47,22 +50,27 @@ impl<'a> FreeWriter<'a> {
                                 return_var = Some(var.clone());
                             } else if self.free_at_break.iter().find(|v| &v.name == var).is_some() {
                                 return_var = Some(var.clone());
-                            } else if self.free_at_return.iter().find(|v| &v.name == var).is_some() {
+                            } else if self
+                                .free_at_return
+                                .iter()
+                                .find(|v| &v.name == var)
+                                .is_some()
+                            {
                                 return_var = Some(var.clone());
-                            } 
+                            }
                         }
                     }
                     hit_return = true;
                     done = true;
-                },
+                }
                 IRStatement::Break => {
                     stop_index = index;
                     hit_break = true;
                     done = true;
-                },
+                }
                 IRStatement::Condition(_, if_body, else_body) => {
                     let mut free_at_return = self.free_at_return.clone();
-                    let mut free_at_break = self.free_at_break.clone();                    
+                    let mut free_at_break = self.free_at_break.clone();
 
                     if self.inside_loop {
                         free_at_break.append(&mut locals.clone());
@@ -91,12 +99,12 @@ impl<'a> FreeWriter<'a> {
                         inside_loop: self.inside_loop,
                     };
                     else_writer.write();
-                },
+                }
                 IRStatement::Loop(body) => {
                     let mut free_at_return = self.free_at_return.clone();
                     free_at_return.append(&mut self.free_at_break.clone());
                     free_at_return.append(&mut locals.clone());
-                    
+
                     let mut loop_writer = FreeWriter {
                         tables: self.tables,
                         function_sym: self.function_sym,
@@ -138,15 +146,16 @@ impl<'a> FreeWriter<'a> {
                 if metadata.conforms_to(&Symbol::stdlib("Freeable")) {
                     let free_sym = Symbol::new_str(sym, "free");
                     let free = IRExpr::call_generic(
-                        free_sym.clone(), 
+                        free_sym.clone(),
                         spec.clone(),
-                        vec![IRExpr::address_of(&var)], 
-                        NodeType::Void
+                        vec![IRExpr::address_of(&var)],
+                        NodeType::Void,
                     );
                     let stmt = IRStatement::Execute(free);
                     self.lines.insert(return_index, stmt);
 
-                    self.tracker.add_call(self.function_sym.clone(), free_sym, spec.clone());
+                    self.tracker
+                        .add_call(self.function_sym.clone(), free_sym, spec.clone());
                 }
             }
         }
@@ -160,5 +169,4 @@ impl<'a> FreeWriter<'a> {
         }
         panic!()
     }
-
 }

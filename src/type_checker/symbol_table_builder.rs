@@ -144,7 +144,8 @@ impl SymbolTableBuilder {
 
         self.context.pop(); // Type pop
 
-        self.symbols.insert_type_metadata(type_symbol, type_metadata);
+        self.symbols
+            .insert_type_metadata(type_symbol, type_metadata);
 
         trace!(target: "symbol_table", "Finished building type {}", decl.name.token.lexeme());
     }
@@ -199,7 +200,7 @@ impl SymbolTableBuilder {
             parameter_types: param_types,
             return_type: return_type,
             is_public: decl.is_public,
-            include_caller: decl.include_caller
+            include_caller: decl.include_caller,
         };
         self.insert_func_metadata(function_symbol.clone(), function_metadata);
 
@@ -208,7 +209,7 @@ impl SymbolTableBuilder {
         function_symbol
     }
 
-    fn build_trait(&mut self, decl: &TraitDecl) {        
+    fn build_trait(&mut self, decl: &TraitDecl) {
         let trait_symbol = Symbol::new(self.current_symbol(), &decl.name);
         self.context.push(trait_symbol.clone());
         let requirements = self.build_functions(&decl.requirements);
@@ -237,7 +238,8 @@ impl SymbolTableBuilder {
         for generic in generics {
             let generic_symbol = Symbol::new(self.current_symbol(), &generic);
             let generic_type = TypeMetadata::generic(owner, generic.lexeme());
-            self.symbols.insert_type_metadata(generic_symbol.clone(), generic_type);
+            self.symbols
+                .insert_type_metadata(generic_symbol.clone(), generic_type);
 
             trace!(target: "symbol_table", "Inserting generic {} (symbol = {})", generic.lexeme(), generic_symbol);
             generic_symbols.push(generic_symbol);

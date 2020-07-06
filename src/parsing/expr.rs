@@ -1,7 +1,7 @@
 use super::{ExplicitType, SpecializedToken};
 use crate::diagnostic::*;
 use crate::lexing::Token;
-use crate::library::{NodeType, GenericSpecialization};
+use crate::library::{GenericSpecialization, NodeType};
 use std::cell::RefCell;
 
 #[derive(Debug)]
@@ -65,16 +65,14 @@ impl Expr {
         match &self.kind {
             ExprKind::Binary(lhs, op, rhs) => visitor.visit_binary_expr(&self, &lhs, &op, &rhs),
             ExprKind::Unary(op, expr) => visitor.visit_unary_expr(&self, &op, &expr),
-            ExprKind::FunctionCall(call) => {
-                visitor.visit_function_call_expr(&self, call)
-            }
+            ExprKind::FunctionCall(call) => visitor.visit_function_call_expr(&self, call),
             ExprKind::Field(target, field) => visitor.visit_field_expr(&self, &target, &field),
             ExprKind::Literal(token) => visitor.visit_literal_expr(&self, &token),
             ExprKind::Variable(name) => visitor.visit_variable_expr(&self, &name),
             ExprKind::Array(elements) => visitor.visit_array_expr(&self, elements),
             ExprKind::Subscript(target, arg) => visitor.visit_subscript_expr(&self, target, arg),
             ExprKind::Cast(exp_type, value) => visitor.visit_cast_expr(&self, &exp_type, &value),
-            ExprKind::Assignment(..) => panic!()
+            ExprKind::Assignment(..) => panic!(),
         }
     }
 
@@ -118,7 +116,10 @@ impl Expr {
     pub fn field(target: Expr, name: Token, specialization: Vec<ExplicitType>) -> Self {
         let span = Span::join(&target, &name);
         Expr::new(
-            ExprKind::Field(Box::new(target), SpecializedToken::new(name, specialization)),
+            ExprKind::Field(
+                Box::new(target),
+                SpecializedToken::new(name, specialization),
+            ),
             span,
         )
     }
@@ -180,11 +181,7 @@ pub trait ExprVisitor {
         rhs: &Expr,
     ) -> Self::ExprResult;
     fn visit_unary_expr(&mut self, expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult;
-    fn visit_function_call_expr(
-        &mut self,
-        expr: &Expr,
-        call: &FunctionCall,
-    ) -> Self::ExprResult;
+    fn visit_function_call_expr(&mut self, expr: &Expr, call: &FunctionCall) -> Self::ExprResult;
     fn visit_field_expr(
         &mut self,
         expr: &Expr,

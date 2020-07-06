@@ -1,5 +1,5 @@
+use super::{SpecializationTracker, SymbolTable};
 use crate::codegen::*;
-use super::{SymbolTable, SpecializationTracker};
 use std::rc::Rc;
 
 #[derive(Debug)]

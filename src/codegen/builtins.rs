@@ -48,7 +48,9 @@ impl Builtin {
 }
 
 pub fn is_direct_c_binding(symbol: &Symbol) -> bool {
-    let bindings = ["strlen", "memcpy", "malloc", "sizeof", "realloc", "exit", "free"];
+    let bindings = [
+        "strlen", "memcpy", "malloc", "sizeof", "realloc", "exit", "free",
+    ];
     for binding in &bindings {
         if symbol == &Symbol::stdlib(binding) {
             return true;
@@ -80,10 +82,7 @@ pub fn write_special_call(
     panic!()
 }
 
-pub fn write_special_function(
-    writer: &mut IRWriter,
-    metadata: &FunctionMetadata,
-) {
+pub fn write_special_function(writer: &mut IRWriter, metadata: &FunctionMetadata) {
     if is_direct_c_binding(&metadata.symbol) {
         return;
     }
@@ -150,7 +149,12 @@ fn write_read_line(writer: &mut IRWriter, _func_symbol: &Symbol) {
 
 // Call impls
 
-fn size_call(_writer: &mut IRWriter, symbol: &Symbol, spec: &GenericSpecialization, _args: Vec<IRExpr>) -> IRExpr {
+fn size_call(
+    _writer: &mut IRWriter,
+    symbol: &Symbol,
+    spec: &GenericSpecialization,
+    _args: Vec<IRExpr>,
+) -> IRExpr {
     let mem_type = Symbol::new_str(symbol, "T");
     let expr_type = spec.type_for(&mem_type).unwrap().clone();
     let arg = IRExpr {
@@ -160,20 +164,16 @@ fn size_call(_writer: &mut IRWriter, symbol: &Symbol, spec: &GenericSpecializati
     IRExpr::call_nongenric("sizeof", vec![arg], NodeType::Double)
 }
 
-fn print_call(writer: &mut IRWriter, _symbol: &Symbol, _spec: &GenericSpecialization, mut args: Vec<IRExpr>) -> IRExpr {
+fn print_call(
+    writer: &mut IRWriter,
+    _symbol: &Symbol,
+    _spec: &GenericSpecialization,
+    mut args: Vec<IRExpr>,
+) -> IRExpr {
     let node_type = args[0].expr_type.clone();
     if let NodeType::Instance(type_symbol, spec) = &node_type {
         let full_symbol = Symbol::new_str(&type_symbol, "write");
-        let object = if args[0].has_defined_location() {
-            args.remove(0)
-        } else {
-            let var = writer.declare_temp(args.remove(0));
-            IRExpr::variable(&var)
-        };
-        let arg = IRExpr {
-            kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(object)),
-            expr_type: node_type.clone(),
-        };
+        let arg = writer.addres_of_expr(args.remove(0));
         IRExpr::call_generic(full_symbol, spec.clone(), vec![arg], NodeType::Void)
     } else {
         let format_specificer = match node_type {
@@ -183,15 +183,8 @@ fn print_call(writer: &mut IRWriter, _symbol: &Symbol, _spec: &GenericSpecializa
             _ => unreachable!(),
         };
 
-        let format_line = format!("\"{}\\n\"", format_specificer);
-        let format_expr = IRExpr {
-            kind: IRExprKind::Literal(format_line),
-            expr_type: NodeType::pointer_to(NodeType::Byte),
-        };
-        IRExpr::call_nongenric(
-            "printf",
-            vec![format_expr, args.remove(0)],
-            NodeType::Void,
-        )
+        let format_line = format!("{}\\n", format_specificer);
+        let format_expr = IRExpr::string_literal(&format_line);
+        IRExpr::call_nongenric("printf", vec![format_expr, args.remove(0)], NodeType::Void)
     }
 }

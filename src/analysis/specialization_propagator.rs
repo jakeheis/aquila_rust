@@ -33,7 +33,7 @@ impl FinalSpecializationMap {
             }
         }
     }
- }
+}
 
 pub struct SpecializationPropagator<'a> {
     libs: &'a [Module],
@@ -120,8 +120,7 @@ impl<'a> SpecializationPropagator<'a> {
         if let Some(explicit_types) = self.explicit_type_map.get(cur) {
             let explicit_types = explicit_types.clone();
             for (explicit_type_symbol, explicit_type_spec) in explicit_types {
-                let explicit_type_spec =
-                    explicit_type_spec.resolve_generics_using(current_spec);
+                let explicit_type_spec = explicit_type_spec.resolve_generics_using(current_spec);
 
                 trace!(target: "spec_propagate", "in func {} Propping from type spec {} to {}", cur, explicit_type_spec, explicit_type_symbol);
 

@@ -1,6 +1,6 @@
 use super::ir::*;
-use crate::library::{NodeType, GenericSpecialization, Module};
 use crate::analysis::FinalSpecializationMap;
+use crate::library::{GenericSpecialization, Module, NodeType};
 use std::cell::{Cell, RefCell};
 use std::fs::File;
 use std::io::Write;
@@ -18,7 +18,7 @@ impl CodeWriter {
             programs,
             file: RefCell::new(file),
             indent: Cell::new(0),
-            spec_map
+            spec_map,
         }
     }
 
@@ -52,13 +52,14 @@ impl CodeWriter {
                     } else {
                         self.writeln(&format!("typedef struct {} {{", struct_name));
                         self.increase_indent();
-            
+
                         for field in &struct_def.fields {
                             let field_type = field.var_type.specialize(spec);
-                            let (c_type, name) = self.convert_type(&field_type, field.name.clone(), true);
+                            let (c_type, name) =
+                                self.convert_type(&field_type, field.name.clone(), true);
                             self.writeln(&format!("{} {};", c_type, name));
                         }
-            
+
                         self.decrease_indent();
                         self.writeln(&format!("}} {};", struct_name));
                     }
@@ -167,7 +168,10 @@ impl CodeWriter {
             }
             IRExprKind::Call(function, spec, args) => {
                 let spec = spec.resolve_generics_using(enclosing_spec);
-                let args: Vec<_> = args.iter().map(|a| self.form_expression(a, enclosing_spec)).collect();
+                let args: Vec<_> = args
+                    .iter()
+                    .map(|a| self.form_expression(a, enclosing_spec))
+                    .collect();
                 let args = args.join(",");
                 let function_name = function.specialized(&spec);
                 format!("{}({})", function_name, args)
@@ -215,7 +219,12 @@ impl CodeWriter {
         }
     }
 
-    fn write_function_header(&self, function: &IRFunction, spec: &GenericSpecialization, terminator: &str) {
+    fn write_function_header(
+        &self,
+        function: &IRFunction,
+        spec: &GenericSpecialization,
+        terminator: &str,
+    ) {
         let param_str: Vec<String> = function
             .parameters
             .iter()

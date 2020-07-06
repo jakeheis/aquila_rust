@@ -309,10 +309,7 @@ impl GenericSpecialization {
         }
     }
 
-    pub fn merge(
-        &self,
-        specialization: &GenericSpecialization,
-    ) -> GenericSpecialization {
+    pub fn merge(&self, specialization: &GenericSpecialization) -> GenericSpecialization {
         let mut resolved_self = self.resolve_generics_using(specialization);
         for (symbol, node_type) in &specialization.map {
             if !self.map.contains_key(symbol) {

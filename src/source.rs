@@ -8,7 +8,7 @@ pub fn file(file: &str) -> Source {
     let path = fs::canonicalize(file).unwrap();
     let full_name = path.to_str().unwrap();
     let short_name = path.file_stem().unwrap().to_str().unwrap();
-    
+
     Rc::new(SourceImpl {
         full_name: String::from(full_name),
         short_name: String::from(short_name),

@@ -162,8 +162,9 @@ impl TypeChecker {
         }
 
         if decl.include_caller {
-            let symbol  = Symbol::new_str(&func_symbol, "caller");
-            self.context.put_in_scope(&symbol, &NodeType::pointer_to(NodeType::Byte));
+            let symbol = Symbol::new_str(&func_symbol, "caller");
+            self.context
+                .put_in_scope(&symbol, &NodeType::pointer_to(NodeType::Byte));
         }
 
         for (index, param_type) in metadata.parameter_types.iter().enumerate() {
@@ -193,7 +194,7 @@ impl TypeChecker {
 
     fn check_conformance_decl(&mut self, decl: &ConformanceDecl) {
         let type_symbol = Symbol::top_level(self.lib.as_ref(), &decl.target.token);
-        
+
         let target_metadata = self.lib.type_metadata(&type_symbol);
         if target_metadata.is_none() {
             self.report_error(Diagnostic::error(&decl.target, "Type not found"));
@@ -231,10 +232,7 @@ impl TypeChecker {
 
         self.context.pop_scope();
 
-        let trait_metadata = self
-            .lib
-            .trait_metadata(decl.trait_name.lexeme())
-            .unwrap();
+        let trait_metadata = self.lib.trait_metadata(decl.trait_name.lexeme()).unwrap();
         for requirement in &trait_metadata.function_requirements {
             let requirement_metadata = self.lib.function_metadata(&requirement).unwrap();
             let impl_symbol = Symbol::new_str(&type_metadata.symbol, requirement.last_component());
@@ -264,11 +262,7 @@ impl TypeChecker {
 impl StmtVisitor for TypeChecker {
     type StmtResult = Analysis;
 
-    fn visit_assignment_stmt(
-        &mut self,
-        target: &Expr,
-        value: &Expr,
-    ) -> Analysis {
+    fn visit_assignment_stmt(&mut self, target: &Expr, value: &Expr) -> Analysis {
         let target_type = self.check_expr(target);
         let value_type = self.check_expr(value);
 
@@ -277,8 +271,10 @@ impl StmtVisitor for TypeChecker {
                 self.report_error(diag);
             }
         }
-        
-        Analysis { guarantees_return: false }
+
+        Analysis {
+            guarantees_return: false,
+        }
     }
 
     fn visit_local_variable_decl(&mut self, decl: &LocalVariableDecl) -> Analysis {
@@ -339,7 +335,7 @@ impl StmtVisitor for TypeChecker {
         self.context.pop_scope();
 
         let guarantees_return = body_analysis.guarantees_return && else_analysis.guarantees_return;
-        Analysis {  guarantees_return }
+        Analysis { guarantees_return }
     }
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) -> Analysis {
@@ -357,7 +353,12 @@ impl StmtVisitor for TypeChecker {
         body_analysis
     }
 
-    fn visit_for_stmt(&mut self, variable: &SymbolicToken, array: &Expr, body: &[Stmt]) -> Analysis {
+    fn visit_for_stmt(
+        &mut self,
+        variable: &SymbolicToken,
+        array: &Expr,
+        body: &[Stmt],
+    ) -> Analysis {
         let array_element_type = match self.check_expr(array) {
             Some(NodeType::Array(of, _)) => of,
             None => {

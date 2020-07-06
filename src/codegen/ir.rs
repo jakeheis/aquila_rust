@@ -1,4 +1,4 @@
-use crate::library::{Symbol, NodeType, GenericSpecialization};
+use crate::library::{GenericSpecialization, NodeType, Symbol};
 
 #[derive(Debug)]
 pub struct IRStructure {
@@ -62,7 +62,7 @@ impl IRExpr {
         let string = format!("\"{}\"", slice);
         IRExpr {
             kind: IRExprKind::Literal(string),
-            expr_type: NodeType::pointer_to(NodeType::Byte)
+            expr_type: NodeType::pointer_to(NodeType::Byte),
         }
     }
 
@@ -88,7 +88,12 @@ impl IRExpr {
         }
     }
 
-    pub fn call_generic(func: Symbol, spec: GenericSpecialization, args: Vec<IRExpr>, ret_type: NodeType) -> Self {
+    pub fn call_generic(
+        func: Symbol,
+        spec: GenericSpecialization,
+        args: Vec<IRExpr>,
+        ret_type: NodeType,
+    ) -> Self {
         IRExpr {
             kind: IRExprKind::Call(func.clone(), spec, args),
             expr_type: ret_type,
@@ -132,7 +137,9 @@ impl IRExpr {
     pub fn has_defined_location(&self) -> bool {
         match &self.kind {
             IRExprKind::Variable(_) | IRExprKind::ExplicitType => true,
-            IRExprKind::FieldAccess(object, _) | IRExprKind::DerefFieldAccess(object, _) => object.has_defined_location(),
+            IRExprKind::FieldAccess(object, _) | IRExprKind::DerefFieldAccess(object, _) => {
+                object.has_defined_location()
+            }
             IRExprKind::Cast(object) => object.has_defined_location(),
             IRExprKind::Unary(..) | IRExprKind::Binary(..) => false,
             IRExprKind::Literal(..) => false,

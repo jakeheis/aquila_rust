@@ -6,8 +6,7 @@ mod irwriter;
 mod memory;
 
 pub use ir::{
-    IRBinaryOperator, IRExpr, IRExprKind, IRFunction, IRStatement, IRStructure,
-    IRUnaryOperator,
+    IRBinaryOperator, IRExpr, IRExprKind, IRFunction, IRStatement, IRStructure, IRUnaryOperator,
 };
 pub use irgen::IRGen;
 
@@ -18,7 +17,7 @@ use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
 
-pub fn generate(lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {    
+pub fn generate(lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {
     let ir_libs = compile(lib);
     // ir.dump();
 

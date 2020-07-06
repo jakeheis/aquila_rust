@@ -107,10 +107,7 @@ pub struct TraitDecl {
 
 impl TraitDecl {
     pub fn new(name: Token, requirements: Vec<FunctionDecl>) -> Self {
-        TraitDecl {
-            name,
-            requirements,
-        }
+        TraitDecl { name, requirements }
     }
 }
 
@@ -289,11 +286,7 @@ pub trait StmtVisitor {
 
     fn visit_local_variable_decl(&mut self, decl: &LocalVariableDecl) -> Self::StmtResult;
 
-    fn visit_assignment_stmt(
-        &mut self,
-        target: &Expr,
-        value: &Expr,
-    ) -> Self::StmtResult;
+    fn visit_assignment_stmt(&mut self, target: &Expr, value: &Expr) -> Self::StmtResult;
 
     fn visit_if_stmt(
         &mut self,

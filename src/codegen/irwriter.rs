@@ -22,10 +22,7 @@ impl IRWriter {
         }
     }
 
-    pub fn declare_struct(
-        &mut self,
-        type_metadata: &TypeMetadata,
-    ) {
+    pub fn declare_struct(&mut self, type_metadata: &TypeMetadata) {
         let fields: Vec<_> = type_metadata
             .field_types
             .iter()
@@ -36,9 +33,9 @@ impl IRWriter {
             })
             .collect();
 
-        let structure = IRStructure { 
-            name: type_metadata.symbol.clone(), 
-            fields, 
+        let structure = IRStructure {
+            name: type_metadata.symbol.clone(),
+            fields,
         };
         self.structures.push(structure);
     }
@@ -57,10 +54,7 @@ impl IRWriter {
         self.functions.push(main);
     }
 
-    pub fn end_decl_func(
-        &mut self,
-        function: &FunctionMetadata,
-    ) {
+    pub fn end_decl_func(&mut self, function: &FunctionMetadata) {
         let mut parameters: Vec<_> = function
             .parameter_types
             .iter()
@@ -126,25 +120,39 @@ impl IRWriter {
         self.add_stmt(IRStatement::DeclLocal(var.clone()));
     }
 
-    pub fn make_temp(&mut self, var_type: NodeType) -> IRVariable {
-        self.temp_count = self.temp_count + 1;
-        IRVariable {
-            name: format!("_ir_tmp_{}", self.temp_count),
-            var_type,
-        }
-    }
-
     pub fn declare_temp(&mut self, expr: IRExpr) -> IRVariable {
-        let var = self.make_temp(expr.expr_type.clone());
-        self.declare_var(&var);
+        let var = self.declare_temp_no_init(expr.expr_type.clone());
         self.assign(IRExpr::variable(&var), expr);
         var
     }
 
     pub fn declare_temp_no_init(&mut self, var_type: NodeType) -> IRVariable {
-        let var = self.make_temp(var_type);
+        self.temp_count = self.temp_count + 1;
+        let var = IRVariable {
+            name: format!("_ir_tmp_{}", self.temp_count),
+            var_type,
+        };
         self.declare_var(&var);
         var
+    }
+
+    pub fn addres_of_expr(&mut self, value: IRExpr) -> IRExpr {
+        if let IRExprKind::Unary(IRUnaryOperator::Dereference, target) = value.kind {
+            return *target;
+        }
+
+        let object = if value.has_defined_location() {
+            value
+        } else {
+            let var = self.declare_temp(value);
+            IRExpr::variable(&var)
+        };
+
+        let expr_type = NodeType::pointer_to(object.expr_type.clone());
+        IRExpr {
+            kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(object)),
+            expr_type,
+        }
     }
 
     pub fn assign(&mut self, var: IRExpr, value: IRExpr) {
@@ -191,15 +199,15 @@ impl IRWriter {
     pub fn write_guard(&mut self, guard: IRExpr, message: &str, span: &Span) {
         self.start_block();
 
-        let message = format!(
-            "\\nFatal error: {}\\n\\n{}\\n",
-            message,
-            span.location(),
-        );
+        let message = format!("\\nFatal error: {}\\n\\n{}\\n", message, span.location(),);
 
         let arg = IRExpr::string_literal(&message);
         self.expr(IRExpr::call_nongenric("printf", vec![arg], NodeType::Void));
-        self.expr(IRExpr::call_nongenric("exit", vec![IRExpr::int_literal("1")], NodeType::Void));
+        self.expr(IRExpr::call_nongenric(
+            "exit",
+            vec![IRExpr::int_literal("1")],
+            NodeType::Void,
+        ));
         self.end_if_block(guard);
     }
 }

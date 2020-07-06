@@ -92,7 +92,12 @@ impl ExprChecker {
         }
     }
 
-    fn visit_print(&self, arg: &Expr, arg_type: &NodeType, context_spec: &GenericSpecialization) -> DiagnosticResult<()> {
+    fn visit_print(
+        &self,
+        arg: &Expr,
+        arg_type: &NodeType,
+        context_spec: &GenericSpecialization,
+    ) -> DiagnosticResult<()> {
         match arg_type {
             NodeType::Int | NodeType::Double | NodeType::Bool => (),
             arg_type if arg_type.is_pointer_to(NodeType::Byte) => (),
@@ -120,7 +125,7 @@ impl ExprChecker {
                 return Err(Diagnostic::error(arg, &message));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -198,11 +203,7 @@ impl ExprVisitor for ExprChecker {
         }
     }
 
-    fn visit_function_call_expr(
-        &mut self,
-        expr: &Expr,
-        call: &FunctionCall,
-    ) -> Self::ExprResult {
+    fn visit_function_call_expr(&mut self, expr: &Expr, call: &FunctionCall) -> Self::ExprResult {
         let arg_types: DiagnosticResult<Vec<NodeType>> =
             call.arguments.iter().map(|a| a.accept(self)).collect();
         let arg_types = arg_types?;
@@ -264,7 +265,8 @@ impl ExprVisitor for ExprChecker {
                 );
                 return Err(Diagnostic::error(call.name.span(), &message));
             }
-            let specialization: std::result::Result<Vec<NodeType>, _> = call.name
+            let specialization: std::result::Result<Vec<NodeType>, _> = call
+                .name
                 .specialization
                 .iter()
                 .map(|s| self.context.resolve_type(s))
@@ -272,8 +274,7 @@ impl ExprVisitor for ExprChecker {
             GenericSpecialization::new(&metadata.generics, specialization?)
         };
 
-        let full_call_specialization =
-            function_specialization.merge(&target_specialization);
+        let full_call_specialization = function_specialization.merge(&target_specialization);
 
         call.set_specialization(full_call_specialization.clone());
 
@@ -293,9 +294,7 @@ impl ExprVisitor for ExprChecker {
             );
         }
 
-        let function_type = metadata
-            .full_type()
-            .specialize(&full_call_specialization);
+        let function_type = metadata.full_type().specialize(&full_call_specialization);
 
         for ((index, param), arg) in function_type
             .parameters

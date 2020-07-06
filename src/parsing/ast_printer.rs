@@ -246,7 +246,6 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
-
     fn visit_assignment_stmt(&mut self, target: &Expr, value: &Expr) {
         self.write_ln("Assign");
         self.indent(|visitor| {
@@ -340,11 +339,7 @@ impl ExprVisitor for ASTPrinter {
         })
     }
 
-    fn visit_function_call_expr(
-        &mut self,
-        _expr: &Expr,
-        call: &FunctionCall,
-    ) -> Self::ExprResult {
+    fn visit_function_call_expr(&mut self, _expr: &Expr, call: &FunctionCall) -> Self::ExprResult {
         let symbol = call
             .name
             .get_symbol()
