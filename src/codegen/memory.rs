@@ -7,7 +7,9 @@ pub struct FreeWriter<'a> {
     function_sym: &'a Symbol,
     lines: &'a mut Vec<IRStatement>,
     tracker: &'a SpecializationTracker,
-    parent_vars: Vec<IRVariable>,
+    free_at_return: Vec<IRVariable>,
+    free_at_break: Vec<IRVariable>,
+    inside_loop: bool,
 }
 
 impl<'a> FreeWriter<'a> {
@@ -18,14 +20,19 @@ impl<'a> FreeWriter<'a> {
             function_sym: &function.name,
             lines: &mut function.statements,
             tracker,
-            parent_vars: Vec::new(),
+            free_at_return: Vec::new(),
+            free_at_break: Vec::new(),
+            inside_loop: false,
         }
     }
 
     pub fn write(&mut self) {
         let mut locals: Vec<IRVariable> = Vec::new();
 
-        let mut return_index: usize = self.lines.len();
+        let mut stop_index: usize = self.lines.len();
+        let mut hit_return = false;
+        let mut hit_break = false;
+        
         let mut return_var: Option<String> = None;
 
         for (index, stmt) in self.lines.iter_mut().enumerate() {
@@ -33,31 +40,44 @@ impl<'a> FreeWriter<'a> {
             match stmt {
                 IRStatement::DeclLocal(var) => locals.push(var.clone()),
                 IRStatement::Return(value) => {
-                    return_index = index;
+                    stop_index = index;
                     if let Some(expr) = value {
                         if let IRExprKind::Variable(var) = &expr.kind {
-                            if self.parent_vars.iter().find(|v| &v.name == var).is_some() {
+                            if locals.iter().find(|v| &v.name == var).is_some() {
                                 return_var = Some(var.clone());
-                            } else if locals.iter().find(|v| &v.name == var).is_some() {
+                            } else if self.free_at_break.iter().find(|v| &v.name == var).is_some() {
                                 return_var = Some(var.clone());
-                            }
+                            } else if self.free_at_return.iter().find(|v| &v.name == var).is_some() {
+                                return_var = Some(var.clone());
+                            } 
                         }
                     }
+                    hit_return = true;
                     done = true;
                 },
                 IRStatement::Break => {
-                    return_index = index;
+                    stop_index = index;
+                    hit_break = true;
                     done = true;
                 },
                 IRStatement::Condition(_, if_body, else_body) => {
-                    let mut combined = self.parent_vars.clone();
-                    combined.append(&mut locals.clone());
+                    let mut free_at_return = self.free_at_return.clone();
+                    let mut free_at_break = self.free_at_break.clone();                    
+
+                    if self.inside_loop {
+                        free_at_break.append(&mut locals.clone());
+                    } else {
+                        free_at_return.append(&mut locals.clone());
+                    }
+
                     let mut if_writer = FreeWriter {
                         tables: self.tables,
                         function_sym: self.function_sym,
                         lines: if_body,
                         tracker: self.tracker,
-                        parent_vars: combined.clone(),
+                        free_at_return: free_at_return.clone(),
+                        free_at_break: free_at_break.clone(),
+                        inside_loop: self.inside_loop,
                     };
                     if_writer.write();
 
@@ -66,12 +86,27 @@ impl<'a> FreeWriter<'a> {
                         function_sym: self.function_sym,
                         lines: else_body,
                         tracker: self.tracker,
-                        parent_vars: combined,
+                        free_at_return: free_at_return,
+                        free_at_break: free_at_break,
+                        inside_loop: self.inside_loop,
                     };
                     else_writer.write();
                 },
                 IRStatement::Loop(body) => {
-                    panic!()
+                    let mut free_at_return = self.free_at_return.clone();
+                    free_at_return.append(&mut self.free_at_break.clone());
+                    free_at_return.append(&mut locals.clone());
+                    
+                    let mut loop_writer = FreeWriter {
+                        tables: self.tables,
+                        function_sym: self.function_sym,
+                        lines: body,
+                        tracker: self.tracker,
+                        free_at_return: free_at_return,
+                        free_at_break: Vec::new(),
+                        inside_loop: true,
+                    };
+                    loop_writer.write();
                 }
                 IRStatement::Assign(..) | IRStatement::Execute(..) => (),
             }
@@ -80,11 +115,15 @@ impl<'a> FreeWriter<'a> {
             }
         }
 
-        if return_index < self.lines.len() {
-            let pvs = std::mem::replace(&mut self.parent_vars, Vec::new());
-            self.add_frees(&pvs, return_index, &return_var);
+        if hit_return {
+            let free_at_return = std::mem::replace(&mut self.free_at_return, Vec::new());
+            self.add_frees(&free_at_return, stop_index, &return_var);
         }
-        self.add_frees(&locals, return_index, &return_var);
+        if hit_break || hit_return {
+            let free_at_break = std::mem::replace(&mut self.free_at_break, Vec::new());
+            self.add_frees(&free_at_break, stop_index, &return_var);
+        }
+        self.add_frees(&locals, stop_index, &return_var);
     }
 
     fn add_frees(&mut self, list: &[IRVariable], return_index: usize, return_var: &Option<String>) {

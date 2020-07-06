@@ -284,6 +284,10 @@ impl StmtVisitor for IRGen {
         let expr = expr.accept(self);
         self.writer.expr(expr);
     }
+
+    fn visit_break_stmt(&mut self) {
+        self.writer.break_loop();
+    }
 }
 
 impl ExprVisitor for IRGen {

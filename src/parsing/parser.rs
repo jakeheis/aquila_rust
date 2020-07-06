@@ -147,6 +147,13 @@ impl Parser {
                     "Return statement only allowed inside functions",
                 ))
             }
+        } else if self.matches(TokenKind::Break) {
+            // TODO: error if not in loop
+            self.consume(
+                TokenKind::Semicolon,
+                "Expected semicolon after break statement",
+            )?;
+            Ok(Stmt::new(StmtKind::BreakStmt, self.previous().span.clone()))
         } else {
             let expr = self.parse_precedence(Precedence::Assignment)?;
             self.consume(TokenKind::Semicolon, "Expected semicolon after expression").replace_span(&expr)?;

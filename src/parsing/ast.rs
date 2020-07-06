@@ -173,6 +173,7 @@ pub enum StmtKind {
     ForStmt(SymbolicToken, Expr, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
     ExpressionStmt(Expr),
+    BreakStmt,
 }
 
 #[derive(Debug)]
@@ -199,6 +200,7 @@ impl Stmt {
             }
             StmtKind::ReturnStmt(expr) => visitor.visit_return_stmt(&self, expr),
             StmtKind::ExpressionStmt(expr) => visitor.visit_expression_stmt(expr),
+            StmtKind::BreakStmt => visitor.visit_break_stmt(),
         }
     }
 
@@ -312,6 +314,8 @@ pub trait StmtVisitor {
     fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Self::StmtResult;
 
     fn visit_expression_stmt(&mut self, expr: &Expr) -> Self::StmtResult;
+
+    fn visit_break_stmt(&mut self) -> Self::StmtResult;
 }
 
 // Tokens

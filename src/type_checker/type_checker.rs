@@ -417,4 +417,10 @@ impl StmtVisitor for TypeChecker {
             guarantees_return: false,
         }
     }
+
+    fn visit_break_stmt(&mut self) -> Analysis {
+        Analysis {
+            guarantees_return: false,
+        }
+    }
 }

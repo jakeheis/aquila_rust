@@ -1,0 +1,8 @@
+#!/usr/local/bin/zsh
+
+set -e
+
+docker start b593d3b9ad91
+docker exec b593d3b9ad91 gcc /aquila/main.c
+docker exec b593d3b9ad91 valgrind /a.out
+docker stop b593d3b9ad91

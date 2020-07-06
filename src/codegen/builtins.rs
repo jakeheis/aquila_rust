@@ -48,13 +48,13 @@ impl Builtin {
 }
 
 pub fn is_direct_c_binding(symbol: &Symbol) -> bool {
-    if symbol.lib_component() != "stdlib" {
-        return false;
+    let bindings = ["strlen", "memcpy", "malloc", "sizeof", "realloc", "exit", "free"];
+    for binding in &bindings {
+        if symbol == &Symbol::stdlib(binding) {
+            return true;
+        }
     }
-    match symbol.last_component() {
-        "strlen" | "memcpy" | "malloc" | "sizeof" | "realloc" | "exit" => true,
-        _ => false,
-    }
+    false
 }
 
 pub fn can_write_special_call(symbol: &Symbol) -> bool {

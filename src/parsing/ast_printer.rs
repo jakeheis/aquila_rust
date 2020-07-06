@@ -153,7 +153,7 @@ impl ASTPrinter {
         });
     }
 
-    fn visit_function_decl(&mut self, decl: &FunctionDecl) {
+    pub fn visit_function_decl(&mut self, decl: &FunctionDecl) {
         let symbol = decl
             .name
             .get_symbol()
@@ -315,6 +315,10 @@ impl StmtVisitor for ASTPrinter {
         self.indent(|visitor| {
             expr.accept(visitor);
         })
+    }
+
+    fn visit_break_stmt(&mut self) {
+        self.write_ln("BreakStmt");
     }
 }
 

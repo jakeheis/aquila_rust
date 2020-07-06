@@ -24,10 +24,6 @@ def hello() {
     return;
   }
   let c = Vec[ptr byte].new();
-
-  while true {
-    let u = Vec[double].new();
-  }
 }
 
 hello();

@@ -208,9 +208,12 @@ impl SymbolTableBuilder {
         function_symbol
     }
 
-    fn build_trait(&mut self, decl: &TraitDecl) {
+    fn build_trait(&mut self, decl: &TraitDecl) {        
         let trait_symbol = Symbol::new(self.current_symbol(), &decl.name);
+        self.context.push(trait_symbol.clone());
         let requirements = self.build_functions(&decl.requirements);
+        self.context.pop();
+
         let metadata = TraitMetadata {
             symbol: trait_symbol.clone(),
             function_requirements: requirements,

@@ -1,5 +1,6 @@
 builtin def malloc(count: int): ptr any;
 builtin def realloc(location: ptr any, count: int): ptr any;
+builtin def free(location: ptr any);
 builtin def strlen(location: ptr byte): int;
 builtin def memcpy(to: ptr any, from: ptr any, length: int): int;
 builtin def sizeof(object: any): int;
@@ -38,6 +39,10 @@ pub type Memory {
 
     meta def offset[T](pointer: ptr T, count: int): ptr T {
         return cast[ptr T](ptr_offset(pointer, count * sizeof(T)));
+    }
+
+    meta def drop[T](loc: ptr T) {
+        free(loc);
     }
 
 }
@@ -218,10 +223,9 @@ trait Freeable {
     def free();
 }
 
-// Memory.free[T](storage);
 impl Vec: Freeable {
     def free() {
-        print("freeing vec");
+        Memory.drop[T](storage);
     }
 }
 

@@ -47,6 +47,7 @@ pub enum TokenKind {
     If,
     Else,
     Return,
+    Break,
     Ptr,
     Builtin,
     Meta,

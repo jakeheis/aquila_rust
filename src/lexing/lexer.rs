@@ -173,6 +173,7 @@ impl Lexer {
             "else" => self.make_token(TokenKind::Else),
             "def" => self.make_token(TokenKind::Def),
             "return" => self.make_token(TokenKind::Return),
+            "break" => self.make_token(TokenKind::Break),
             "ptr" => self.make_token(TokenKind::Ptr),
             "builtin" => self.make_token(TokenKind::Builtin),
             "meta" => self.make_token(TokenKind::Meta),
