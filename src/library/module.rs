@@ -1,12 +1,13 @@
 use crate::codegen::*;
 use super::{SymbolTable, SpecializationTracker};
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct Module {
     pub name: String,
     pub structures: Vec<IRStructure>,
     pub functions: Vec<IRFunction>,
-    pub symbols: SymbolTable,
+    pub symbols: Rc<SymbolTable>,
     pub specialization_tracker: SpecializationTracker,
 }
 
@@ -16,7 +17,7 @@ impl Module {
             name: String::new(),
             structures: Vec::new(),
             functions: Vec::new(),
-            symbols: SymbolTable::new(),
+            symbols: Rc::new(SymbolTable::new()),
             specialization_tracker: SpecializationTracker::new(),
         }
     }

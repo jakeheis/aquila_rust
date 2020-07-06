@@ -157,10 +157,6 @@ pub type Vec[T] {
         Memory.copy[T](object, location);
     }
 
-    // def free() {
-    //     Memory.free[T](storage);
-    // }
-
 }
 
 pub type Optional[T] {
@@ -215,6 +211,17 @@ impl Optional: Writable {
         } else {
             print("None");
         }
+    }
+}
+
+trait Freeable {
+    def free();
+}
+
+// Memory.free[T](storage);
+impl Vec: Freeable {
+    def free() {
+        print("freeing vec");
     }
 }
 

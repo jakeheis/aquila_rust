@@ -26,13 +26,13 @@ impl TypeChecker {
         };
 
         for decl in &lib.type_decls {
-            checker.visit_type_decl(decl);
+            checker.check_type_decl(decl);
         }
         for decl in &lib.function_decls {
-            checker.visit_function_decl(decl);
+            checker.check_function_decl(decl);
         }
         for decl in &lib.conformance_decls {
-            checker.visit_conformance_decl(decl);
+            checker.check_conformance_decl(decl);
         }
 
         let main_func = FunctionMetadata::main();
@@ -86,7 +86,7 @@ impl TypeChecker {
         self.reporter.report(diag);
     }
 
-    fn visit_type_decl(&mut self, decl: &TypeDecl) -> Analysis {
+    fn check_type_decl(&mut self, decl: &TypeDecl) -> Analysis {
         let (type_symbol, metadata) = self.context.push_type_scope(&decl.name);
 
         self.context.push_scope_meta(&metadata);
@@ -96,7 +96,7 @@ impl TypeChecker {
                 .put_in_scope(meta_method, &method_metadata.node_type());
         }
         for meta_method in &decl.meta_methods {
-            self.visit_function_decl(meta_method);
+            self.check_function_decl(meta_method);
         }
         self.context.pop_scope();
 
@@ -114,7 +114,7 @@ impl TypeChecker {
                 .put_in_scope(method, &method_metadata.node_type());
         }
         for method in &decl.methods {
-            self.visit_function_decl(method);
+            self.check_function_decl(method);
         }
 
         self.context.pop_scope();
@@ -124,7 +124,7 @@ impl TypeChecker {
         }
     }
 
-    fn visit_function_decl(&mut self, decl: &FunctionDecl) -> Analysis {
+    fn check_function_decl(&mut self, decl: &FunctionDecl) -> Analysis {
         let (func_symbol, metadata) = self.context.push_function_scope(&decl.name);
         decl.name.set_symbol(func_symbol.clone());
 
@@ -191,7 +191,7 @@ impl TypeChecker {
         }
     }
 
-    fn visit_conformance_decl(&mut self, decl: &ConformanceDecl) {
+    fn check_conformance_decl(&mut self, decl: &ConformanceDecl) {
         let type_symbol = Symbol::top_level(self.lib.as_ref(), &decl.target.token);
         
         let target_metadata = self.lib.type_metadata(&type_symbol);
@@ -226,7 +226,7 @@ impl TypeChecker {
         }
 
         for function in &decl.implementations {
-            self.visit_function_decl(function);
+            self.check_function_decl(function);
         }
 
         self.context.pop_scope();

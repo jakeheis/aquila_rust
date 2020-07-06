@@ -105,11 +105,14 @@ impl CodeWriter {
 
     fn write_block(&self, stmts: &[IRStatement], spec: &GenericSpecialization) {
         for stmt in stmts {
-            self.write_statement(stmt, spec);
+            let end_block = self.write_statement(stmt, spec);
+            if end_block {
+                break;
+            }
         }
     }
 
-    fn write_statement(&self, stmt: &IRStatement, spec: &GenericSpecialization) {
+    fn write_statement(&self, stmt: &IRStatement, spec: &GenericSpecialization) -> bool {
         match stmt {
             IRStatement::DeclLocal(var) => {
                 let var_type = var.var_type.specialize(spec);
@@ -156,11 +159,15 @@ impl CodeWriter {
                     String::from("return;")
                 };
                 self.writeln(&line);
+                return true;
             }
             IRStatement::Break => {
                 self.writeln("break;");
+                return true;
             }
         }
+
+        return false;
     }
 
     fn form_expression(&self, expr: &IRExpr, enclosing_spec: &GenericSpecialization) -> String {

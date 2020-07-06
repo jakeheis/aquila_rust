@@ -15,6 +15,23 @@ type Adder[T] {
     }
 }
 
+def hello() {
+  let z = Vec[int].new();
+  if true {
+    let a = Vec[bool].new();
+  } else {
+    let b = Vec[byte].new();
+    return;
+  }
+  let c = Vec[ptr byte].new();
+
+  while true {
+    let u = Vec[double].new();
+  }
+}
+
+hello();
+
 // let heap = box Adder[int](3, 4);
 // let stack = Adder[ptr byte]("hi", "byte");
 
@@ -31,9 +48,9 @@ type Adder[T] {
 // let uno = box 1;
 // let duo = box 2;
 
-let vector = Vec[int].new();
-vector.insert(2);
-vector.insert(4);
+// let vector = Vec[int].new();
+// vector.insert(2);
+// vector.insert(4);
 
 // let vec = Vec[int].heap();
 

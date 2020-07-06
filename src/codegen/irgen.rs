@@ -56,7 +56,7 @@ impl IRGen {
             name,
             structures: structs,
             functions: funcs,
-            symbols,
+            symbols: Rc::new(symbols),
             specialization_tracker: tracker
         };
         modules.push(new);

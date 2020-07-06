@@ -3,6 +3,7 @@ mod codewriter;
 mod ir;
 mod irgen;
 mod irwriter;
+mod memory;
 
 pub use ir::{
     IRBinaryOperator, IRExpr, IRExprKind, IRFunction, IRStatement, IRStructure,
@@ -51,5 +52,13 @@ pub fn generate(lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str
 }
 
 pub fn compile(lib: Lib) -> Vec<Module> {
-    IRGen::new(lib).generate()
+    let mut mods = IRGen::new(lib).generate();
+    let tables: Vec<_> = mods.iter().map(|m| Rc::clone(&m.symbols)).collect();
+    for module in &mut mods {
+        for func in &mut module.functions {
+            let mut writer = memory::FreeWriter::new(&tables, func, &module.specialization_tracker);
+            writer.write();
+        }
+    }
+    mods
 }

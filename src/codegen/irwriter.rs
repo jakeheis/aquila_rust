@@ -7,7 +7,7 @@ pub struct IRWriter {
     pub lib: Rc<Lib>,
     pub structures: Vec<IRStructure>,
     pub functions: Vec<IRFunction>,
-    blocks: Vec<Vec<IRStatement>>,
+    pub blocks: Vec<Vec<IRStatement>>,
     temp_count: usize,
 }
 
