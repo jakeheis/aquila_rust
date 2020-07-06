@@ -126,15 +126,24 @@ impl IRWriter {
         self.add_stmt(IRStatement::DeclLocal(var.clone()));
     }
 
-    pub fn declare_temp(&mut self, expr: IRExpr) -> IRVariable {
-        let var = IRVariable {
-            name: format!("_ir_tmp_{}", self.temp_count),
-            var_type: expr.expr_type.clone(),
-        };
+    pub fn make_temp(&mut self, var_type: NodeType) -> IRVariable {
         self.temp_count = self.temp_count + 1;
+        IRVariable {
+            name: format!("_ir_tmp_{}", self.temp_count),
+            var_type,
+        }
+    }
 
+    pub fn declare_temp(&mut self, expr: IRExpr) -> IRVariable {
+        let var = self.make_temp(expr.expr_type.clone());
         self.declare_var(&var);
         self.assign(IRExpr::variable(&var), expr);
+        var
+    }
+
+    pub fn declare_temp_no_init(&mut self, var_type: NodeType) -> IRVariable {
+        let var = self.make_temp(var_type);
+        self.declare_var(&var);
         var
     }
 

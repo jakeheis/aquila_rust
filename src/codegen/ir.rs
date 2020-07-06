@@ -128,6 +128,17 @@ impl IRExpr {
             expr_type,
         }
     }
+
+    pub fn has_defined_location(&self) -> bool {
+        match &self.kind {
+            IRExprKind::Variable(_) | IRExprKind::ExplicitType => true,
+            IRExprKind::FieldAccess(object, _) | IRExprKind::DerefFieldAccess(object, _) => object.has_defined_location(),
+            IRExprKind::Cast(object) => object.has_defined_location(),
+            IRExprKind::Unary(..) | IRExprKind::Binary(..) => false,
+            IRExprKind::Literal(..) => false,
+            IRExprKind::Call(..) => false,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -159,8 +170,6 @@ pub enum IRExprKind {
     FieldAccess(Box<IRExpr>, String),
     DerefFieldAccess(Box<IRExpr>, String),
     Call(Symbol, GenericSpecialization, Vec<IRExpr>),
-    Array(Vec<IRExpr>),
-    Subscript(Box<IRExpr>, Box<IRExpr>),
     Binary(Box<IRExpr>, IRBinaryOperator, Box<IRExpr>),
     Unary(IRUnaryOperator, Box<IRExpr>),
     Literal(String),

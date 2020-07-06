@@ -1,4 +1,4 @@
-let dyn = String.from("hello");
+let dyn = String.literal("hello");
 
 let combo1 = dyn.append_literal(" world");
 

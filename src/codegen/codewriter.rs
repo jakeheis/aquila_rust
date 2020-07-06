@@ -9,7 +9,6 @@ pub struct CodeWriter {
     programs: Vec<Module>,
     file: RefCell<File>,
     indent: Cell<u32>,
-    temp_count: Cell<u32>,
     spec_map: FinalSpecializationMap,
 }
 
@@ -19,7 +18,6 @@ impl CodeWriter {
             programs,
             file: RefCell::new(file),
             indent: Cell::new(0),
-            temp_count: Cell::new(0),
             spec_map
         }
     }
@@ -27,11 +25,11 @@ impl CodeWriter {
     pub fn write(&self) {
         self.write_includes();
 
-        self.write_struct_prototypes();
-        self.write_struct_bodies();
+        self.write_structs(true);
+        self.write_structs(false);
 
-        self.write_function_prototypes();
-        self.write_function_bodies();
+        self.write_functions(true);
+        self.write_functions(false);
     }
 
     fn write_includes(&self) {
@@ -41,63 +39,48 @@ impl CodeWriter {
         self.writeln("#include <string.h>");
     }
 
-    fn write_struct_prototypes(&self) {
+    fn write_structs(&self, prototype: bool) {
         let structures = self.programs.iter().flat_map(|p| &p.structures);
         for struct_def in structures {
             if let Some(specs) = self.spec_map.specs_for(&struct_def.name) {
                 for spec in specs {
                     let struct_name = struct_def.name.specialized(spec);
                     self.writeln("");
-                    self.writeln(&format!("struct {};", struct_name));
-                }
-            }
-        }
-    }
 
-    fn write_struct_bodies(&self) {
-        let structures = self.programs.iter().flat_map(|p| &p.structures);
-        for struct_def in structures {
-            if let Some(specs) = self.spec_map.specs_for(&struct_def.name) {
-                for spec in specs {
-                    let struct_name = struct_def.name.specialized(spec);
-                    self.writeln("");
-                    self.writeln(&format!("typedef struct {} {{", struct_name));
-                    self.increase_indent();
-        
-                    for field in &struct_def.fields {
-                        let field_type = field.var_type.specialize(spec);
-                        let (c_type, name) = self.convert_type(&field_type, field.name.clone(), true);
-                        self.writeln(&format!("{} {};", c_type, name));
+                    if prototype {
+                        self.writeln(&format!("struct {};", struct_name));
+                    } else {
+                        self.writeln(&format!("typedef struct {} {{", struct_name));
+                        self.increase_indent();
+            
+                        for field in &struct_def.fields {
+                            let field_type = field.var_type.specialize(spec);
+                            let (c_type, name) = self.convert_type(&field_type, field.name.clone(), true);
+                            self.writeln(&format!("{} {};", c_type, name));
+                        }
+            
+                        self.decrease_indent();
+                        self.writeln(&format!("}} {};", struct_name));
                     }
-        
-                    self.decrease_indent();
-                    self.writeln(&format!("}} {};", struct_name));
                 }
             }
         }
     }
 
-    fn write_function_prototypes(&self) {
+    fn write_functions(&self, prototype: bool) {
         let functions = self.programs.iter().flat_map(|p| &p.functions);
         for func in functions {
             if let Some(specs) = self.spec_map.specs_for(&func.name) {
                 for spec in specs {
-                    self.write_function_header(func, spec, ";");
-                }
-            }
-        }
-    }
-
-    fn write_function_bodies(&self) {
-        let functions = self.programs.iter().flat_map(|p| &p.functions);
-        for func in functions {
-            if let Some(specs) = self.spec_map.specs_for(&func.name) {
-                for spec in specs {
-                    self.write_function_header(func, spec, " {");
-                    self.increase_indent();
-                    self.write_block(&func.statements, spec);
-                    self.decrease_indent();
-                    self.writeln("}");
+                    if prototype {
+                        self.write_function_header(func, spec, ";");
+                    } else {
+                        self.write_function_header(func, spec, " {");
+                        self.increase_indent();
+                        self.write_block(&func.statements, spec);
+                        self.decrease_indent();
+                        self.writeln("}");
+                    }
                 }
             }
         }
@@ -175,12 +158,7 @@ impl CodeWriter {
 
         match &expr.kind {
             IRExprKind::FieldAccess(target, field) => {
-                let target_str = self.form_expression(target, enclosing_spec);
-                let target = if let IRExprKind::Call(..) = &target.kind {
-                    self.write_temp(&target.expr_type, target_str)
-                } else {
-                    target_str
-                };
+                let target = self.form_expression(target, enclosing_spec);
                 format!("{}.{}", target, field)
             }
             IRExprKind::DerefFieldAccess(target, field) => {
@@ -193,16 +171,6 @@ impl CodeWriter {
                 let args = args.join(",");
                 let function_name = function.specialized(&spec);
                 format!("{}({})", function_name, args)
-            }
-            IRExprKind::Array(elements) => {
-                let elements: Vec<String> =
-                    elements.iter().map(|e| self.form_expression(e, enclosing_spec)).collect();
-                self.write_temp(&expr_type, format!("{{ {} }}", elements.join(",")))
-            }
-            IRExprKind::Subscript(target, value) => {
-                let target = self.form_expression(target, enclosing_spec);
-                let value = self.form_expression(value, enclosing_spec);
-                format!("{}[{}]", target, value)
             }
             IRExprKind::Binary(lhs, op, rhs) => {
                 let lhs = self.form_expression(lhs, enclosing_spec);
@@ -224,18 +192,7 @@ impl CodeWriter {
                 format!("({}) {} ({})", lhs, op, rhs)
             }
             IRExprKind::Unary(operator, operand) => {
-                let operand_str = self.form_expression(operand, enclosing_spec);
-                let operand = if let IRUnaryOperator::Reference = operator {
-                    match &operand.kind {
-                        IRExprKind::Unary(IRUnaryOperator::Dereference, inner) => {
-                            return self.form_expression(inner, enclosing_spec);
-                        }
-                        IRExprKind::Variable(..) | IRExprKind::FieldAccess(..) => operand_str,
-                        _ => self.write_temp(&operand.expr_type, operand_str),
-                    }
-                } else {
-                    operand_str
-                };
+                let operand = self.form_expression(operand, enclosing_spec);
                 let operator = match operator {
                     IRUnaryOperator::Negate => "-",
                     IRUnaryOperator::Invert => "!",
@@ -275,18 +232,6 @@ impl CodeWriter {
             param_str,
             terminator
         ));
-    }
-
-    fn write_temp(&self, temp_type: &NodeType, value: String) -> String {
-        let temp_count = self.temp_count.get();
-        let temp_name = format!("_temp_{}", temp_count);
-        self.temp_count.set(temp_count + 1);
-
-        let temp_type = self.type_and_name(&temp_type, &temp_name);
-        let temp = format!("{} = {};", temp_type, value);
-        self.writeln(&temp);
-
-        temp_name
     }
 
     fn type_and_name(&self, var_type: &NodeType, name: &str) -> String {

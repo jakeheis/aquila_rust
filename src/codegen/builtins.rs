@@ -4,7 +4,7 @@ use crate::library::*;
 
 struct Builtin {
     write: Option<fn(&mut IRWriter, &Symbol) -> ()>,
-    special_call: Option<fn(&Symbol, &GenericSpecialization, Vec<IRExpr>) -> IRExpr>,
+    special_call: Option<fn(&mut IRWriter, &Symbol, &GenericSpecialization, Vec<IRExpr>) -> IRExpr>,
 }
 
 impl Builtin {
@@ -67,13 +67,14 @@ pub fn can_write_special_call(symbol: &Symbol) -> bool {
 }
 
 pub fn write_special_call(
+    writer: &mut IRWriter,
     symbol: &Symbol,
     spec: &GenericSpecialization,
     args: Vec<IRExpr>,
 ) -> IRExpr {
     if let Some(builtin) = Builtin::named(&symbol) {
         if let Some(call) = &builtin.special_call {
-            return call(symbol, spec, args);
+            return call(writer, symbol, spec, args);
         }
     }
     panic!()
@@ -149,7 +150,7 @@ fn write_read_line(writer: &mut IRWriter, _func_symbol: &Symbol) {
 
 // Call impls
 
-fn size_call(symbol: &Symbol, spec: &GenericSpecialization, _args: Vec<IRExpr>) -> IRExpr {
+fn size_call(_writer: &mut IRWriter, symbol: &Symbol, spec: &GenericSpecialization, _args: Vec<IRExpr>) -> IRExpr {
     let mem_type = Symbol::new_str(symbol, "T");
     let expr_type = spec.type_for(&mem_type).unwrap().clone();
     let arg = IRExpr {
@@ -159,12 +160,18 @@ fn size_call(symbol: &Symbol, spec: &GenericSpecialization, _args: Vec<IRExpr>) 
     IRExpr::call_nongenric("sizeof", vec![arg], NodeType::Double)
 }
 
-fn print_call(_symbol: &Symbol, _spec: &GenericSpecialization, mut args: Vec<IRExpr>) -> IRExpr {
+fn print_call(writer: &mut IRWriter, _symbol: &Symbol, _spec: &GenericSpecialization, mut args: Vec<IRExpr>) -> IRExpr {
     let node_type = args[0].expr_type.clone();
     if let NodeType::Instance(type_symbol, spec) = &node_type {
         let full_symbol = Symbol::new_str(&type_symbol, "write");
+        let object = if args[0].has_defined_location() {
+            args.remove(0)
+        } else {
+            let var = writer.declare_temp(args.remove(0));
+            IRExpr::variable(&var)
+        };
         let arg = IRExpr {
-            kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(args.remove(0))),
+            kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(object)),
             expr_type: node_type.clone(),
         };
         IRExpr::call_generic(full_symbol, spec.clone(), vec![arg], NodeType::Void)

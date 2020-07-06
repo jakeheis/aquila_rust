@@ -50,7 +50,7 @@ pub type Memory {
 pub builtin def print(obj: any);
 
 pub def read_line(): String {
-    return String.from(_read_line());
+    return String.literal(_read_line());
 }
 
 pub def fatal_error(message: ptr byte, #caller) {
@@ -58,7 +58,7 @@ pub def fatal_error(message: ptr byte, #caller) {
 }
 
 pub def fatal_error_location(message: ptr byte, location: ptr byte) {
-    print(String.from("Fatal error: ").append_literal(message).storage);
+    print(String.literal("Fatal error: ").append_literal(message).storage);
     print("");
     print(location);
     exit(1);
@@ -76,10 +76,11 @@ pub type String {
     
     let storage: ptr byte;
     let size: int;
+    let owned: bool;
 
-    pub meta def from(lit: ptr byte): String {
+    pub meta def literal(lit: ptr byte): String {
         let size = strlen(lit) + 1;
-        return String(lit, size);
+        return String(lit, size, false);
     }
 
     pub def append_literal(lit: ptr byte): String {
@@ -91,7 +92,7 @@ pub type String {
         let second_part = Memory.offset[byte](new_storage, size - 1);
         Memory.copy_block[byte](lit, second_part, strlen(lit) + 1);
 
-        return String(new_storage, new_size);
+        return String(new_storage, new_size, true);
     }
 
     pub def append(string: String): String {
@@ -100,22 +101,40 @@ pub type String {
 
 }
 
+
+impl String: Writable {
+    def write() {
+        print(storage);
+    }
+}
+
+impl String: Freeable {
+    def free() {
+        if owned {
+            Memory.drop[byte](storage);
+        }
+    }
+}
+
 pub type Vec[T] {
 
     let storage: ptr T;
     pub let count: int;
     pub let capacity: int;
-    let element_size: int;
 
     pub meta def new(): Vec[T] {
-        let storage = Memory.allocate_block[T](10);
-        return Vec[T](storage, 0, 10, Memory.size[T]());
+        return Vec[T](cast[ptr T](&0), 0, 0);
     }
 
     pub def insert(object: T) {
         if count == capacity {
-            capacity = capacity * 2;
-            storage = Memory.reallocate[T](storage, capacity);
+            if capacity == 0 {
+                capacity = 10;
+                storage = Memory.allocate_block[T](capacity);
+            } else {
+                capacity = capacity * 2;
+                storage = Memory.reallocate[T](storage, capacity);
+            }
         }
 
         copy_in(count, &object);
@@ -164,6 +183,14 @@ pub type Vec[T] {
 
 }
 
+impl Vec: Freeable {
+    def free() {
+        if capacity > 0 {
+            Memory.drop[T](storage);
+        }
+    }
+}
+
 pub type Optional[T] {
 
     let _is_some: bool;
@@ -199,16 +226,6 @@ pub type Optional[T] {
     }
 }
 
-trait Writable {
-    def write();
-}
-
-impl String: Writable {
-    def write() {
-        print(storage);
-    }
-}
-
 impl Optional: Writable {
     def write() {
         if _is_some {
@@ -219,14 +236,12 @@ impl Optional: Writable {
     }
 }
 
-trait Freeable {
-    def free();
+trait Writable {
+    def write();
 }
 
-impl Vec: Freeable {
-    def free() {
-        Memory.drop[T](storage);
-    }
+trait Freeable {
+    def free();
 }
 
 // trait Indexable {

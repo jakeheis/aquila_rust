@@ -6,6 +6,22 @@
 
 // let str = add[ptr byte]("hi", "byte");
 
+let dyn = String.literal("hello");
+
+let combo1 = dyn.append_literal(" world");
+
+/// -> hello world
+print(combo1);
+
+let combo2 = combo1.append_literal(" ag");
+
+/// -> hello world ag
+print(combo2);
+
+/// -> hello world again
+print(dyn.append_literal(" world").append_literal(" again"));
+
+
 type Adder[T] {
     let lhs: T;
     let rhs: T;

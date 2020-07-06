@@ -324,12 +324,26 @@ impl ExprVisitor for IRGen {
     }
 
     fn visit_unary_expr(&mut self, expr: &Expr, op: &Token, operand: &Expr) -> Self::ExprResult {
-        let operand = operand.accept(self);
+        let mut operand = operand.accept(self);
         let op_type = match &op.kind {
             TokenKind::Minus => IRUnaryOperator::Negate,
             TokenKind::Bang => IRUnaryOperator::Invert,
-            TokenKind::Ampersand => IRUnaryOperator::Reference,
-            TokenKind::Star => IRUnaryOperator::Dereference,
+            TokenKind::Ampersand => {
+                if let IRExprKind::Unary(IRUnaryOperator::Dereference, _) = &operand.kind {
+                    return operand;
+                }
+                if !operand.has_defined_location() {
+                    let temp = self.writer.declare_temp(operand);
+                    operand = IRExpr::variable(&temp);
+                }
+                IRUnaryOperator::Reference
+            },
+            TokenKind::Star => {
+                if let IRExprKind::Unary(IRUnaryOperator::Reference, _) = &operand.kind {
+                    return operand;
+                }
+                IRUnaryOperator::Dereference
+            },
             tk => panic!("Illegal operator {:?}", tk),
         };
         IRExpr {
@@ -348,30 +362,33 @@ impl ExprVisitor for IRGen {
         let function_symbol = call.name.get_symbol().unwrap();
         let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
 
-        trace!("Writing call to {}", function_symbol);
-
         let specialization = call.get_specialization().unwrap();
 
-        if let Some(target) = &call.target {
-            if let FunctionKind::Method(..) = function_metadata.kind {
+        if let FunctionKind::Method(..) = function_metadata.kind {
+            if let Some(target) = &call.target {
                 let target_expr = target.accept(self);
                 let target_expr = match &target_expr.kind {
                     IRExprKind::Variable(v) if v == "self" => target_expr,
                     _ => {
-                        let expr_type = NodeType::pointer_to(target_expr.expr_type.clone());
-                        IRExpr {
-                            kind: IRExprKind::Unary(
-                                IRUnaryOperator::Reference,
-                                Box::new(target_expr),
-                            ),
-                            expr_type,
+                        if target_expr.has_defined_location() {
+                            let expr_type = NodeType::pointer_to(target_expr.expr_type.clone());
+                            IRExpr {
+                                kind: IRExprKind::Unary(
+                                    IRUnaryOperator::Reference,
+                                    Box::new(target_expr),
+                                ),
+                                expr_type,
+                            }
+                        } else if let IRExprKind::Unary(IRUnaryOperator::Dereference, obj) = target_expr.kind {
+                            *obj
+                        } else {
+                            let var = self.writer.declare_temp(target_expr);
+                            IRExpr::address_of(&var)
                         }
                     }
                 };
                 arg_exprs.insert(0, target_expr);
-            }
-        } else {
-            if let FunctionKind::Method(..) = function_metadata.kind {
+            } else {
                 arg_exprs.insert(
                     0,
                     IRExpr {
@@ -391,7 +408,7 @@ impl ExprVisitor for IRGen {
         if builtins::is_direct_c_binding(&function_symbol) {
             return IRExpr::call_nongenric(function_symbol.last_component(), arg_exprs, self.get_expr_type(expr))
         } else if builtins::can_write_special_call(&function_symbol) {
-            builtins::write_special_call(&function_symbol, &specialization, arg_exprs)
+            builtins::write_special_call(&mut self.writer, &function_symbol, &specialization, arg_exprs)
         } else {
             IRExpr::call_generic(function_symbol, specialization, arg_exprs, self.get_expr_type(expr))
         }
@@ -468,11 +485,26 @@ impl ExprVisitor for IRGen {
     }
 
     fn visit_array_expr(&mut self, expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
-        let elements: Vec<_> = elements.iter().map(|e| e.accept(self)).collect();
-        IRExpr {
-            kind: IRExprKind::Array(elements),
-            expr_type: self.get_expr_type(expr),
+        let array = self.writer.declare_temp_no_init(expr.get_type().unwrap());
+
+        for (index, element) in elements.iter().enumerate() {
+            let element = element.accept(self);
+            let value = self.writer.declare_temp(element);
+
+            let offset = IRExpr::binary(
+                IRExpr::variable(&array), 
+                IRBinaryOperator::Plus, 
+                IRExpr::int_literal(&index.to_string()), 
+                array.var_type.clone()
+            );
+            let deref = IRExpr {
+                kind: IRExprKind::Unary(IRUnaryOperator::Dereference, Box::new(offset)),
+                expr_type: NodeType::Ambiguous,
+            };
+            self.writer.assign(deref, IRExpr::variable(&value));
         }
+
+        IRExpr::variable(&array)
     }
 
     fn visit_subscript_expr(
@@ -498,9 +530,17 @@ impl ExprVisitor for IRGen {
 
         self.writer
             .write_guard(guard, "index out of bounds", &expr.span);
-        let kind = IRExprKind::Subscript(
-            Box::new(target.accept(self)),
-            Box::new(IRExpr::variable(&index)),
+        let array = target.accept(self);
+        let array_type = array.expr_type.coerce_array_to_ptr();
+        let add = IRExpr::binary(
+            array,
+            IRBinaryOperator::Plus, 
+            IRExpr::variable(&index), 
+            array_type,
+        );
+        let kind = IRExprKind::Unary(
+            IRUnaryOperator::Dereference,
+            Box::new(add),
         );
         IRExpr {
             kind,
