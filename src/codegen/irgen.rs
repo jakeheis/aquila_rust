@@ -14,7 +14,8 @@ pub struct IRGen {
 }
 
 impl IRGen {
-    pub fn new(lib: Rc<Lib>) -> Self {
+    pub fn new(lib: Lib) -> Self {        
+        let lib = Rc::new(lib);
         let lib_copy = Rc::clone(&lib);
         IRGen {
             lib,
@@ -23,7 +24,7 @@ impl IRGen {
         }
     }
 
-    pub fn generate(mut self) -> IRProgram {
+    pub fn generate(mut self) -> Vec<IRProgram> {
         let lib = Rc::clone(&self.lib);
 
         for t in &lib.type_decls {
@@ -43,7 +44,23 @@ impl IRGen {
             self.writer.end_decl_main();
         }
 
-        self.writer.program
+        let (lib_copy, structs, funcs) = (self.writer.lib, self.writer.structures, self.writer.functions);
+
+        std::mem::drop(lib);
+        std::mem::drop(lib_copy);
+
+        let lib = Rc::try_unwrap(self.lib).ok().unwrap();
+        let (name, symbols, tracker, mut libs) = (lib.name, lib.symbols, lib.specialization_tracker, lib.dependencies);
+
+        let new = IRProgram {
+            name,
+            structures: structs,
+            functions: funcs,
+            symbols,
+            specialization_tracker: tracker
+        };
+        libs.push(new);
+        libs
     }
 
     fn gen_stmts(&mut self, stmts: &[Stmt]) {
@@ -372,7 +389,7 @@ impl ExprVisitor for IRGen {
         } else if builtins::can_write_special_call(&function_symbol) {
             builtins::write_special_call(&function_symbol, &specialization, arg_exprs)
         } else {
-            IRExpr::call_generic(&function_symbol.mangled(), specialization, arg_exprs, self.get_expr_type(expr))
+            IRExpr::call_generic(function_symbol, specialization, arg_exprs, self.get_expr_type(expr))
         }
     }
 

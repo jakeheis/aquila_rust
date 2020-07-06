@@ -16,6 +16,12 @@ impl Symbol {
         }
     }
 
+    pub fn root(name: &str) -> Self {
+        Symbol {
+            id: name.to_owned(),
+        }
+    }
+
     pub fn new(parent: &Symbol, name: &Token) -> Self {
         Symbol::new_str(parent, name.lexeme())
     }
@@ -107,6 +113,15 @@ impl Symbol {
     pub fn is_init(&self) -> bool {
         self.last_component() == "init"
     }
+
+    pub fn specialized(&self, spec: &GenericSpecialization) -> String {
+        let spec = spec.symbolic_list();
+        if spec.len() > 0 {
+            self.mangled() + "__" + &spec
+        } else {
+            self.mangled()
+        }
+    }
 }
 
 impl std::fmt::Display for Symbol {
@@ -115,7 +130,7 @@ impl std::fmt::Display for Symbol {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SymbolTable {
     pub type_metadata: HashMap<Symbol, TypeMetadata>,
     function_metadata: HashMap<Symbol, FunctionMetadata>,

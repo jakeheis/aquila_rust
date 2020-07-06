@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::Write;
 
 pub struct CodeWriter {
-    program: IRProgram,
+    programs: Vec<IRProgram>,
     file: RefCell<File>,
     indent: Cell<u32>,
     temp_count: Cell<u32>,
@@ -14,9 +14,9 @@ pub struct CodeWriter {
 }
 
 impl CodeWriter {
-    pub fn new(program: IRProgram, file: File, spec_map: FinalSpecializationMap) -> Self {
+    pub fn new(programs: Vec<IRProgram>, file: File, spec_map: FinalSpecializationMap) -> Self {
         CodeWriter {
-            program,
+            programs,
             file: RefCell::new(file),
             indent: Cell::new(0),
             temp_count: Cell::new(0),
@@ -42,10 +42,11 @@ impl CodeWriter {
     }
 
     fn write_struct_prototypes(&self) {
-        for struct_def in &self.program.structures {
+        let structures = self.programs.iter().flat_map(|p| &p.structures);
+        for struct_def in structures {
             if let Some(specs) = self.spec_map.specs_for(&struct_def.name) {
                 for spec in specs {
-                    let struct_name = self.specialized_name(&struct_def.name.mangled(), spec);
+                    let struct_name = struct_def.name.specialized(spec);
                     self.writeln("");
                     self.writeln(&format!("struct {};", struct_name));
                 }
@@ -54,10 +55,11 @@ impl CodeWriter {
     }
 
     fn write_struct_bodies(&self) {
-        for struct_def in &self.program.structures {
+        let structures = self.programs.iter().flat_map(|p| &p.structures);
+        for struct_def in structures {
             if let Some(specs) = self.spec_map.specs_for(&struct_def.name) {
                 for spec in specs {
-                    let struct_name = self.specialized_name(&struct_def.name.mangled(), spec);
+                    let struct_name = struct_def.name.specialized(spec);
                     self.writeln("");
                     self.writeln(&format!("typedef struct {} {{", struct_name));
                     self.increase_indent();
@@ -76,7 +78,8 @@ impl CodeWriter {
     }
 
     fn write_function_prototypes(&self) {
-        for func in &self.program.functions {
+        let functions = self.programs.iter().flat_map(|p| &p.functions);
+        for func in functions {
             if let Some(specs) = self.spec_map.specs_for(&func.name) {
                 for spec in specs {
                     self.write_function_header(func, spec, ";");
@@ -86,7 +89,8 @@ impl CodeWriter {
     }
 
     fn write_function_bodies(&self) {
-        for func in &self.program.functions {
+        let functions = self.programs.iter().flat_map(|p| &p.functions);
+        for func in functions {
             if let Some(specs) = self.spec_map.specs_for(&func.name) {
                 for spec in specs {
                     self.write_function_header(func, spec, " {");
@@ -180,7 +184,7 @@ impl CodeWriter {
                 let spec = spec.resolve_generics_using(enclosing_spec);
                 let args: Vec<_> = args.iter().map(|a| self.form_expression(a, enclosing_spec)).collect();
                 let args = args.join(",");
-                let function_name = self.specialized_name(function, &spec);
+                let function_name = function.specialized(&spec);
                 format!("{}({})", function_name, args)
             }
             IRExprKind::Array(elements) => {
@@ -254,7 +258,7 @@ impl CodeWriter {
             .map(|param| self.type_and_name(&param.var_type.specialize(spec), &param.name))
             .collect();
 
-        let function_name = self.specialized_name(&function.name.mangled(), spec);
+        let function_name = function.name.specialized(spec);
         let param_str = param_str.join(",");
 
         self.writeln("");
@@ -276,15 +280,6 @@ impl CodeWriter {
         self.writeln(&temp);
 
         temp_name
-    }
-
-    fn specialized_name(&self, name: &str, spec: &GenericSpecialization) -> String {
-        let func_specialization = spec.symbolic_list();
-        if func_specialization.len() > 0 {
-            name.to_owned() + "__" + &func_specialization
-        } else {
-            name.to_owned()
-        }
     }
 
     fn type_and_name(&self, var_type: &NodeType, name: &str) -> String {

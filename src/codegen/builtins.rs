@@ -3,21 +3,11 @@ use super::irwriter::IRWriter;
 use crate::library::*;
 
 struct Builtin {
-    name: &'static str,
-    implicit_calls: Vec<Symbol>,
     write: Option<fn(&mut IRWriter, &Symbol) -> ()>,
     special_call: Option<fn(&Symbol, &GenericSpecialization, Vec<IRExpr>) -> IRExpr>,
 }
 
 impl Builtin {
-    fn all() -> Vec<Builtin> {
-        vec![
-            Builtin::size(),
-            Builtin::ptr_offset(),
-            Builtin::read_line(),
-        ]
-    }
-
     fn named(symbol: &Symbol) -> Option<Builtin> {
         match symbol.id.as_str() {
             "stdlib$Memory$Meta$size" => Some(Builtin::size()),
@@ -30,8 +20,6 @@ impl Builtin {
 
     fn size() -> Self {
         Builtin {
-            name: "size",
-            implicit_calls: Vec::new(),
             write: None,
             special_call: Some(size_call),
         }
@@ -39,8 +27,6 @@ impl Builtin {
 
     fn ptr_offset() -> Self {
         Builtin {
-            name: "ptr_offset",
-            implicit_calls: Vec::new(),
             write: Some(write_ptr_offset),
             special_call: None,
         }
@@ -48,8 +34,6 @@ impl Builtin {
 
     fn read_line() -> Self {
         Builtin {
-            name: "_read_line",
-            implicit_calls: Vec::new(),
             write: Some(write_read_line),
             special_call: None,
         }
@@ -57,15 +41,9 @@ impl Builtin {
 
     fn print() -> Self {
         Builtin {
-            name: "print",
-            implicit_calls: Vec::new(),
             write: None,
             special_call: Some(print_call),
         }
-    }
-
-    fn symbol(&self) -> Symbol {
-        Symbol::new_str(&Symbol::stdlib_root(), self.name)
     }
 }
 
@@ -76,19 +54,6 @@ pub fn is_direct_c_binding(symbol: &Symbol) -> bool {
     match symbol.last_component() {
         "strlen" | "memcpy" | "malloc" | "sizeof" | "realloc" | "exit" => true,
         _ => false,
-    }
-}
-
-pub fn record_implicit_calls(lib: &mut Lib) {
-    for builtin in Builtin::all() {
-        for call in &builtin.implicit_calls {
-            let builtin_symbol = builtin.symbol();
-            lib.specialization_tracker.add_call(
-                builtin_symbol,
-                call.clone(),
-                GenericSpecialization::empty(),
-            );
-        }
     }
 }
 
@@ -202,7 +167,7 @@ fn print_call(_symbol: &Symbol, _spec: &GenericSpecialization, mut args: Vec<IRE
             kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(args.remove(0))),
             expr_type: node_type.clone(),
         };
-        IRExpr::call_generic(&full_symbol.mangled(), spec.clone(), vec![arg], NodeType::Void)
+        IRExpr::call_generic(full_symbol, spec.clone(), vec![arg], NodeType::Void)
     } else {
         let format_specificer = match node_type {
             NodeType::Int | NodeType::Bool => "%i",

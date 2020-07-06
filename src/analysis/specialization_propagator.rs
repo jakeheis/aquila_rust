@@ -1,10 +1,12 @@
 use crate::library::*;
+use crate::codegen::IRProgram;
 use log::trace;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 type SpecializationTrackerMap = HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>;
 
+#[derive(Clone, Debug)]
 pub struct SpecializationTracker {
     call_map: RefCell<SpecializationTrackerMap>,
     explicit_type_map: RefCell<SpecializationTrackerMap>,
@@ -96,7 +98,7 @@ impl FinalSpecializationMap {
  }
 
 pub struct SpecializationPropagator<'a> {
-    lib: &'a mut Lib,
+    libs: &'a [IRProgram],
     call_map: SpecializationTrackerMap,
     explicit_type_map: SpecializationTrackerMap,
     visited: HashSet<String>,
@@ -104,20 +106,32 @@ pub struct SpecializationPropagator<'a> {
 }
 
 impl<'a> SpecializationPropagator<'a> {
-    pub fn propogate(lib: &mut Lib) -> FinalSpecializationMap {
-        trace!(target: "spec_propagate", "{}", lib.specialization_tracker);
-        for dep in &lib.dependencies {
-            trace!(target: "spec_propagate", "{}", dep.specialization_tracker);
+    pub fn propagate(libs: &[IRProgram]) -> FinalSpecializationMap {
+        for lib in libs {
+            trace!(target: "spec_propagate", "{}", lib.specialization_tracker);
         }
 
         let mut call_map: SpecializationTrackerMap = HashMap::new();
-        SpecializationPropagator::flattened_call_map(lib, &mut call_map);
-
         let mut explicit_type_map: SpecializationTrackerMap = HashMap::new();
-        SpecializationPropagator::flattened_explicit_type_map(lib, &mut explicit_type_map);
+
+        for lib in libs {
+            let lib_map = lib.specialization_tracker.call_map.borrow();
+            for (caller, callees) in lib_map.iter() {
+                let all = call_map.entry(caller.clone()).or_insert(Vec::new());
+                all.append(&mut callees.clone());
+            }
+
+            let lib_map = lib.specialization_tracker.explicit_type_map.borrow();
+            for (enclosing_func, explicit_types) in lib_map.iter() {
+                let all = explicit_type_map
+                    .entry(enclosing_func.clone())
+                    .or_insert(Vec::new());
+                all.append(&mut explicit_types.clone());
+            }
+        }
 
         let mut prop = SpecializationPropagator {
-            lib,
+            libs,
             call_map,
             explicit_type_map,
             visited: HashSet::new(),
@@ -125,55 +139,16 @@ impl<'a> SpecializationPropagator<'a> {
         };
         prop.go();
 
-        let map = std::mem::replace(&mut prop.map, FinalSpecializationMap::new());
-
-        trace!(target: "spec_propagate", "{}", lib.symbols);
-        trace!(target: "spec_propagate", "{}", lib.dependencies[0].symbols);
-
-        map
-    }
-
-    pub fn flattened_call_map(
-        lib: &Lib,
-        call_map: &mut HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
-    ) {
-        let lib_map = lib.specialization_tracker.call_map.borrow();
-        for (caller, callees) in lib_map.iter() {
-            let all = call_map.entry(caller.clone()).or_insert(Vec::new());
-            all.append(&mut callees.clone());
-        }
-        for lib in &lib.dependencies {
-            SpecializationPropagator::flattened_call_map(lib, call_map);
-        }
-    }
-
-    pub fn flattened_explicit_type_map(
-        lib: &Lib,
-        explicit_type_map: &mut HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>,
-    ) {
-        let lib_map = lib.specialization_tracker.explicit_type_map.borrow();
-        for (enclosing_func, explicit_types) in lib_map.iter() {
-            let all = explicit_type_map
-                .entry(enclosing_func.clone())
-                .or_insert(Vec::new());
-            all.append(&mut explicit_types.clone());
-        }
-        for lib in &lib.dependencies {
-            SpecializationPropagator::flattened_explicit_type_map(lib, explicit_type_map);
-        }
+        prop.map
     }
 
     pub fn go(&mut self) {
         let main_symbol = Symbol::main_symbol();
-        self.propagate(&main_symbol, &GenericSpecialization::empty());
+        self.propagate_through_function(&main_symbol, &GenericSpecialization::empty());
     }
 
-    fn propagate(&mut self, cur: &Symbol, current_spec: &GenericSpecialization) {
-        let metadata = self.lib.function_metadata(cur);
-        let func_id = metadata
-            .as_ref()
-            .map(|m| m.function_name(self.lib, current_spec))
-            .unwrap_or(cur.mangled());
+    fn propagate_through_function(&mut self, cur: &Symbol, current_spec: &GenericSpecialization) {
+        let func_id = cur.specialized(current_spec);
         if self.visited.contains(&func_id) {
             return;
         }
@@ -200,7 +175,7 @@ impl<'a> SpecializationPropagator<'a> {
             let calls = calls.clone();
             for (callee_function_symbol, call_spec) in calls {
                 let call_spec = call_spec.resolve_generics_using(current_spec);
-                self.propagate(&callee_function_symbol, &call_spec);
+                self.propagate_through_function(&callee_function_symbol, &call_spec);
             }
         }
 
@@ -220,8 +195,7 @@ impl<'a> SpecializationPropagator<'a> {
     }
 
     fn propagate_through_type(&mut self, cur: &Symbol, current_spec: &GenericSpecialization) {
-        let metadata = self.lib.type_metadata(cur).unwrap();
-        let type_id = metadata.type_name(current_spec);
+        let type_id = cur.specialized(current_spec);
 
         if self.visited.insert(type_id) == false {
             return;
@@ -231,7 +205,7 @@ impl<'a> SpecializationPropagator<'a> {
 
         self.map.add_spec(cur.clone(), current_spec.clone());
 
-        let type_metadata = self.lib.type_metadata(cur).unwrap().clone();
+        let type_metadata = self.type_metadata(cur).clone();
         for field_type in &type_metadata.field_types {
             if let NodeType::Instance(target, field_spec) = field_type {
                 let field_spec = field_spec.resolve_generics_using(&current_spec);
@@ -240,5 +214,14 @@ impl<'a> SpecializationPropagator<'a> {
         }
 
         trace!(target: "spec_propagate", "Finished function {}", cur);
+    }
+
+    fn type_metadata(&self, symbol: &Symbol) -> &TypeMetadata {
+        for lib in self.libs {
+            if let Some(metadata) = lib.symbols.get_type_metadata(symbol) {
+                return metadata;
+            }
+        }
+        panic!("Propagating through undefined type {}", symbol)
     }
 }

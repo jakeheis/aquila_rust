@@ -1,16 +1,23 @@
 use crate::library::*;
+use crate::analysis::SpecializationTracker;
 
 #[derive(Debug)]
 pub struct IRProgram {
+    pub name: String,
     pub structures: Vec<IRStructure>,
     pub functions: Vec<IRFunction>,
+    pub symbols: SymbolTable,
+    pub specialization_tracker: SpecializationTracker,
 }
 
 impl IRProgram {
     pub fn new() -> Self {
         IRProgram {
+            name: String::new(),
             structures: Vec::new(),
             functions: Vec::new(),
+            symbols: SymbolTable::new(),
+            specialization_tracker: SpecializationTracker::new(),
         }
     }
 
@@ -122,16 +129,16 @@ impl IRExpr {
         }
     }
 
-    pub fn call_generic(func: &str, spec: GenericSpecialization, args: Vec<IRExpr>, ret_type: NodeType) -> Self {
+    pub fn call_generic(func: Symbol, spec: GenericSpecialization, args: Vec<IRExpr>, ret_type: NodeType) -> Self {
         IRExpr {
-            kind: IRExprKind::Call(String::from(func), spec, args),
+            kind: IRExprKind::Call(func.clone(), spec, args),
             expr_type: ret_type,
         }
     }
 
     pub fn call_nongenric(func: &str, args: Vec<IRExpr>, ret_type: NodeType) -> Self {
         IRExpr {
-            kind: IRExprKind::Call(String::from(func), GenericSpecialization::empty(), args),
+            kind: IRExprKind::Call(Symbol::root(func), GenericSpecialization::empty(), args),
             expr_type: ret_type,
         }
     }
@@ -192,7 +199,7 @@ pub enum IRUnaryOperator {
 pub enum IRExprKind {
     FieldAccess(Box<IRExpr>, String),
     DerefFieldAccess(Box<IRExpr>, String),
-    Call(String, GenericSpecialization, Vec<IRExpr>),
+    Call(Symbol, GenericSpecialization, Vec<IRExpr>),
     Array(Vec<IRExpr>),
     Subscript(Box<IRExpr>, Box<IRExpr>),
     Binary(Box<IRExpr>, IRBinaryOperator, Box<IRExpr>),

@@ -17,17 +17,15 @@ use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
 
-pub fn generate(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {
-    builtins::record_implicit_calls(&mut lib);
-    
-    let (mut lib, ir) = gen_ir(lib);
+pub fn generate(lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {    
+    let ir_libs = compile(lib);
     // ir.dump();
 
-    let spec_map = SpecializationPropagator::propogate(&mut lib);
+    let spec_map = SpecializationPropagator::propagate(&ir_libs);
 
     fs::create_dir_all("build").unwrap();
     let file = File::create("build/main.c").unwrap();
-    let code_writer = codewriter::CodeWriter::new(ir, file, spec_map);
+    let code_writer = codewriter::CodeWriter::new(ir_libs, file, spec_map);
     code_writer.write();
 
     let status = Command::new("/usr/local/opt/llvm/bin/clang")
@@ -52,21 +50,6 @@ pub fn generate(mut lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static
     }
 }
 
-fn gen_ir(lib: Lib) -> (Lib, IRProgram) {
-    let lib = Rc::new(lib);
-    let mut program = IRGen::new(Rc::clone(&lib)).generate();
-    let mut lib = Rc::try_unwrap(lib).ok().unwrap();
-
-    let deps = std::mem::replace(&mut lib.dependencies, Vec::new());
-    let mut restored_deps: Vec<Lib> = Vec::new();
-
-    for dep in deps {
-        let (dep, mut dep_program) = gen_ir(dep);
-        program.structures.append(&mut dep_program.structures);
-        program.functions.append(&mut dep_program.functions);
-        restored_deps.push(dep);
-    }
-    std::mem::replace(&mut lib.dependencies, restored_deps);
-
-    (lib, program)
+pub fn compile(lib: Lib) -> Vec<IRProgram> {
+    IRGen::new(lib).generate()
 }

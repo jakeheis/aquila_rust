@@ -4,6 +4,7 @@ use crate::lexing::*;
 use crate::parsing::*;
 use crate::source;
 use crate::type_checker::*;
+use crate::codegen::{IRProgram, self};
 use log::trace;
 use std::rc::Rc;
 
@@ -25,7 +26,7 @@ pub struct Lib {
     pub conformance_decls: Vec<ConformanceDecl>,
     pub main: Vec<Stmt>,
     pub symbols: SymbolTable,
-    pub dependencies: Vec<Lib>,
+    pub dependencies: Vec<IRProgram>,
     pub specialization_tracker: SpecializationTracker,
 }
 
@@ -68,7 +69,7 @@ impl Lib {
         reporter: Rc<dyn Reporter>,
     ) -> Result<Lib, &'static str> {
         let dependencies = if link_stdlib {
-            vec![Lib::stdlib(Rc::clone(&reporter))]
+            Lib::stdlib(Rc::clone(&reporter)).compile()
         } else {
             vec![]
         };
@@ -104,56 +105,60 @@ impl Lib {
         Ok(lib)
     }
 
+    pub fn compile(self) -> Vec<IRProgram> {
+        codegen::compile(self)
+    }
+
     fn deep_search<'a, F, U>(&'a self, search: &F) -> Option<&U>
     where
-        F: Fn(&'a Lib) -> Option<&'a U>,
+        F: Fn(&str, &'a SymbolTable) -> Option<&'a U>,
     {
-        if let Some(found) = search(self) {
+        if let Some(found) = search(&self.name, &self.symbols) {
             Some(found)
         } else {
             for dep in &self.dependencies {
-                if let Some(found) = dep.deep_search(search) {
+                if let Some(found) = search(&dep.name, &dep.symbols) {
                     return Some(found);
                 }
             }
             None
         }
     }
-
+    
     pub fn type_metadata(&self, symbol: &Symbol) -> Option<&TypeMetadata> {
-        self.deep_search(&|lib| lib.symbols.get_type_metadata(symbol))
+        self.deep_search(&|_name, sym| sym.get_type_metadata(symbol))
     }
 
     pub fn type_metadata_named(&self, name: &str) -> Option<&TypeMetadata> {
-        self.deep_search(&|lib| {
-            let type_symbol = Symbol::new_str(&Symbol::lib_root(lib), name);
-            lib.symbols.get_type_metadata(&type_symbol)
+        self.deep_search(&|lib_name, symbols| {
+            let type_symbol = Symbol::new_str(&Symbol::root(lib_name), name);
+            symbols.get_type_metadata(&type_symbol)
         })
     }
 
     pub fn top_level_function_named(&self, name: &str) -> Option<&FunctionMetadata> {
-        self.deep_search(&|lib: &Lib| {
-            let func_symbol = Symbol::new_str(&Symbol::lib_root(lib), name);
-            lib.symbols.get_func_metadata(&func_symbol)
+        self.deep_search(&|lib_name, symbols| {
+            let func_symbol = Symbol::new_str(&Symbol::root(lib_name), name);
+            symbols.get_func_metadata(&func_symbol)
         })
     }
 
     pub fn function_metadata(&self, symbol: &Symbol) -> Option<&FunctionMetadata> {
-        self.deep_search(&|l| l.symbols.get_func_metadata(symbol))
+        self.deep_search(&|_name, symbols| symbols.get_func_metadata(symbol))
     }
 
     pub fn trait_metadata(&self, name: &str) -> Option<&TraitMetadata> {
-        self.deep_search(&|lib| {
-            let trait_symbol = Symbol::new_str(&Symbol::lib_root(lib), name);
-            lib.symbols.get_trait_metadata(&trait_symbol)
+        self.deep_search(&|lib_name, symbols| {
+            let trait_symbol = Symbol::new_str(&Symbol::root(lib_name), name);
+            symbols.get_trait_metadata(&trait_symbol)
         })
     }
 
     pub fn trait_metadata_symbol(&self, name: &Symbol) -> Option<&TraitMetadata> {
-        self.deep_search(&|l| l.symbols.get_trait_metadata(name))
+        self.deep_search(&|_name, symbols| symbols.get_trait_metadata(name))
     }
 
     pub fn symbol_span(&self, symbol: &Symbol) -> Option<&Span> {
-        self.deep_search(&|l| l.symbols.get_span(symbol))
+        self.deep_search(&|_name, symbols| symbols.get_span(symbol))
     }
 }

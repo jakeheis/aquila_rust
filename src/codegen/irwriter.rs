@@ -4,8 +4,9 @@ use crate::source::Span;
 use std::rc::Rc;
 
 pub struct IRWriter {
-    lib: Rc<Lib>,
-    pub program: IRProgram,
+    pub lib: Rc<Lib>,
+    pub structures: Vec<IRStructure>,
+    pub functions: Vec<IRFunction>,
     blocks: Vec<Vec<IRStatement>>,
     temp_count: usize,
 }
@@ -14,7 +15,8 @@ impl IRWriter {
     pub fn new(lib: Rc<Lib>) -> Self {
         IRWriter {
             lib,
-            program: IRProgram::new(),
+            structures: Vec::new(),
+            functions: Vec::new(),
             blocks: Vec::new(),
             temp_count: 0,
         }
@@ -38,7 +40,7 @@ impl IRWriter {
             name: type_metadata.symbol.clone(), 
             fields, 
         };
-        self.program.structures.push(structure);
+        self.structures.push(structure);
     }
 
     pub fn start_block(&mut self) {
@@ -52,7 +54,7 @@ impl IRWriter {
             return_type: NodeType::Int,
             statements: self.blocks.pop().unwrap(),
         };
-        self.program.functions.push(main);
+        self.functions.push(main);
     }
 
     pub fn end_decl_func(
@@ -88,7 +90,7 @@ impl IRWriter {
             statements: self.blocks.pop().unwrap(),
         };
 
-        self.program.functions.push(function);
+        self.functions.push(function);
     }
 
     pub fn end_if_block(&mut self, condition: IRExpr) {

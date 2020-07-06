@@ -35,27 +35,6 @@ impl TypeMetadata {
         TypeMetadata::new(Symbol::new_str(owner, name), false)
     }
 
-    pub fn type_name(&self, specialization: &GenericSpecialization) -> String {
-        let specialization = self
-            .generics
-            .iter()
-            .map(|g| {
-                specialization
-                    .type_for(g)
-                    .expect(&format!(
-                        "Expected type for generic {}\n{}",
-                        g, specialization
-                    ))
-                    .symbolic_form()
-            })
-            .collect::<Vec<_>>();
-        if specialization.is_empty() {
-            self.symbol.mangled()
-        } else {
-            self.symbol.mangled() + "__" + &specialization.join("__")
-        }
-    }
-
     pub fn field_named(&self, name: &str) -> Option<(Symbol, &NodeType, bool)> {
         let possible_symbol = Symbol::new_str(&self.symbol, name);
         if let Some(index) = self
@@ -195,34 +174,6 @@ impl FunctionMetadata {
             return_type: NodeType::Int,
             is_public: false,
             include_caller: false,
-        }
-    }
-
-    pub fn function_name(&self, lib: &Lib, specialization: &GenericSpecialization) -> String {
-        let func_specialization = self
-            .generics
-            .iter()
-            .map(|g| specialization.type_for(g).unwrap().symbolic_form())
-            .collect::<Vec<_>>()
-            .join("__");
-
-        match &self.kind {
-            FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
-                let type_meta = lib.type_metadata(&owner).unwrap();
-                format!(
-                    "{}__{}__{}",
-                    type_meta.type_name(specialization),
-                    self.symbol.last_component(),
-                    func_specialization
-                )
-            }
-            FunctionKind::TopLevel => {
-                if self.symbol.is_main() {
-                    String::from("main")
-                } else {
-                    self.symbol.mangled() + &func_specialization
-                }
-            }
         }
     }
 
