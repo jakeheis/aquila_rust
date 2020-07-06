@@ -5,14 +5,14 @@ mod irgen;
 mod irwriter;
 
 pub use ir::{
-    IRBinaryOperator, IRExpr, IRExprKind, IRFunction, IRProgram, IRStatement, IRStructure,
+    IRBinaryOperator, IRExpr, IRExprKind, IRFunction, IRStatement, IRStructure,
     IRUnaryOperator,
 };
 pub use irgen::IRGen;
 
 use crate::analysis::SpecializationPropagator;
 use crate::diagnostic::*;
-use crate::library::Lib;
+use crate::library::{Lib, Module};
 use std::fs::{self, File};
 use std::process::Command;
 use std::rc::Rc;
@@ -50,6 +50,6 @@ pub fn generate(lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str
     }
 }
 
-pub fn compile(lib: Lib) -> Vec<IRProgram> {
+pub fn compile(lib: Lib) -> Vec<Module> {
     IRGen::new(lib).generate()
 }

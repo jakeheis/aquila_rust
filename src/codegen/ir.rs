@@ -1,45 +1,4 @@
-use crate::library::*;
-use crate::analysis::SpecializationTracker;
-
-#[derive(Debug)]
-pub struct IRProgram {
-    pub name: String,
-    pub structures: Vec<IRStructure>,
-    pub functions: Vec<IRFunction>,
-    pub symbols: SymbolTable,
-    pub specialization_tracker: SpecializationTracker,
-}
-
-impl IRProgram {
-    pub fn new() -> Self {
-        IRProgram {
-            name: String::new(),
-            structures: Vec::new(),
-            functions: Vec::new(),
-            symbols: SymbolTable::new(),
-            specialization_tracker: SpecializationTracker::new(),
-        }
-    }
-
-    pub fn dump(&self) {
-        println!("Structures:");
-        for structure in &self.structures {
-            println!("  {}", structure.name);
-            for field in &structure.fields {
-                println!("    {}: {}", field.name, field.var_type);
-            }
-        }
-
-        println!("Functions:");
-        for func in &self.functions {
-            println!("  {}", func.name);
-            for param in &func.parameters {
-                println!("    param: {}: {}", param.name, param.var_type);
-            }
-            println!("    ret: {}", func.return_type);
-        }
-    }
-}
+use crate::library::{Symbol, NodeType, GenericSpecialization};
 
 #[derive(Debug)]
 pub struct IRStructure {

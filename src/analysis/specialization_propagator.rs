@@ -1,68 +1,6 @@
 use crate::library::*;
-use crate::codegen::IRProgram;
 use log::trace;
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-
-type SpecializationTrackerMap = HashMap<Symbol, Vec<(Symbol, GenericSpecialization)>>;
-
-#[derive(Clone, Debug)]
-pub struct SpecializationTracker {
-    call_map: RefCell<SpecializationTrackerMap>,
-    explicit_type_map: RefCell<SpecializationTrackerMap>,
-}
-
-impl SpecializationTracker {
-    pub fn new() -> Self {
-        SpecializationTracker {
-            call_map: RefCell::new(HashMap::new()),
-            explicit_type_map: RefCell::new(HashMap::new()),
-        }
-    }
-
-    pub fn add_call(&self, from: Symbol, to: Symbol, with: GenericSpecialization) {
-        self.call_map
-            .borrow_mut()
-            .entry(from)
-            .or_insert(Vec::new())
-            .push((to, with));
-    }
-
-    pub fn add_required_type_spec(
-        &self,
-        in_func: Symbol,
-        type_symbol: Symbol,
-        spec: GenericSpecialization,
-    ) {
-        self.explicit_type_map
-            .borrow_mut()
-            .entry(in_func)
-            .or_insert(Vec::new())
-            .push((type_symbol, spec));
-    }
-}
-
-impl std::fmt::Display for SpecializationTracker {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let call_map = self.call_map.borrow();
-        for (caller, calls) in call_map.iter() {
-            write!(f, "\nCalls for {}:", caller.id)?;
-            for (call, spec) in calls {
-                write!(f, "\n  {} -- {}", call, spec)?;
-            }
-        }
-
-        let explicit_type_specializations = self.explicit_type_map.borrow();
-        for (caller, explicit_types) in explicit_type_specializations.iter() {
-            write!(f, "\nExplicit types for {}:", caller.id)?;
-            for (et, spec) in explicit_types {
-                write!(f, "\n  {} -- {}", et, spec)?;
-            }
-        }
-
-        Ok(())
-    }
-}
 
 pub struct FinalSpecializationMap {
     map: HashMap<Symbol, HashSet<GenericSpecialization>>,
@@ -98,7 +36,7 @@ impl FinalSpecializationMap {
  }
 
 pub struct SpecializationPropagator<'a> {
-    libs: &'a [IRProgram],
+    libs: &'a [Module],
     call_map: SpecializationTrackerMap,
     explicit_type_map: SpecializationTrackerMap,
     visited: HashSet<String>,
@@ -106,7 +44,7 @@ pub struct SpecializationPropagator<'a> {
 }
 
 impl<'a> SpecializationPropagator<'a> {
-    pub fn propagate(libs: &[IRProgram]) -> FinalSpecializationMap {
+    pub fn propagate(libs: &[Module]) -> FinalSpecializationMap {
         for lib in libs {
             trace!(target: "spec_propagate", "{}", lib.specialization_tracker);
         }

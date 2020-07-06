@@ -1,12 +1,12 @@
 use super::ir::*;
-use crate::library::{NodeType, GenericSpecialization};
+use crate::library::{NodeType, GenericSpecialization, Module};
 use crate::analysis::FinalSpecializationMap;
 use std::cell::{Cell, RefCell};
 use std::fs::File;
 use std::io::Write;
 
 pub struct CodeWriter {
-    programs: Vec<IRProgram>,
+    programs: Vec<Module>,
     file: RefCell<File>,
     indent: Cell<u32>,
     temp_count: Cell<u32>,
@@ -14,7 +14,7 @@ pub struct CodeWriter {
 }
 
 impl CodeWriter {
-    pub fn new(programs: Vec<IRProgram>, file: File, spec_map: FinalSpecializationMap) -> Self {
+    pub fn new(programs: Vec<Module>, file: File, spec_map: FinalSpecializationMap) -> Self {
         CodeWriter {
             programs,
             file: RefCell::new(file),

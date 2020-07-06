@@ -24,7 +24,7 @@ impl IRGen {
         }
     }
 
-    pub fn generate(mut self) -> Vec<IRProgram> {
+    pub fn generate(mut self) -> Vec<Module> {
         let lib = Rc::clone(&self.lib);
 
         for t in &lib.type_decls {
@@ -50,17 +50,17 @@ impl IRGen {
         std::mem::drop(lib_copy);
 
         let lib = Rc::try_unwrap(self.lib).ok().unwrap();
-        let (name, symbols, tracker, mut libs) = (lib.name, lib.symbols, lib.specialization_tracker, lib.dependencies);
+        let (name, symbols, tracker, mut modules) = (lib.name, lib.symbols, lib.specialization_tracker, lib.dependencies);
 
-        let new = IRProgram {
+        let new = Module {
             name,
             structures: structs,
             functions: funcs,
             symbols,
             specialization_tracker: tracker
         };
-        libs.push(new);
-        libs
+        modules.push(new);
+        modules
     }
 
     fn gen_stmts(&mut self, stmts: &[Stmt]) {
