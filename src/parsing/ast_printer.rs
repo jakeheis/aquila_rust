@@ -1,6 +1,7 @@
 use super::*;
 use crate::lexing::Token;
 use crate::source::*;
+use crate::library::Symbol;
 use log::trace;
 
 enum ASTPrinterMode {
@@ -87,14 +88,11 @@ impl ASTPrinter {
     fn write_explicit_type(&mut self, explicit_type: &ExplicitType) {
         match &explicit_type.kind {
             ExplicitTypeKind::Simple(token) => {
-                let symbol = token
-                    .get_symbol()
-                    .map(|s| s.unique_id())
-                    .unwrap_or(String::from("<none>"));
+                let symbol = token.get_symbol().unwrap_or(Symbol::lib_root("<none>"));
                 self.write_ln(&format!(
                     "ExplicitType(name: {}, symbol: {})",
                     token.span().lexeme(),
-                    symbol
+                    symbol.unique_id()
                 ));
                 self.indent(|visitor| {
                     for spec in &token.specialization {
@@ -120,15 +118,11 @@ impl ASTPrinter {
     }
 
     fn visit_type_decl(&mut self, decl: &TypeDecl) {
-        let symbol = decl
-            .name
-            .get_symbol()
-            .map(|s| s.unique_id())
-            .unwrap_or(String::from("<none>"));
+        let symbol = decl.name.get_symbol().unwrap_or(Symbol::lib_root("<none>"));
         self.write_ln(&format!(
             "TypeDecl(name: {}, symbol: {}, pub: {})",
             decl.name.span().lexeme(),
-            symbol,
+            symbol.unique_id(),
             decl.is_public
         ));
         self.indent(|visitor| {
@@ -154,18 +148,14 @@ impl ASTPrinter {
     }
 
     pub fn visit_function_decl(&mut self, decl: &FunctionDecl) {
-        let symbol = decl
-            .name
-            .get_symbol()
-            .map(|s| s.unique_id())
-            .unwrap_or(String::from("<none>"));
+        let symbol = decl.name.get_symbol().unwrap_or(Symbol::lib_root("<none>"));
         let generics: Vec<_> = decl.generics.iter().map(|g| g.span().lexeme()).collect();
         let generics = format!("<{}>", generics.join(","));
         self.write_ln(&format!(
             "FunctionDecl(name: {}, generics: {}, symbol: {}, meta: {}, pub: {}, include_caller: {})",
             decl.name.span().lexeme(),
             generics,
-            symbol,
+            symbol.unique_id(),
             decl.is_meta,
             decl.is_public,
             decl.include_caller,
@@ -226,15 +216,11 @@ impl StmtVisitor for ASTPrinter {
     type StmtResult = ();
 
     fn visit_local_variable_decl(&mut self, decl: &LocalVariableDecl) {
-        let symbol = decl
-            .name
-            .get_symbol()
-            .map(|s| s.unique_id())
-            .unwrap_or(String::from("<none>"));
+        let symbol = decl.name.get_symbol().unwrap_or(Symbol::lib_root("<none>"));
         self.write_ln(&format!(
             "LocalVariableDecl(name: {}, symbol: {})",
             decl.name.span().lexeme(),
-            symbol,
+            symbol.unique_id(),
         ));
         self.indent(|visitor| {
             if let Some(e) = decl.explicit_type.as_ref() {
@@ -340,15 +326,11 @@ impl ExprVisitor for ASTPrinter {
     }
 
     fn visit_function_call_expr(&mut self, _expr: &Expr, call: &FunctionCall) -> Self::ExprResult {
-        let symbol = call
-            .name
-            .get_symbol()
-            .map(|s| s.unique_id())
-            .unwrap_or(String::from("<none>"));
+        let symbol = call.name.get_symbol().unwrap_or(Symbol::lib_root("<none>"));
         self.write_ln(&format!(
             "FunctionCall(name: {}, symbol: {})",
             call.name.token.lexeme(),
-            symbol
+            symbol.unique_id()
         ));
         self.indent(|visitor| {
             if let Some(target) = &call.target {
@@ -374,14 +356,11 @@ impl ExprVisitor for ASTPrinter {
     }
 
     fn visit_field_expr(&mut self, _expr: &Expr, target: &Expr, field: &SpecializedToken) {
-        let symbol = field
-            .get_symbol()
-            .map(|s| s.unique_id())
-            .unwrap_or(String::from("<none>"));
+        let symbol = field.get_symbol().unwrap_or(Symbol::lib_root("<none>"));
         self.write_ln(&format!(
             "Field(name: {}, symbol: {})",
             field.span().lexeme(),
-            symbol
+            symbol.unique_id()
         ));
         self.indent(|visitor| {
             target.accept(visitor);
@@ -393,14 +372,11 @@ impl ExprVisitor for ASTPrinter {
     }
 
     fn visit_variable_expr(&mut self, _expr: &Expr, name: &SpecializedToken) {
-        let symbol = name
-            .get_symbol()
-            .map(|s| s.unique_id())
-            .unwrap_or(String::from("<none>"));
+        let symbol = name.get_symbol().unwrap_or(Symbol::lib_root("<none>"));
         self.write_ln(&format!(
             "Variable(name: {}, symbol: {})",
             name.span().lexeme(),
-            symbol
+            symbol.unique_id()
         ))
     }
 

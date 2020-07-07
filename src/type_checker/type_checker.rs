@@ -235,7 +235,7 @@ impl TypeChecker {
         let trait_metadata = self.lib.trait_metadata(decl.trait_name.lexeme()).unwrap();
         for requirement in &trait_metadata.function_requirements {
             let requirement_metadata = self.lib.function_metadata(&requirement).unwrap();
-            let impl_symbol = type_metadata.symbol.child(&requirement.name);
+            let impl_symbol = type_metadata.symbol.child(requirement.name());
             let impl_metadata = self.lib.function_metadata(&impl_symbol);
             if let Some(impl_metadata) = impl_metadata {
                 if !impl_metadata
@@ -244,14 +244,14 @@ impl TypeChecker {
                 {
                     let message = format!(
                         "Type implements requirement '{}' but with wrong signature",
-                        requirement.name
+                        requirement.name()
                     );
                     self.report_error(Diagnostic::error(&decl.target, &message));
                 }
             } else {
                 let message = format!(
                     "Type doesn't implement requirement '{}'",
-                    requirement.name
+                    requirement.name()
                 );
                 self.report_error(Diagnostic::error(&decl.target, &message));
             }

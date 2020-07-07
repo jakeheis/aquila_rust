@@ -68,7 +68,7 @@ mod check {
     }
 
     pub fn symbol_accessible(lib: &Lib, symbol: &Symbol) -> bool {
-        symbol.lib == lib.name
+        symbol.lib() == lib.name
     }
 }
 

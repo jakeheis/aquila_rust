@@ -104,7 +104,7 @@ impl std::fmt::Display for TypeMetadata {
             let gens = self
                 .generics
                 .iter()
-                .map(|symbol| format!("{}", symbol.name))
+                .map(|symbol| format!("{}", symbol.name()))
                 .collect::<Vec<_>>()
                 .join(",");
             writeln!(f, "  generics: {}", gens)?;
@@ -193,12 +193,12 @@ impl fmt::Display for FunctionMetadata {
             FunctionKind::Method(owner) => format!(
                 "Method(object: {}, method: {}",
                 owner.mangled(),
-                self.symbol.name
+                self.symbol.name()
             ),
             FunctionKind::MetaMethod(owner) => format!(
                 "MetaMethod(object: {}, meta_method: {}",
                 owner.mangled(),
-                self.symbol.name
+                self.symbol.name()
             ),
         };
         writeln!(f, "{}, public: {})", line, self.is_public)?;
@@ -206,7 +206,7 @@ impl fmt::Display for FunctionMetadata {
         let generics: Vec<&str> = self
             .generics
             .iter()
-            .map(|g| g.name.as_str())
+            .map(|g| g.name())
             .collect();
         let generic_porition = if generics.is_empty() {
             String::new()
@@ -345,7 +345,7 @@ impl GenericSpecialization {
             .map(|symbol| {
                 format!(
                     "{}={}",
-                    symbol.name,
+                    symbol.name(),
                     self.map.get(symbol).unwrap()
                 )
             })

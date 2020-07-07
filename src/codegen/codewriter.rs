@@ -174,7 +174,7 @@ impl CodeWriter {
                     if key.directly_owns(&function) {
                         // TODO: doesn't support meta requirements
                         if let NodeType::Instance(instance_sym, instance_spec) = value {
-                            function_name = instance_sym.child(&function.name).specialized(instance_spec);
+                            function_name = instance_sym.child(function.name()).specialized(instance_spec);
                             break;
                         }
                     }

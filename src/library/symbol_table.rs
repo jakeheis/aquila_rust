@@ -5,17 +5,13 @@ use std::collections::HashMap;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct Symbol {
-    pub lib: String,
-    pub owner: Vec<String>,
-    pub name: String,
+    id: String,
 }
 
 impl Symbol {
     pub fn lib_root(name: &str) -> Self {
         Symbol {
-            lib: name.to_owned(),
-            owner: Vec::new(),
-            name: String::new(),
+            id: name.to_owned(),
         }
     }
 
@@ -24,32 +20,19 @@ impl Symbol {
     }
 
     pub fn child(&self, name: &str) -> Self {
-        let mut owner = self.owner.clone();
-        if !self.name.is_empty() {
-            owner.push(self.name.clone());
-        }
         Symbol {
-            lib: self.lib.clone(),
-            owner: owner,
-            name: name.to_owned(),
+            id: self.id.clone() + "$" + name
         }
     }
 
     pub fn owner_symbol(&self) -> Option<Self> {
-        if self.owner.is_empty() {
-            if self.name.is_empty() {
-                None
-            } else {
-                Some(Symbol::lib_root(&self.lib))
-            }
-        } else {
-            let mut owner = self.owner.clone();
-            let name = owner.pop().unwrap();
+        let mut components = self.id.split("$").collect::<Vec<_>>();
+        if components.pop().is_some() {
             Some(Symbol {
-                lib: self.lib.clone(),
-                owner,
-                name
+                id: components.join("$")
             })
+        } else {
+            None
         }
     }
 
@@ -93,31 +76,20 @@ impl Symbol {
         self.child("write")
     }
 
-    pub fn form_str(&self, separator: &str) -> String {
-        let mut id = self.lib.clone();
-        for owner in &self.owner {
-            id = id + separator + &owner;
-        }
-        if !self.name.is_empty() {
-            id = id + separator + &self.name;
-        }
-        id
-    }
-
-    pub fn unique_id(&self) -> String {
-        self.form_str("$")
+    pub fn unique_id(&self) -> &str {
+        &self.id
     }
 
     pub fn mangled(&self) -> String {
-        self.form_str("__")
+        self.id.replace("$", "__")
     }
 
     pub fn is_meta(&self) -> bool {
-        &self.name == "Meta"
+        self.name() == "Meta"
     }
 
     pub fn is_self(&self) -> bool {
-        &self.name == "self"
+        self.name() == "self"
     }
 
     pub fn directly_owns(&self, child: &Symbol) -> bool {
@@ -126,6 +98,14 @@ impl Symbol {
         } else {
             false
         }
+    }
+
+    pub fn lib(&self) -> &str {
+        self.id.split("$").next().unwrap()
+    }
+
+    pub fn name(&self) -> &str {
+        self.id.rsplit("$").next().unwrap()
     }
 
     pub fn specialized(&self, spec: &GenericSpecialization) -> String {

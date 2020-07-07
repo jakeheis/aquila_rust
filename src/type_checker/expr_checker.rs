@@ -336,7 +336,7 @@ impl ExprVisitor for ExprChecker {
                         &Span::join(target, field.span()),
                         &format!(
                             "Type '{}' does not has field '{}'",
-                            type_symbol.name,
+                            type_symbol.name(),
                             field.span().lexeme()
                         ),
                     ))

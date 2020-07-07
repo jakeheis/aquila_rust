@@ -9,7 +9,7 @@ struct Builtin {
 
 impl Builtin {
     fn named(symbol: &Symbol) -> Option<Builtin> {
-        match symbol.unique_id().as_str() {
+        match symbol.unique_id() {
             "stdlib$Memory$Meta$size" => Some(Builtin::size()),
             "stdlib$ptr_offset" => Some(Builtin::ptr_offset()),
             "stdlib$_read_line" => Some(Builtin::read_line()),

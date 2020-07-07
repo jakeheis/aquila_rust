@@ -10,6 +10,13 @@ print(*my_vec.get(1) * 2);
 my_vec.replace(0, 5);
 print(*my_vec.get(0));
 
+/// -> 5
+/// -> 4
+/// -> 7
+for num in my_vec {
+    print(*num);
+}
+
 /// -> 7
 print(my_vec.pop());
 /// -> 4

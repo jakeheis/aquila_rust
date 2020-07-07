@@ -437,7 +437,7 @@ impl ExprVisitor for IRGen {
 
         if builtins::is_direct_c_binding(&function_symbol) {
             return IRExpr::call_extern(
-                &function_symbol.name,
+                function_symbol.name(),
                 arg_exprs,
                 self.get_expr_type(expr),
             );
