@@ -31,6 +31,10 @@ type Adder[T] {
     }
 }
 
+let adder_of_vecs = Adder[Vec[int]](Vec[int].new(), Vec[int].new());
+adder_of_vecs.lhs.insert(4);
+adder_of_vecs.rhs.insert(2);
+
 def hello() {
   let z = Vec[int].new();
   if true {

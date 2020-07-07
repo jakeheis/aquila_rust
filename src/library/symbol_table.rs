@@ -43,6 +43,10 @@ impl Symbol {
         Symbol::new_str(parent, "init")
     }
 
+    pub fn deinit_symbol(parent: &Symbol) -> Self {
+        Symbol::new_str(parent, "deinit")
+    }
+
     pub fn self_symbol(parent: &Symbol) -> Self {
         Symbol::new_str(parent, "self")
     }
@@ -76,6 +80,11 @@ impl Symbol {
         let name = other.id.rsplit("$").nth(0).unwrap();
         let expected = self.id.clone() + "$" + &name;
         other.id == expected
+    }
+
+    pub fn is_ancestor_of(&self, other: &Symbol) -> bool {
+        let expected = self.id.clone() + "$";
+        other.id.starts_with(&expected)
     }
 
     pub fn lib_component(&self) -> &str {

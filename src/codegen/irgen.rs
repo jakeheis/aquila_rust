@@ -112,26 +112,8 @@ impl IRGen {
 
         self.writer.declare_struct(&type_metadata);
 
-        let meta_symbol = Symbol::meta_symbol(&type_symbol);
-        let init_symbol = Symbol::init_symbol(&meta_symbol);
-        let init_metadata = self.lib.function_metadata(&init_symbol).unwrap();
-
-        let new_item = IRVariable::new("new_item", init_metadata.return_type.clone());
-
-        self.writer.start_block();
-        self.writer.declare_var(&new_item);
-
-        for (field, field_type) in type_metadata
-            .field_symbols
-            .iter()
-            .zip(&type_metadata.field_types)
-        {
-            let field_expr = IRExpr::field(&new_item, &field.mangled(), field_type.clone());
-            let param = IRVariable::new_sym(&field, field_type.clone());
-            self.writer.assign(field_expr, IRExpr::variable(&param));
-        }
-        self.writer.return_value(IRExpr::variable(&new_item));
-        self.writer.end_decl_func(&init_metadata);
+        builtins::write_type_init(&mut self.writer, &type_metadata);
+        builtins::write_type_deinit(&mut self.writer, &type_metadata, &self.lib.specialization_tracker);
 
         trace!("Writing methods for {}", type_symbol);
 

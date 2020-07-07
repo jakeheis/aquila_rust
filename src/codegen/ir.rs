@@ -88,6 +88,14 @@ impl IRExpr {
         }
     }
 
+    pub fn field_deref(var: &IRVariable, field: &str, field_type: NodeType) -> Self {
+        let var = IRExpr::variable(var);
+        IRExpr {
+            kind: IRExprKind::DerefFieldAccess(Box::new(var), String::from(field)),
+            expr_type: field_type,
+        }
+    }
+
     pub fn call_generic(
         func: Symbol,
         spec: GenericSpecialization,

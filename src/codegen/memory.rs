@@ -142,31 +142,28 @@ impl<'a> FreeWriter<'a> {
                 }
             }
             if let NodeType::Instance(sym, spec) = &var.var_type {
-                let metadata = self.get_type_metadata(sym);
-                if metadata.conforms_to(&Symbol::stdlib("Freeable")) {
-                    let free_sym = Symbol::new_str(sym, "free");
-                    let free = IRExpr::call_generic(
-                        free_sym.clone(),
-                        spec.clone(),
-                        vec![IRExpr::address_of(&var)],
-                        NodeType::Void,
-                    );
-                    let stmt = IRStatement::Execute(free);
-                    self.lines.insert(return_index, stmt);
+                let deinit_sym = Symbol::deinit_symbol(&sym);
+                let deinit = IRExpr::call_generic(
+                    deinit_sym.clone(),
+                    spec.clone(),
+                    vec![IRExpr::address_of(&var)],
+                    NodeType::Void,
+                );
+                let stmt = IRStatement::Execute(deinit);
+                self.lines.insert(return_index, stmt);
 
-                    self.tracker
-                        .add_call(self.function_sym.clone(), free_sym, spec.clone());
-                }
+                self.tracker
+                    .add_call(self.function_sym.clone(), deinit_sym, spec.clone());
             }
         }
     }
 
-    fn get_type_metadata(&self, symbol: &Symbol) -> &TypeMetadata {
-        for table in self.tables {
-            if let Some(metadata) = table.get_type_metadata(symbol) {
-                return metadata;
-            }
-        }
-        panic!()
-    }
+    // fn get_type_metadata(&self, symbol: &Symbol) -> &TypeMetadata {
+    //     for table in self.tables {
+    //         if let Some(metadata) = table.get_type_metadata(symbol) {
+    //             return metadata;
+    //         }
+    //     }
+    //     panic!()
+    // }
 }

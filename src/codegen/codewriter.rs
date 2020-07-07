@@ -1,6 +1,6 @@
 use super::ir::*;
 use crate::analysis::FinalSpecializationMap;
-use crate::library::{GenericSpecialization, Module, NodeType};
+use crate::library::{GenericSpecialization, Module, NodeType, Symbol};
 use std::cell::{Cell, RefCell};
 use std::fs::File;
 use std::io::Write;
@@ -168,12 +168,24 @@ impl CodeWriter {
             }
             IRExprKind::Call(function, spec, args) => {
                 let spec = spec.resolve_generics_using(enclosing_spec);
+                
+                let mut function_name = function.specialized(&spec);
+                for (key, value) in &enclosing_spec.map {
+                    if key.is_ancestor_of(&function) {
+                        let owner_comps = key.id.split("$").count();
+                        let function_comps: Vec<_> = function.id.split("$").skip(owner_comps).collect();
+                        if let NodeType::Instance(instance_sym, instance_spec) = value {
+                            function_name = Symbol::new_str(instance_sym, &function_comps.join("$")).specialized(instance_spec);
+                            break;
+                        }
+                    }
+                }
+
                 let args: Vec<_> = args
                     .iter()
                     .map(|a| self.form_expression(a, enclosing_spec))
                     .collect();
                 let args = args.join(",");
-                let function_name = function.specialized(&spec);
                 format!("{}({})", function_name, args)
             }
             IRExprKind::Binary(lhs, op, rhs) => {

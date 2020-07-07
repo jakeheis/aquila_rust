@@ -112,35 +112,38 @@ impl SymbolTableBuilder {
         type_metadata.meta_methods = self.build_functions(&decl.meta_methods);
 
         let init_symbol = Symbol::init_symbol(self.current_symbol());
-        if self.symbols.get_func_metadata(&init_symbol).is_none() {
-            let generic_types: Vec<_> = type_metadata
-                .generics
-                .iter()
-                .map(|symbol| NodeType::Instance(symbol.clone(), GenericSpecialization::empty()))
-                .collect();
-            let instance_type = NodeType::Instance(
-                type_symbol.clone(),
-                GenericSpecialization::new(&type_metadata.generics, generic_types),
-            );
-
-            type_metadata.meta_methods.push(init_symbol.clone());
-
-            self.insert_func_metadata(
-                init_symbol.clone(),
-                FunctionMetadata {
-                    symbol: init_symbol,
-                    kind: FunctionKind::MetaMethod(type_symbol.clone()),
-                    generics: Vec::new(),
-                    parameter_symbols: type_metadata.field_symbols.clone(),
-                    parameter_types: type_metadata.field_types.clone(),
-                    return_type: instance_type,
-                    is_public: !any_private_fields,
-                    include_caller: false,
-                },
-            )
-        }
+        type_metadata.meta_methods.push(init_symbol.clone());
+        self.insert_func_metadata(
+            init_symbol.clone(),
+            FunctionMetadata {
+                symbol: init_symbol,
+                kind: FunctionKind::MetaMethod(type_symbol.clone()),
+                generics: Vec::new(),
+                parameter_symbols: type_metadata.field_symbols.clone(),
+                parameter_types: type_metadata.field_types.clone(),
+                return_type: type_metadata.unspecialized_type(),
+                is_public: !any_private_fields,
+                include_caller: false,
+            },
+        );
 
         self.context.pop(); // Meta pop
+
+        let deinit_symbol = Symbol::deinit_symbol(self.current_symbol());
+        type_metadata.meta_methods.push(deinit_symbol.clone());
+        self.insert_func_metadata(
+            deinit_symbol.clone(),
+            FunctionMetadata {
+                symbol: deinit_symbol,
+                kind: FunctionKind::Method(type_symbol.clone()),
+                generics: Vec::new(),
+                parameter_symbols: Vec::new(),
+                parameter_types: Vec::new(),
+                return_type: NodeType::Void,
+                is_public: !any_private_fields,
+                include_caller: false,
+            },
+        );
 
         self.context.pop(); // Type pop
 
