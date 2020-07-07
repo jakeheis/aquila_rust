@@ -198,8 +198,8 @@ impl IRWriter {
         let message = format!("\\nFatal error: {}\\n\\n{}\\n", message, span.location(),);
 
         let arg = IRExpr::string_literal(&message);
-        self.expr(IRExpr::call_nongenric("printf", vec![arg], NodeType::Void));
-        self.expr(IRExpr::call_nongenric(
+        self.expr(IRExpr::call_extern("printf", vec![arg], NodeType::Void));
+        self.expr(IRExpr::call_extern(
             "exit",
             vec![IRExpr::int_literal("1")],
             NodeType::Void,

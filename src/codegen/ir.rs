@@ -108,9 +108,9 @@ impl IRExpr {
         }
     }
 
-    pub fn call_nongenric(func: &str, args: Vec<IRExpr>, ret_type: NodeType) -> Self {
+    pub fn call_extern(func: &str, args: Vec<IRExpr>, ret_type: NodeType) -> Self {
         IRExpr {
-            kind: IRExprKind::Call(Symbol::root(func), GenericSpecialization::empty(), args),
+            kind: IRExprKind::Call(Symbol::lib_root(func), GenericSpecialization::empty(), args),
             expr_type: ret_type,
         }
     }

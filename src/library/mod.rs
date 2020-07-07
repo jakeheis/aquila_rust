@@ -133,14 +133,14 @@ impl Lib {
 
     pub fn type_metadata_named(&self, name: &str) -> Option<&TypeMetadata> {
         self.deep_search(&|lib_name, symbols| {
-            let type_symbol = Symbol::new_str(&Symbol::root(lib_name), name);
+            let type_symbol = Symbol::lib_root(lib_name).child(name);
             symbols.get_type_metadata(&type_symbol)
         })
     }
 
     pub fn top_level_function_named(&self, name: &str) -> Option<&FunctionMetadata> {
         self.deep_search(&|lib_name, symbols| {
-            let func_symbol = Symbol::new_str(&Symbol::root(lib_name), name);
+            let func_symbol = Symbol::lib_root(lib_name).child(name);
             symbols.get_func_metadata(&func_symbol)
         })
     }
@@ -151,7 +151,7 @@ impl Lib {
 
     pub fn trait_metadata(&self, name: &str) -> Option<&TraitMetadata> {
         self.deep_search(&|lib_name, symbols| {
-            let trait_symbol = Symbol::new_str(&Symbol::root(lib_name), name);
+            let trait_symbol = Symbol::lib_root(lib_name).child(name);
             symbols.get_trait_metadata(&trait_symbol)
         })
     }
@@ -210,7 +210,7 @@ impl std::fmt::Display for SpecializationTracker {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let call_map = self.call_map.borrow();
         for (caller, calls) in call_map.iter() {
-            write!(f, "\nCalls for {}:", caller.id)?;
+            write!(f, "\nCalls for {}:", caller.unique_id())?;
             for (call, spec) in calls {
                 write!(f, "\n  {} -- {}", call, spec)?;
             }
@@ -218,7 +218,7 @@ impl std::fmt::Display for SpecializationTracker {
 
         let explicit_type_specializations = self.explicit_type_map.borrow();
         for (caller, explicit_types) in explicit_type_specializations.iter() {
-            write!(f, "\nExplicit types for {}:", caller.id)?;
+            write!(f, "\nExplicit types for {}:", caller.unique_id())?;
             for (et, spec) in explicit_types {
                 write!(f, "\n  {} -- {}", et, spec)?;
             }

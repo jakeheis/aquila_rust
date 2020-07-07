@@ -32,11 +32,11 @@ impl TypeMetadata {
     }
 
     pub fn generic(owner: &Symbol, name: &str) -> Self {
-        TypeMetadata::new(Symbol::new_str(owner, name), false)
+        TypeMetadata::new(owner.child(name), false)
     }
 
     pub fn field_named(&self, name: &str) -> Option<(Symbol, &NodeType, bool)> {
-        let possible_symbol = Symbol::new_str(&self.symbol, name);
+        let possible_symbol = self.symbol.child(name);
         if let Some(index) = self
             .field_symbols
             .iter()
@@ -53,7 +53,7 @@ impl TypeMetadata {
     }
 
     pub fn method_named(&self, name: &str) -> Option<Symbol> {
-        let possible_symbol = Symbol::new_str(&self.symbol, name);
+        let possible_symbol = self.symbol.child(name);
         if self.methods.contains(&possible_symbol) {
             Some(possible_symbol)
         } else {
@@ -62,7 +62,7 @@ impl TypeMetadata {
     }
 
     pub fn meta_method_named(&self, name: &str) -> Option<Symbol> {
-        let possible_symbol = Symbol::new_str(&Symbol::meta_symbol(&self.symbol), name);
+        let possible_symbol = self.symbol.meta_symbol().child(name);
         if self.meta_methods.contains(&possible_symbol) {
             Some(possible_symbol)
         } else {
@@ -104,7 +104,7 @@ impl std::fmt::Display for TypeMetadata {
             let gens = self
                 .generics
                 .iter()
-                .map(|symbol| format!("{}", symbol.last_component()))
+                .map(|symbol| format!("{}", symbol.name))
                 .collect::<Vec<_>>()
                 .join(",");
             writeln!(f, "  generics: {}", gens)?;
@@ -193,20 +193,20 @@ impl fmt::Display for FunctionMetadata {
             FunctionKind::Method(owner) => format!(
                 "Method(object: {}, method: {}",
                 owner.mangled(),
-                self.symbol.last_component()
+                self.symbol.name
             ),
             FunctionKind::MetaMethod(owner) => format!(
                 "MetaMethod(object: {}, meta_method: {}",
                 owner.mangled(),
-                self.symbol.last_component()
+                self.symbol.name
             ),
         };
         writeln!(f, "{}, public: {})", line, self.is_public)?;
 
-        let generics: Vec<String> = self
+        let generics: Vec<&str> = self
             .generics
             .iter()
-            .map(|g| g.last_component().to_string())
+            .map(|g| g.name.as_str())
             .collect();
         let generic_porition = if generics.is_empty() {
             String::new()
@@ -324,7 +324,7 @@ impl GenericSpecialization {
             .map
             .iter()
             .flat_map(|(symbol, node_type)| {
-                if owner.owns(symbol) {
+                if owner.directly_owns(symbol) {
                     Some((symbol.clone(), node_type.clone()))
                 } else {
                     None
@@ -345,7 +345,7 @@ impl GenericSpecialization {
             .map(|symbol| {
                 format!(
                     "{}={}",
-                    symbol.last_component(),
+                    symbol.name,
                     self.map.get(symbol).unwrap()
                 )
             })

@@ -79,7 +79,7 @@ impl<'a> TypeResolution<'a> {
         trace!(target: "symbol_table", "Trying to find symbol for {} -- ({})", token.lexeme(), token.span.entire_line().0);
 
         for parent in self.context.iter().rev() {
-            let non_top_level_symbol = Symbol::new(parent, token);
+            let non_top_level_symbol = parent.child_token(token);
             if let Some(type_metadata) = self.symbols.get_type_metadata(&non_top_level_symbol) {
                 trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), non_top_level_symbol);
                 return self.create_instance(token, type_metadata, specialization);

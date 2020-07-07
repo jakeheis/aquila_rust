@@ -208,15 +208,14 @@ impl std::fmt::Display for NodeType {
             NodeType::Pointer(ty) => format!("ptr<{}>", ty),
             NodeType::Array(ty, size) => format!("Array<{}, count={}>", ty, size),
             NodeType::Instance(ty, specialization) => {
-                let mut string = ty.id.clone();
+                let mut string = ty.mangled().clone();
                 if !specialization.map.is_empty() {
                     string += &format!("[{}]", specialization.display_list());
                 }
                 string
             }
-            NodeType::Metatype(ty, spec) => format!("Metatype({}, spec: {})", ty.id, spec),
+            NodeType::Metatype(ty, spec) => format!("Metatype({}, spec: {})", ty.mangled(), spec),
             NodeType::Ambiguous => String::from("_"),
-            // NodeType::FlexibleFunction(_) => String::from("<flexible function>"),
         };
         write!(f, "{}", kind)
     }

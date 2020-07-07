@@ -68,7 +68,7 @@ mod check {
     }
 
     pub fn symbol_accessible(lib: &Lib, symbol: &Symbol) -> bool {
-        symbol.lib_component() == Symbol::lib_root(lib).lib_component()
+        symbol.lib == lib.name
     }
 }
 
@@ -108,7 +108,7 @@ pub struct ContextTracker {
 
 impl ContextTracker {
     fn new(lib: Rc<Lib>) -> Self {
-        let root_symbol = Symbol::lib_root(lib.as_ref());
+        let root_symbol = Symbol::lib_root(&lib.name);
         ContextTracker {
             lib,
             scopes: vec![Scope::new(root_symbol, ScopeType::TopLevel)],
@@ -116,7 +116,7 @@ impl ContextTracker {
     }
 
     fn push_scope_named(&mut self, name: &str) -> Symbol {
-        let symbol = Symbol::new_str(self.current_symbol(), name);
+        let symbol = self.current_symbol().child(name);
         let copied = self.current_scope().scope_type.clone();
         self.push_scope(symbol.clone(), copied);
         symbol
@@ -128,14 +128,14 @@ impl ContextTracker {
     }
 
     fn push_type_scope(&mut self, name: &SymbolicToken) -> (Symbol, TypeMetadata) {
-        let symbol = Symbol::new(self.current_symbol(), &name.token);
+        let symbol = self.current_symbol().child_token(&name.token);
         let metadata = self.lib.type_metadata(&symbol).unwrap().clone();
         self.push_scope(symbol.clone(), ScopeType::InsideType(metadata.clone()));
         (symbol, metadata)
     }
 
     fn push_function_scope(&mut self, name: &SymbolicToken) -> (Symbol, FunctionMetadata) {
-        let symbol = Symbol::new(self.current_symbol(), &name.token);
+        let symbol = self.current_symbol().child_token(&name.token);
         let metadata = self.lib.function_metadata(&symbol).unwrap().clone();
         self.push_scope(symbol.clone(), ScopeType::InsideFunction(metadata.clone()));
         (symbol, metadata)
@@ -220,7 +220,7 @@ impl ContextTracker {
             panic!("Should never define var as ambiguous");
         }
 
-        let new_symbol = Symbol::new(&self.current_scope().id, &name.token);
+        let new_symbol = self.current_symbol().child_token(&name.token);
 
         trace!(target: "type_checker", "Defining {} (symbol = {}) as {}", name.span().lexeme(), new_symbol, var_type);
 
@@ -233,7 +233,7 @@ impl ContextTracker {
 
     pub fn resolve_var(&self, name: &str) -> Option<(Symbol, NodeType)> {
         for scope in self.scopes.iter().rev() {
-            let possible_symbol = Symbol::new_str(&scope.id, name);
+            let possible_symbol = scope.id.child(name);
             if let Some(node_type) = scope.type_of(&possible_symbol) {
                 return Some((possible_symbol, node_type.clone()));
             }

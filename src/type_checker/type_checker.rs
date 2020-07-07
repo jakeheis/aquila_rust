@@ -162,7 +162,7 @@ impl TypeChecker {
         }
 
         if decl.include_caller {
-            let symbol = Symbol::new_str(&func_symbol, "caller");
+            let symbol = func_symbol.caller_symbol();
             self.context
                 .put_in_scope(&symbol, &NodeType::pointer_to(NodeType::Byte));
         }
@@ -193,7 +193,7 @@ impl TypeChecker {
     }
 
     fn check_conformance_decl(&mut self, decl: &ConformanceDecl) {
-        let type_symbol = Symbol::top_level(self.lib.as_ref(), &decl.target.token);
+        let type_symbol = Symbol::lib_root(&self.lib.name).child_token(&decl.target.token);
 
         let target_metadata = self.lib.type_metadata(&type_symbol);
         if target_metadata.is_none() {
@@ -235,7 +235,7 @@ impl TypeChecker {
         let trait_metadata = self.lib.trait_metadata(decl.trait_name.lexeme()).unwrap();
         for requirement in &trait_metadata.function_requirements {
             let requirement_metadata = self.lib.function_metadata(&requirement).unwrap();
-            let impl_symbol = Symbol::new_str(&type_metadata.symbol, requirement.last_component());
+            let impl_symbol = type_metadata.symbol.child(&requirement.name);
             let impl_metadata = self.lib.function_metadata(&impl_symbol);
             if let Some(impl_metadata) = impl_metadata {
                 if !impl_metadata
@@ -244,14 +244,14 @@ impl TypeChecker {
                 {
                     let message = format!(
                         "Type implements requirement '{}' but with wrong signature",
-                        requirement.last_component()
+                        requirement.name
                     );
                     self.report_error(Diagnostic::error(&decl.target, &message));
                 }
             } else {
                 let message = format!(
                     "Type doesn't implement requirement '{}'",
-                    requirement.last_component()
+                    requirement.name
                 );
                 self.report_error(Diagnostic::error(&decl.target, &message));
             }
@@ -365,7 +365,7 @@ impl StmtVisitor for TypeChecker {
                 let metadata = self.lib.type_metadata(&instance_symbol).unwrap();
                 if metadata.conforms_to(&Symbol::iterable_symbol()) {
                     if instance_symbol == Symbol::stdlib("Vec") {
-                        let object_type = spec.type_for(&Symbol::new_str(&instance_symbol, "T")).unwrap().specialize(&spec);
+                        let object_type = spec.type_for(&instance_symbol.child("T")).unwrap().specialize(&spec);
                         NodeType::pointer_to(object_type)
                     } else if instance_symbol == Symbol::stdlib("Range") {
                         NodeType::Int

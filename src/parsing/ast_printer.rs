@@ -89,7 +89,7 @@ impl ASTPrinter {
             ExplicitTypeKind::Simple(token) => {
                 let symbol = token
                     .get_symbol()
-                    .map(|s| s.id.clone())
+                    .map(|s| s.unique_id())
                     .unwrap_or(String::from("<none>"));
                 self.write_ln(&format!(
                     "ExplicitType(name: {}, symbol: {})",
@@ -123,7 +123,7 @@ impl ASTPrinter {
         let symbol = decl
             .name
             .get_symbol()
-            .map(|s| s.id.clone())
+            .map(|s| s.unique_id())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "TypeDecl(name: {}, symbol: {}, pub: {})",
@@ -157,7 +157,7 @@ impl ASTPrinter {
         let symbol = decl
             .name
             .get_symbol()
-            .map(|s| s.id.clone())
+            .map(|s| s.unique_id())
             .unwrap_or(String::from("<none>"));
         let generics: Vec<_> = decl.generics.iter().map(|g| g.span().lexeme()).collect();
         let generics = format!("<{}>", generics.join(","));
@@ -229,7 +229,7 @@ impl StmtVisitor for ASTPrinter {
         let symbol = decl
             .name
             .get_symbol()
-            .map(|s| s.id.clone())
+            .map(|s| s.unique_id())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "LocalVariableDecl(name: {}, symbol: {})",
@@ -343,7 +343,7 @@ impl ExprVisitor for ASTPrinter {
         let symbol = call
             .name
             .get_symbol()
-            .map(|s| s.id.clone())
+            .map(|s| s.unique_id())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "FunctionCall(name: {}, symbol: {})",
@@ -376,7 +376,7 @@ impl ExprVisitor for ASTPrinter {
     fn visit_field_expr(&mut self, _expr: &Expr, target: &Expr, field: &SpecializedToken) {
         let symbol = field
             .get_symbol()
-            .map(|s| s.id.clone())
+            .map(|s| s.unique_id())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "Field(name: {}, symbol: {})",
@@ -395,7 +395,7 @@ impl ExprVisitor for ASTPrinter {
     fn visit_variable_expr(&mut self, _expr: &Expr, name: &SpecializedToken) {
         let symbol = name
             .get_symbol()
-            .map(|s| s.id.clone())
+            .map(|s| s.unique_id())
             .unwrap_or(String::from("<none>"));
         self.write_ln(&format!(
             "Variable(name: {}, symbol: {})",

@@ -131,7 +131,7 @@ impl IRGen {
         let mut func_metadata = self.lib.function_metadata(&func_symbol).unwrap().clone();
 
         if decl.include_caller {
-            let caller_symbol = Symbol::new_str(&func_symbol, "caller");
+            let caller_symbol = func_symbol.caller_symbol();
             func_metadata.parameter_symbols.push(caller_symbol);
             func_metadata
                 .parameter_types
@@ -265,7 +265,7 @@ impl StmtVisitor for IRGen {
 
             },
             NodeType::Instance(symbol, spec) if symbol == Symbol::stdlib("Vec") => {
-                let element_ty = spec.type_for(&Symbol::new_str(&symbol, "T")).unwrap().clone();
+                let element_ty = spec.type_for(&symbol.child("T")).unwrap().clone();
                 let element_ty = NodeType::pointer_to(element_ty);
 
                 let local = self
@@ -436,8 +436,8 @@ impl ExprVisitor for IRGen {
         }
 
         if builtins::is_direct_c_binding(&function_symbol) {
-            return IRExpr::call_nongenric(
-                function_symbol.last_component(),
+            return IRExpr::call_extern(
+                &function_symbol.name,
                 arg_exprs,
                 self.get_expr_type(expr),
             );
@@ -507,7 +507,7 @@ impl ExprVisitor for IRGen {
             };
             if symbol.is_self() {
                 return self_expr;
-            } else if current_type.symbol.owns(&symbol) {
+            } else if current_type.symbol.directly_owns(&symbol) {
                 let kind = IRExprKind::DerefFieldAccess(
                     Box::new(IRExpr {
                         kind: self_expr.kind,

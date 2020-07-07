@@ -1,70 +1,64 @@
 use super::metadata::*;
-use super::Lib;
 use crate::lexing::Token;
 use crate::source::Span;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct Symbol {
-    pub id: String,
+    pub lib: String,
+    pub owner: Vec<String>,
+    pub name: String,
 }
 
 impl Symbol {
-    pub fn lib_root(lib: &Lib) -> Self {
+    pub fn lib_root(name: &str) -> Self {
         Symbol {
-            id: lib.name.clone(),
+            lib: name.to_owned(),
+            owner: Vec::new(),
+            name: String::new(),
         }
     }
 
-    pub fn root(name: &str) -> Self {
+    pub fn child_token(&self, name: &Token) -> Self {
+        self.child(name.lexeme())
+    }
+
+    pub fn child(&self, name: &str) -> Self {
+        let mut owner = self.owner.clone();
+        if !self.name.is_empty() {
+            owner.push(self.name.clone());
+        }
         Symbol {
-            id: name.to_owned(),
+            lib: self.lib.clone(),
+            owner: owner,
+            name: name.to_owned(),
         }
     }
 
-    pub fn new(parent: &Symbol, name: &Token) -> Self {
-        Symbol::new_str(parent, name.lexeme())
-    }
-
-    pub fn new_str(parent: &Symbol, name: &str) -> Self {
-        let id = parent.id.clone() + "$" + name;
-        Symbol { id }
-    }
-
-    pub fn top_level(lib: &Lib, name: &Token) -> Self {
-        Symbol::new(&Symbol::lib_root(lib), name)
-    }
-
-    pub fn meta_symbol(parent: &Symbol) -> Self {
-        Symbol::new_str(parent, "Meta")
-    }
-
-    pub fn init_symbol(parent: &Symbol) -> Self {
-        Symbol::new_str(parent, "init")
-    }
-
-    pub fn deinit_symbol(parent: &Symbol) -> Self {
-        Symbol::new_str(parent, "deinit")
-    }
-
-    pub fn self_symbol(parent: &Symbol) -> Self {
-        Symbol::new_str(parent, "self")
+    pub fn owner_symbol(&self) -> Option<Self> {
+        if self.owner.is_empty() {
+            if self.name.is_empty() {
+                None
+            } else {
+                Some(Symbol::lib_root(&self.lib))
+            }
+        } else {
+            let mut owner = self.owner.clone();
+            let name = owner.pop().unwrap();
+            Some(Symbol {
+                lib: self.lib.clone(),
+                owner,
+                name
+            })
+        }
     }
 
     pub fn main_symbol() -> Self {
-        Symbol {
-            id: String::from("main"),
-        }
-    }
-
-    pub fn stdlib_root() -> Self {
-        Symbol {
-            id: String::from("stdlib"),
-        }
+        Symbol::lib_root("main")
     }
 
     pub fn stdlib(name: &str) -> Self {
-        Symbol::new_str(&Symbol::stdlib_root(), name)
+        Symbol::lib_root("stdlib").child(name)
     }
 
     pub fn writable_symbol() -> Self {
@@ -75,55 +69,63 @@ impl Symbol {
         Symbol::stdlib("Iterable")
     }
 
-    pub fn mangled(&self) -> String {
-        self.id.replace("$", "__")
+    pub fn meta_symbol(&self) -> Self {
+        self.child("Meta")
     }
 
-    pub fn owns(&self, other: &Symbol) -> bool {
-        let name = other.id.rsplit("$").nth(0).unwrap();
-        let expected = self.id.clone() + "$" + &name;
-        other.id == expected
+    pub fn init_symbol(&self) -> Self {
+        self.child("init")
     }
 
-    pub fn is_ancestor_of(&self, other: &Symbol) -> bool {
-        let expected = self.id.clone() + "$";
-        other.id.starts_with(&expected)
+    pub fn deinit_symbol(&self) -> Self {
+        self.child("deinit")
     }
 
-    pub fn lib_component(&self) -> &str {
-        self.id.split("$").next().unwrap()
+    pub fn self_symbol(&self) -> Self {
+        self.child("self")
     }
 
-    pub fn parent(&self) -> Option<Symbol> {
-        let mut comopnents: Vec<_> = self.id.split("$").collect();
-        comopnents.pop();
-        if comopnents.is_empty() {
-            None
-        } else {
-            Some(Symbol {
-                id: comopnents.join("$"),
-            })
+    pub fn caller_symbol(&self) -> Self {
+        self.child("caller")
+    }
+
+    pub fn write_symbol(&self) -> Self {
+        self.child("write")
+    }
+
+    pub fn form_str(&self, separator: &str) -> String {
+        let mut id = self.lib.clone();
+        for owner in &self.owner {
+            id = id + separator + &owner;
         }
+        if !self.name.is_empty() {
+            id = id + separator + &self.name;
+        }
+        id
     }
 
-    pub fn last_component(&self) -> &str {
-        self.id.split("$").last().unwrap()
+    pub fn unique_id(&self) -> String {
+        self.form_str("$")
+    }
+
+    pub fn mangled(&self) -> String {
+        self.form_str("__")
     }
 
     pub fn is_meta(&self) -> bool {
-        self.last_component() == "Meta"
+        &self.name == "Meta"
     }
 
     pub fn is_self(&self) -> bool {
-        self.last_component() == "self"
+        &self.name == "self"
     }
 
-    pub fn is_main(&self) -> bool {
-        self.last_component() == "main"
-    }
-
-    pub fn is_init(&self) -> bool {
-        self.last_component() == "init"
+    pub fn directly_owns(&self, child: &Symbol) -> bool {
+        if let Some(owner) = child.owner_symbol() {
+            self == &owner
+        } else {
+            false
+        }
     }
 
     pub fn specialized(&self, spec: &GenericSpecialization) -> String {
@@ -138,7 +140,7 @@ impl Symbol {
 
 impl std::fmt::Display for Symbol {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Symbol({})", self.id)
+        write!(f, "Symbol({})", self.unique_id())
     }
 }
 

@@ -9,7 +9,7 @@ struct Builtin {
 
 impl Builtin {
     fn named(symbol: &Symbol) -> Option<Builtin> {
-        match symbol.id.as_str() {
+        match symbol.unique_id().as_str() {
             "stdlib$Memory$Meta$size" => Some(Builtin::size()),
             "stdlib$ptr_offset" => Some(Builtin::ptr_offset()),
             "stdlib$_read_line" => Some(Builtin::read_line()),
@@ -101,14 +101,14 @@ pub fn write_special_function(writer: &mut IRWriter, metadata: &FunctionMetadata
 // Write impls
 
 fn write_ptr_offset(writer: &mut IRWriter, func_symbol: &Symbol) {
-    let pointer_param = Symbol::new_str(func_symbol, "pointer");
-    let distance_param = Symbol::new_str(func_symbol, "distance");
-
-    let pointer = IRVariable::new(
-        &pointer_param.mangled(),
+    let pointer = IRVariable::new_sym(
+        &func_symbol.child("pointer"),
         NodeType::pointer_to(NodeType::Any),
     );
-    let distance = IRVariable::new(&distance_param.mangled(), NodeType::Int);
+    let distance = IRVariable::new_sym(
+        &func_symbol.child("distance"), 
+        NodeType::Int
+    );
 
     let casted = IRExpr::cast(
         IRExpr::variable(&pointer),
@@ -141,7 +141,7 @@ fn write_read_line(writer: &mut IRWriter, _func_symbol: &Symbol) {
         IRExpr::literal("stdin", NodeType::Void),
     ];
 
-    let call = IRExpr::call_nongenric("getline", args, NodeType::Void);
+    let call = IRExpr::call_extern("getline", args, NodeType::Void);
     writer.expr(call);
 
     writer.return_var(&line);
@@ -178,7 +178,7 @@ pub fn write_type_deinit(writer: &mut IRWriter, type_metadata: &TypeMetadata, tr
 
     if type_metadata.conforms_to(&Symbol::stdlib("Freeable")) {
         let self_var = IRVariable::new("self", type_metadata.unspecialized_type());
-        let free_sym = Symbol::new_str(&type_metadata.symbol, "free");
+        let free_sym = type_metadata.symbol.child("free");
         let free = IRExpr::call_generic(
             free_sym.clone(),
             type_metadata.dummy_specialization(),
@@ -223,13 +223,13 @@ fn size_call(
     spec: &GenericSpecialization,
     _args: Vec<IRExpr>,
 ) -> IRExpr {
-    let mem_type = Symbol::new_str(symbol, "T");
+    let mem_type = symbol.child("T");
     let expr_type = spec.type_for(&mem_type).unwrap().clone();
     let arg = IRExpr {
         kind: IRExprKind::ExplicitType,
         expr_type: expr_type,
     };
-    IRExpr::call_nongenric("sizeof", vec![arg], NodeType::Double)
+    IRExpr::call_extern("sizeof", vec![arg], NodeType::Double)
 }
 
 fn print_call(
@@ -240,7 +240,7 @@ fn print_call(
 ) -> IRExpr {
     let node_type = args[0].expr_type.clone();
     if let NodeType::Instance(type_symbol, spec) = &node_type {
-        let full_symbol = Symbol::new_str(&type_symbol, "write");
+        let full_symbol = type_symbol.write_symbol();
         let arg = writer.addres_of_expr(args.remove(0));
         IRExpr::call_generic(full_symbol, spec.clone(), vec![arg], NodeType::Void)
     } else {
@@ -253,6 +253,6 @@ fn print_call(
 
         let format_line = format!("{}\\n", format_specificer);
         let format_expr = IRExpr::string_literal(&format_line);
-        IRExpr::call_nongenric("printf", vec![format_expr, args.remove(0)], NodeType::Void)
+        IRExpr::call_extern("printf", vec![format_expr, args.remove(0)], NodeType::Void)
     }
 }

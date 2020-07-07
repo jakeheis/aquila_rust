@@ -104,7 +104,7 @@ impl ExprChecker {
             NodeType::Instance(sym, spec) => {
                 let metadata = self.lib.type_metadata(&sym).unwrap();
                 if metadata.conforms_to(&Symbol::writable_symbol()) {
-                    let write_sym = Symbol::new_str(&sym, "write");
+                    let write_sym = sym.write_symbol();
                     let enclosing_func = self
                         .context
                         .enclosing_function()
@@ -336,7 +336,7 @@ impl ExprVisitor for ExprChecker {
                         &Span::join(target, field.span()),
                         &format!(
                             "Type '{}' does not has field '{}'",
-                            type_symbol.id,
+                            type_symbol.name,
                             field.span().lexeme()
                         ),
                     ))
