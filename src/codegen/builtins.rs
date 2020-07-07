@@ -176,6 +176,20 @@ pub fn write_type_deinit(writer: &mut IRWriter, type_metadata: &TypeMetadata, tr
 
     writer.start_block();
 
+    if type_metadata.conforms_to(&Symbol::stdlib("Freeable")) {
+        let self_var = IRVariable::new("self", type_metadata.unspecialized_type());
+        let free_sym = Symbol::new_str(&type_metadata.symbol, "free");
+        let free = IRExpr::call_generic(
+            free_sym.clone(),
+            type_metadata.dummy_specialization(),
+            vec![IRExpr::variable(&self_var)],
+            NodeType::Void,
+        );
+        writer.expr(free);
+
+        tracker.add_call(deinit_symbol.clone(), free_sym, type_metadata.dummy_specialization());
+    }
+
     let self_var = IRVariable::new("self", type_metadata.unspecialized_type());
     for (field_symbol, field_type) in type_metadata.field_symbols.iter().zip(&type_metadata.field_types) {
         if let NodeType::Instance(type_sym, spec) = field_type {
@@ -196,20 +210,6 @@ pub fn write_type_deinit(writer: &mut IRWriter, type_metadata: &TypeMetadata, tr
     
             tracker.add_call(deinit_symbol.clone(), deinit_sym, spec.clone());
         }
-    }
-
-    if type_metadata.conforms_to(&Symbol::stdlib("Freeable")) {
-        let self_var = IRVariable::new("self", type_metadata.unspecialized_type());
-        let free_sym = Symbol::new_str(&type_metadata.symbol, "free");
-        let free = IRExpr::call_generic(
-            free_sym.clone(),
-            type_metadata.dummy_specialization(),
-            vec![IRExpr::variable(&self_var)],
-            NodeType::Void,
-        );
-        writer.expr(free);
-
-        tracker.add_call(deinit_symbol.clone(), free_sym, type_metadata.dummy_specialization());
     }
 
     writer.end_decl_func(&deinit_metadata);

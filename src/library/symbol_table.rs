@@ -68,8 +68,11 @@ impl Symbol {
     }
 
     pub fn writable_symbol() -> Self {
-        // Temporarily hard coded
         Symbol::stdlib("Writable")
+    }
+
+    pub fn iterable_symbol() -> Self {
+        Symbol::stdlib("Iterable")
     }
 
     pub fn mangled(&self) -> String {

@@ -48,6 +48,24 @@ def hello() {
 
 hello();
 
+let arr = [1, 2, 3];
+
+for obj in arr {
+  print(*obj);
+}
+
+let ints = Vec[int].new();
+ints.insert(4);
+ints.insert(5);
+
+for obj in ints {
+  print(*obj);
+}
+
+for obj in Range.bounds(6, 8) {
+  print(obj);
+}
+
 // let heap = box Adder[int](3, 4);
 // let stack = Adder[ptr byte]("hi", "byte");
 

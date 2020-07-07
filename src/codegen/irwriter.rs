@@ -104,12 +104,8 @@ impl IRWriter {
     }
 
     pub fn declare_local(&mut self, symbol: Symbol, var_type: NodeType) -> IRVariable {
-        self.declare_local_str(&symbol.mangled(), var_type)
-    }
-
-    pub fn declare_local_str(&mut self, name: &str, var_type: NodeType) -> IRVariable {
         let var = IRVariable {
-            name: String::from(name),
+            name: symbol.mangled(),
             var_type,
         };
         self.add_stmt(IRStatement::DeclLocal(var.clone()));

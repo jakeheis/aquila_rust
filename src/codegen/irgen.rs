@@ -207,11 +207,37 @@ impl StmtVisitor for IRGen {
         self.writer.end_loop();
     }
 
-    fn visit_for_stmt(&mut self, variable: &SymbolicToken, array_expr: &Expr, body: &[Stmt]) {
-        let array = array_expr.accept(self);
-        let limit = self.array_count(array_expr);
+    fn visit_for_stmt(&mut self, variable: &SymbolicToken, iter_expr: &Expr, body: &[Stmt]) {
+        let counter = self.writer.declare_temp_no_init(NodeType::Int);
 
-        let counter = self.writer.declare_local_str("i", NodeType::Int);
+        let iterator = iter_expr.accept(self);
+        let iterator_type = iter_expr.get_type().unwrap();
+        
+        let limit = match &iterator_type {
+            NodeType::Instance(symbol, _) if symbol == &Symbol::stdlib("Range") => {
+                let start = IRExpr {
+                    kind: IRExprKind::FieldAccess(Box::new(iterator.clone()), "stdlib__Range__start".to_owned()),
+                    expr_type: NodeType::Int,
+                };
+                self.writer.assign(IRExpr::variable(&counter), start);
+                IRExpr {
+                    kind: IRExprKind::FieldAccess(Box::new(iterator.clone()), "stdlib__Range__end".to_owned()),
+                    expr_type: NodeType::Int,
+                }
+            },
+            NodeType::Instance(symbol, _) if symbol == &Symbol::stdlib("Vec") => {
+                self.writer.assign(IRExpr::variable(&counter), IRExpr::int_literal("0"));
+                IRExpr {
+                    kind: IRExprKind::FieldAccess(Box::new(iterator.clone()), "stdlib__Vec__count".to_owned()),
+                    expr_type: NodeType::Int,
+                }
+            }
+            NodeType::Array(_, count) => {
+                self.writer.assign(IRExpr::variable(&counter), IRExpr::int_literal("0"));
+                IRExpr::int_literal(&count.to_string())
+            },
+            _ => unimplemented!()
+        };
 
         self.writer.start_block();
 
@@ -221,28 +247,69 @@ impl StmtVisitor for IRGen {
             kind: IRExprKind::Binary(
                 Box::new(IRExpr::variable(&counter)),
                 IRBinaryOperator::GreaterEqual,
-                Box::new(IRExpr::int_literal(&limit.to_string())),
+                Box::new(limit),
             ),
             expr_type: NodeType::Bool,
         });
 
-        let var_type = array_expr.get_type().unwrap().coerce_array_to_ptr();
+        match iterator_type {
+            NodeType::Instance(symbol, _) if symbol == Symbol::stdlib("Range") => {
+                let local = self
+                    .writer
+                    .declare_local(variable.get_symbol().unwrap(), NodeType::Int);
+    
+                self.writer.assign(
+                    IRExpr::variable(&local),
+                    IRExpr::variable(&counter),
+                );
 
-        let local = self
-            .writer
-            .declare_local(variable.get_symbol().unwrap(), var_type.clone());
-
-        self.writer.assign(
-            IRExpr::variable(&local),
-            IRExpr {
-                kind: IRExprKind::Binary(
-                    Box::new(array),
-                    IRBinaryOperator::Plus,
-                    Box::new(IRExpr::variable(&counter)),
-                ),
-                expr_type: var_type,
             },
-        );
+            NodeType::Instance(symbol, spec) if symbol == Symbol::stdlib("Vec") => {
+                let element_ty = spec.type_for(&Symbol::new_str(&symbol, "T")).unwrap().clone();
+                let element_ty = NodeType::pointer_to(element_ty);
+
+                let local = self
+                    .writer
+                    .declare_local(variable.get_symbol().unwrap(), element_ty.clone());
+
+                let storage = IRExpr {
+                    kind: IRExprKind::FieldAccess(Box::new(iterator.clone()), "stdlib__Vec__storage".to_owned()),
+                    expr_type: element_ty.clone(),
+                };
+
+                self.writer.assign(
+                    IRExpr::variable(&local),
+                    IRExpr {
+                        kind: IRExprKind::Binary(
+                            Box::new(storage),
+                            IRBinaryOperator::Plus,
+                            Box::new(IRExpr::variable(&counter)),
+                        ),
+                        expr_type: element_ty,
+                    },
+                );
+            }
+            NodeType::Array(element_ty, _) => {
+                let element_ty = NodeType::pointer_to(*element_ty);
+
+                let local = self
+                    .writer
+                    .declare_local(variable.get_symbol().unwrap(), element_ty.clone());
+
+                self.writer.assign(
+                    IRExpr::variable(&local),
+                    IRExpr {
+                        kind: IRExprKind::Binary(
+                            Box::new(iterator),
+                            IRBinaryOperator::Plus,
+                            Box::new(IRExpr::variable(&counter)),
+                        ),
+                        expr_type: element_ty,
+                    },
+                );
+            },
+            _ => unimplemented!()
+        };
 
         self.gen_stmts(body);
         self.writer.assign(

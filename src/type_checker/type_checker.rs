@@ -360,14 +360,33 @@ impl StmtVisitor for TypeChecker {
         body: &[Stmt],
     ) -> Analysis {
         let array_element_type = match self.check_expr(array) {
-            Some(NodeType::Array(of, _)) => of,
+            Some(NodeType::Array(of, _)) => NodeType::Pointer(of),
+            Some(NodeType::Instance(instance_symbol, spec)) => {
+                let metadata = self.lib.type_metadata(&instance_symbol).unwrap();
+                if metadata.conforms_to(&Symbol::iterable_symbol()) {
+                    if instance_symbol == Symbol::stdlib("Vec") {
+                        let object_type = spec.type_for(&Symbol::new_str(&instance_symbol, "T")).unwrap().specialize(&spec);
+                        NodeType::pointer_to(object_type)
+                    } else if instance_symbol == Symbol::stdlib("Range") {
+                        NodeType::Int
+                    } else {
+                        unimplemented!()
+                    }
+                } else {
+                    let message = format!("Type '{}' does not implement Iterable", instance_symbol.mangled());
+                    self.report_error(Diagnostic::error(array, &message));
+                    return Analysis {
+                        guarantees_return: false,
+                    }
+                }
+            }
             None => {
                 return Analysis {
                     guarantees_return: false,
                 }
             }
             _ => {
-                self.report_error(Diagnostic::error(array, "Can only iterate over arrays"));
+                self.report_error(Diagnostic::error(array, "Cannot iterate"));
                 return Analysis {
                     guarantees_return: false,
                 };
@@ -375,8 +394,7 @@ impl StmtVisitor for TypeChecker {
         };
 
         self.context.push_scope_named("for");
-        self.context
-            .define_var(variable, &NodeType::Pointer(array_element_type));
+        self.context.define_var(variable, &array_element_type);
         let body_analysis = self.check_list(body);
         self.context.pop_scope();
 

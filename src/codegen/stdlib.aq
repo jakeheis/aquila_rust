@@ -101,7 +101,6 @@ pub type String {
 
 }
 
-
 impl String: Writable {
     def write() {
         print(storage);
@@ -115,6 +114,23 @@ impl String: Freeable {
         }
     }
 }
+
+pub type Range {
+
+    let start: int;
+    let end: int;
+
+    pub meta def length(start: int, length: int): Range {
+        return Range(start, start + length);
+    }
+
+    pub meta def bounds(start: int, end: int): Range {
+        return Range(start, end);
+    }
+
+}
+
+impl Range: Iterable {}
 
 pub type Vec[T] {
 
@@ -183,8 +199,15 @@ pub type Vec[T] {
 
 }
 
+impl Vec: Iterable {}
+
 impl Vec: Freeable {
     def free() {
+        // #if_conforms(T, Freeable) {
+            //for object in self {
+                // object.deinit();
+            //}
+        // }
         if capacity > 0 {
             Memory.drop[T](storage);
         }
@@ -243,6 +266,13 @@ trait Writable {
 trait Freeable {
     def free();
 }
+
+trait Iterable {}
+
+/*trait Iterable {
+    def iter_count(): int;
+    def at_index(index: int): ptr any;
+}*/
 
 // trait Indexable {
 //     type T; 
