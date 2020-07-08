@@ -92,6 +92,10 @@ impl Lib {
 
         trace!(target: "symbol_table", "{}", lib.symbols);
 
+        if reporter.has_errored() {
+            return Err("Symbol table builder failed");
+        }
+
         let mut lib = TypeChecker::check(lib, Rc::clone(&reporter));
 
         if reporter.has_errored() {

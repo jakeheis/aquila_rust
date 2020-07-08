@@ -185,6 +185,7 @@ impl Lexer {
             "self" => self.make_token(TokenKind::SelfKeyword),
             "pub" => self.make_token(TokenKind::Pub),
             "impl" => self.make_token(TokenKind::Impl),
+            "where" => self.make_token(TokenKind::Where),
             _ => self.make_token(TokenKind::Identifier),
         }
     }

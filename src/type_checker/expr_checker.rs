@@ -41,6 +41,17 @@ impl ExprChecker {
             target_metadata.method_named(method)
         };
 
+        // if method_metadata.is_none() {
+        //     let trait_impls = target_metadata.trait_impls.borrow();
+        //     for impl_trait in trait_impls.as_slice() {
+        //         let trait_metadata = self.lib.trait_metadata_symbol(impl_trait).unwrap();
+        //         let possible_sym = impl_trait.child(method);
+        //         if trait_metadata.function_requirements.contains(&possible_sym) {
+        //             return Ok((possible_sym, specialization.clone()));
+        //         }
+        //     }
+        // }
+
         match method_metadata {
             Some(method) => Ok((method, specialization.clone())),
             None => {
@@ -123,6 +134,29 @@ impl ExprChecker {
             _ => {
                 let message = format!("Can't print object of type {}", arg_type);
                 return Err(Diagnostic::error(arg, &message));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn check_specialization_restrictions(
+        &self, 
+        specialization: &GenericSpecialization, 
+        restrictions: &[(Symbol, Symbol)],
+        span: &Span,
+    ) -> DiagnosticResult<()> {
+        for (generic_symbol, trait_symbol) in restrictions {
+            let specialized_type = specialization.type_for(&generic_symbol).unwrap();
+            if let NodeType::Instance(type_sym, ..) = specialized_type {
+                let metadata = self.lib.type_metadata(&type_sym).unwrap();
+                if !metadata.conforms_to(trait_symbol) {
+                    let message = format!("Type '{}' does not implement '{}'", type_sym.name(), trait_symbol.name());
+                    return Err(Diagnostic::error(span, &message));
+                }
+            } else {
+                let message = format!("Type does not implement '{}'", trait_symbol.name());
+                return Err(Diagnostic::error(span, &message));
             }
         }
 
@@ -275,6 +309,12 @@ impl ExprVisitor for ExprChecker {
         };
 
         let full_call_specialization = function_specialization.merge(&target_specialization);
+
+        self.check_specialization_restrictions(
+            &full_call_specialization, 
+            &metadata.generic_restrictions,
+            call.name.span()
+        )?;
 
         call.set_specialization(full_call_specialization.clone());
 

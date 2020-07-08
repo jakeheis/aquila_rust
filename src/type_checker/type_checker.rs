@@ -210,7 +210,7 @@ impl TypeChecker {
         let trait_metadata = trait_metadata.unwrap();
 
         let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
-        type_metadata.add_trait_impl(&trait_metadata.symbol);
+        type_metadata.add_trait_impl(trait_metadata.symbol.clone());
         let type_metadata = type_metadata.clone();
 
         self.context.push_scope(

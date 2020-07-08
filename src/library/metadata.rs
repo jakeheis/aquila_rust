@@ -70,8 +70,8 @@ impl TypeMetadata {
         }
     }
 
-    pub fn add_trait_impl(&self, trait_symbol: &Symbol) {
-        self.trait_impls.borrow_mut().push(trait_symbol.clone());
+    pub fn add_trait_impl(&self, trait_symbol: Symbol) {
+        self.trait_impls.borrow_mut().push(trait_symbol);
     }
 
     pub fn conforms_to(&self, trait_symbol: &Symbol) -> bool {
@@ -159,6 +159,7 @@ pub struct FunctionMetadata {
     pub parameter_symbols: Vec<Symbol>,
     pub parameter_types: Vec<NodeType>,
     pub return_type: NodeType,
+    pub generic_restrictions: Vec<(Symbol, Symbol)>,
     pub is_public: bool,
     pub include_caller: bool,
 }
@@ -171,6 +172,7 @@ impl FunctionMetadata {
             generics: Vec::new(),
             parameter_symbols: Vec::new(),
             parameter_types: Vec::new(),
+            generic_restrictions: Vec::new(),
             return_type: NodeType::Int,
             is_public: false,
             include_caller: false,

@@ -112,6 +112,14 @@ impl<'a> SpecializationPropagator<'a> {
         if let Some(calls) = self.call_map.get(cur) {
             let calls = calls.clone();
             for (callee_function_symbol, call_spec) in calls {
+                if let Some(owner) = callee_function_symbol.owner_symbol() {
+                    if let Some(NodeType::Instance(sym, spec)) = current_spec.type_for(&owner) {
+                        let func_symbol = sym.child(callee_function_symbol.name());
+                        self.propagate_through_function(&func_symbol, spec);
+                        continue;
+                    }
+                }
+                
                 let call_spec = call_spec.resolve_generics_using(current_spec);
                 self.propagate_through_function(&callee_function_symbol, &call_spec);
             }

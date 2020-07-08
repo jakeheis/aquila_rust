@@ -25,11 +25,16 @@ impl SymbolTableBuilder {
         };
 
         builder.build_type_headers(&lib.type_decls);
-        builder.build_type_internals(&lib.type_decls);
-        builder.build_functions(&lib.function_decls);
 
         for decl in &lib.trait_decls {
-            builder.build_trait(decl);
+            builder.build_trait_header(decl);
+        }
+
+        builder.build_type_internals(&lib.type_decls);
+        builder.build_functions(&lib.function_decls, false);
+
+        for decl in &lib.trait_decls {
+            builder.build_trait_body(decl);
         }
 
         for decl in &lib.conformance_decls {
@@ -61,7 +66,7 @@ impl SymbolTableBuilder {
         let mut metadata = TypeMetadata::new(new_symbol.clone(), decl.is_public);
 
         self.context.push(new_symbol.clone());
-        metadata.generics = self.insert_generics(&new_symbol, &decl.generics);
+        metadata.generics = self.insert_placeholder_generics(&new_symbol, &decl.generics);
         self.context.pop();
 
         self.symbols
@@ -89,6 +94,10 @@ impl SymbolTableBuilder {
             .unwrap()
             .clone();
 
+        let (generics, _) = self.insert_generics(&type_symbol, &decl.generics, &[]);
+
+        type_metadata.generics = generics;
+
         let mut any_private_fields = false;
         for field in &decl.fields {
             let (token, field_type) = self.var_decl_type(field, None);
@@ -105,11 +114,11 @@ impl SymbolTableBuilder {
             trace!(target: "symbol_table", "Inserting field {} (symbol = {})", token.lexeme(), field_symbol);
         }
 
-        type_metadata.methods = self.build_functions(&decl.methods);
+        type_metadata.methods = self.build_functions(&decl.methods, false);
 
         self.context
             .push(Symbol::meta_symbol(self.current_symbol()));
-        type_metadata.meta_methods = self.build_functions(&decl.meta_methods);
+        type_metadata.meta_methods = self.build_functions(&decl.meta_methods, false);
 
         let init_symbol = Symbol::init_symbol(self.current_symbol());
         type_metadata.meta_methods.push(init_symbol.clone());
@@ -123,6 +132,7 @@ impl SymbolTableBuilder {
                 parameter_types: type_metadata.field_types.clone(),
                 return_type: type_metadata.unspecialized_type(),
                 is_public: !any_private_fields,
+                generic_restrictions: Vec::new(),
                 include_caller: false,
             },
         );
@@ -141,6 +151,7 @@ impl SymbolTableBuilder {
                 parameter_types: Vec::new(),
                 return_type: NodeType::Void,
                 is_public: !any_private_fields,
+                generic_restrictions: Vec::new(),
                 include_caller: false,
             },
         );
@@ -153,18 +164,18 @@ impl SymbolTableBuilder {
         trace!(target: "symbol_table", "Finished building type {}", decl.name.token.lexeme());
     }
 
-    fn build_functions(&mut self, decls: &[FunctionDecl]) -> Vec<Symbol> {
-        decls.iter().map(|decl| self.build_function(decl)).collect()
+    fn build_functions(&mut self, decls: &[FunctionDecl], force_public: bool) -> Vec<Symbol> {
+        decls.iter().map(|decl| self.build_function(decl, force_public)).collect()
     }
 
-    fn build_function(&mut self, decl: &FunctionDecl) -> Symbol {
+    fn build_function(&mut self, decl: &FunctionDecl, force_public: bool) -> Symbol {
         let function_symbol = self.current_symbol().child_token(&decl.name.token);
 
         trace!(target: "symbol_table", "Building function {} (symbol = {})", decl.name.token.lexeme(), function_symbol);
 
         self.context.push(function_symbol.clone());
 
-        let generic_symbols = self.insert_generics(&function_symbol, &decl.generics);
+        let (generic_symbols, generic_restrictions) = self.insert_generics(&function_symbol, &decl.generics, &decl.generic_restrctions);
 
         let mut param_types: Vec<NodeType> = Vec::new();
         let mut param_symbols: Vec<Symbol> = Vec::new();
@@ -202,8 +213,9 @@ impl SymbolTableBuilder {
             parameter_symbols: param_symbols,
             parameter_types: param_types,
             return_type: return_type,
-            is_public: decl.is_public,
             include_caller: decl.include_caller,
+            generic_restrictions,
+            is_public: force_public || decl.is_public,
         };
         self.insert_func_metadata(function_symbol.clone(), function_metadata);
 
@@ -212,10 +224,24 @@ impl SymbolTableBuilder {
         function_symbol
     }
 
-    fn build_trait(&mut self, decl: &TraitDecl) {
+    fn build_trait_header(&mut self, decl: &TraitDecl) {
+        trace!("Building trait header {}", decl.name.lexeme());
+
+        let trait_symbol = self.current_symbol().child_token(&decl.name);
+
+        let metadata = TraitMetadata {
+            symbol: trait_symbol.clone(),
+            function_requirements: Vec::new(),
+        };
+        self.symbols.insert_trait_metadata(trait_symbol, metadata);
+    }
+
+    fn build_trait_body(&mut self, decl: &TraitDecl) {
+        trace!("Building trait body {}", decl.name.lexeme());
+
         let trait_symbol = self.current_symbol().child_token(&decl.name);
         self.context.push(trait_symbol.clone());
-        let requirements = self.build_functions(&decl.requirements);
+        let requirements = self.build_functions(&decl.requirements, true);
         self.context.pop();
 
         let metadata = TraitMetadata {
@@ -223,12 +249,14 @@ impl SymbolTableBuilder {
             function_requirements: requirements,
         };
         self.symbols.insert_trait_metadata(trait_symbol, metadata);
+
+        trace!("Finished trait body {}", decl.name.lexeme());
     }
 
     fn build_conformance(&mut self, decl: &ConformanceDecl) {
         let type_symbol = self.current_symbol().child_token(&decl.target.token);
         self.context.push(type_symbol);
-        self.build_functions(&decl.implementations);
+        self.build_functions(&decl.implementations, true);
         self.context.pop();
     }
 
@@ -236,18 +264,74 @@ impl SymbolTableBuilder {
         self.context.last().unwrap()
     }
 
-    fn insert_generics(&mut self, owner: &Symbol, generics: &[Token]) -> Vec<Symbol> {
+    fn insert_placeholder_generics(&mut self, owner: &Symbol, generics: &[Token]) -> Vec<Symbol> {
         let mut generic_symbols = Vec::new();
         for generic in generics {
             let generic_symbol = self.current_symbol().child_token(&generic);
             let generic_type = TypeMetadata::generic(owner, generic.lexeme());
+            self.symbols.insert_type_metadata(generic_symbol.clone(), generic_type);
+            generic_symbols.push(generic_symbol);
+        }
+        generic_symbols
+    }
+
+    fn insert_generics(&mut self, owner: &Symbol, generics: &[Token], restrictions: &[GenericRestriction]) -> (Vec<Symbol>, Vec<(Symbol, Symbol)>) {
+        let mut generic_symbols = Vec::new();
+
+        for generic in generics {
+            let generic_symbol = self.current_symbol().child_token(&generic);
+            let mut generic_type = TypeMetadata::generic(owner, generic.lexeme());
+
+            for restriction in restrictions {
+                if restriction.generic.token.lexeme() == generic.lexeme() {
+                    restriction.generic.set_symbol(generic_symbol.clone());
+                    let trait_metadata = self.resolve_trait(&restriction.trait_name.token.lexeme());
+
+                    if let Some(trait_metadata) = trait_metadata {
+                        let trait_metadata = trait_metadata.clone();
+
+                        restriction.trait_name.set_symbol(trait_metadata.symbol.clone());
+
+                        // TODO: doesn't support meta requirements
+                        for requirement in &trait_metadata.function_requirements {
+                            let mut req_metadata = if let Some(func) = self.symbols.get_func_metadata(requirement) {
+                                func
+                            } else {
+                                self.lib.function_metadata(requirement).unwrap()
+                            }.clone();
+                            let symbol = generic_symbol.child(requirement.name());
+                            req_metadata.symbol = symbol.clone();
+                            req_metadata.kind = FunctionKind::Method(generic_symbol.clone());
+                            self.symbols.insert_func_metadata(symbol.clone(), req_metadata);
+                            generic_type.methods.push(symbol);
+                        }
+    
+                        generic_type.add_trait_impl(trait_metadata.symbol.clone());
+                    } else {
+                        self.reporter.report(Diagnostic::error(&restriction.trait_name, "Unrecognized trait"));
+                    }
+                }
+            }
+
             self.symbols
                 .insert_type_metadata(generic_symbol.clone(), generic_type);
 
             trace!(target: "symbol_table", "Inserting generic {} (symbol = {})", generic.lexeme(), generic_symbol);
             generic_symbols.push(generic_symbol);
         }
-        generic_symbols
+
+        let mut restriction_symbols: Vec<(Symbol, Symbol)> = Vec::new();
+        for restriction in restrictions {
+            if let Some(generic_symbol) = restriction.generic.get_symbol() {
+                if let Some(trait_symbol) = restriction.trait_name.get_symbol() {
+                    restriction_symbols.push((generic_symbol, trait_symbol));
+                }
+            } else {
+                self.reporter.report(Diagnostic::error(&restriction.generic, "Unrecognized generic type"));
+            }
+        }
+
+        (generic_symbols, restriction_symbols)
     }
 
     fn var_decl_type<'b>(
@@ -278,6 +362,18 @@ impl SymbolTableBuilder {
                 self.reporter.report(diag);
                 NodeType::Ambiguous
             }
+        }
+    }
+
+    fn resolve_trait(&self, trait_name: &str) -> Option<&TraitMetadata> {
+        let same_lib_symbol = self.current_symbol().child(trait_name);
+        
+        if let Some(metadata) = self.symbols.get_trait_metadata(&same_lib_symbol) {
+            Some(metadata)
+        } else if let Some(trait_meta) = self.lib.trait_metadata(trait_name) {
+            Some(trait_meta)
+        } else {
+            None
         }
     }
 }

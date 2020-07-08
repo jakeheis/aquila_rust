@@ -6,65 +6,15 @@
 
 // let str = add[ptr byte]("hi", "byte");
 
-let dyn = String.literal("hello");
-
-let combo1 = dyn.append_literal(" world");
-
-/// -> hello world
-print(combo1);
-
-let combo2 = combo1.append_literal(" ag");
-
-/// -> hello world ag
-print(combo2);
-
-/// -> hello world again
-print(dyn.append_literal(" world").append_literal(" again"));
-
-
-type Adder[T] {
-    let lhs: T;
-    let rhs: T;
-
-    def pick(): T {
-      return rhs;
-    }
+pub def print_object[T](obj: T) where T: Writable {
+    obj.write();
 }
 
-let adder_of_vecs = Adder[Vec[int]](Vec[int].new(), Vec[int].new());
-adder_of_vecs.lhs.insert(4);
-adder_of_vecs.rhs.insert(2);
+// let vector = Vec[int].new();
+// print_object[Vec[int]](vector);
 
-def hello() {
-  let z = Vec[int].new();
-  if true {
-    let a = Vec[bool].new();
-  } else {
-    let b = Vec[byte].new();
-    return;
-  }
-  let c = Vec[ptr byte].new();
-}
-
-hello();
-
-let arr = [1, 2, 3];
-
-for obj in arr {
-  print(*obj);
-}
-
-let ints = Vec[int].new();
-ints.insert(4);
-ints.insert(5);
-
-for obj in ints {
-  print(*obj);
-}
-
-for obj in Range.bounds(6, 8) {
-  print(obj);
-}
+let obj = String.literal("hello");
+print_object[String](obj);
 
 // let heap = box Adder[int](3, 4);
 // let stack = Adder[ptr byte]("hi", "byte");

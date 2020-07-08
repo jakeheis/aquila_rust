@@ -203,7 +203,7 @@ impl Vec: Iterable {}
 
 impl Vec: Freeable {
     def free() {
-        // #if_conforms(T, Freeable) {
+        // #if_conforms(T: Freeable) {
             //for object in self {
                 // object.deinit();
             //}

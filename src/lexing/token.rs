@@ -59,6 +59,7 @@ pub enum TokenKind {
     Pub,
     Impl,
     Caller,
+    Where,
 
     // Other
     Comma,

@@ -35,11 +35,18 @@ impl TypeDecl {
 }
 
 #[derive(Debug)]
+pub struct GenericRestriction {
+    pub generic: SymbolicToken,
+    pub trait_name: SymbolicToken
+}
+
+#[derive(Debug)]
 pub struct FunctionDecl {
     pub name: SymbolicToken,
     pub generics: Vec<Token>,
     pub parameters: Vec<StructuralVariableDecl>,
     pub return_type: Option<ExplicitType>,
+    pub generic_restrctions: Vec<GenericRestriction>,
     pub body: Vec<Stmt>,
     pub is_meta: bool,
     pub is_public: bool,
@@ -53,6 +60,7 @@ impl FunctionDecl {
         generics: Vec<Token>,
         parameters: Vec<StructuralVariableDecl>,
         return_type: Option<ExplicitType>,
+        generic_restrctions: Vec<GenericRestriction>,
         body: Vec<Stmt>,
         is_meta: bool,
         is_builtin: bool,
@@ -64,6 +72,7 @@ impl FunctionDecl {
             generics,
             parameters,
             return_type,
+            generic_restrctions,
             body,
             is_meta,
             is_public,

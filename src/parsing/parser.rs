@@ -292,6 +292,12 @@ impl Parser {
             None
         };
 
+        let generic_restrictions = if self.matches(TokenKind::Where) {
+            self.generic_restriction_list()?
+        } else {
+            Vec::new()
+        };
+
         let body = if parse_body {
             self.consume(
                 TokenKind::LeftBrace,
@@ -317,12 +323,29 @@ impl Parser {
             generics,
             params,
             return_type,
+            generic_restrictions,
             body,
             meta,
             builtin,
             public,
             include_caller,
         ))
+    }
+
+    fn generic_restriction_list(&mut self) -> DiagnosticResult<Vec<GenericRestriction>> {
+        let mut restrictions: Vec<GenericRestriction> = Vec::new();
+
+        while !self.is_at_end() && self.peek() != TokenKind::LeftBrace {
+            let generic = self.consume(TokenKind::Identifier, "Expect generic type")?.clone();
+            self.consume(TokenKind::Colon, "Expect ':' after generic type")?;
+            let trait_name = self.consume(TokenKind::Identifier, "Expect trait name")?.clone();
+            restrictions.push(GenericRestriction {
+                generic: SymbolicToken::new(generic),
+                trait_name: SymbolicToken::new(trait_name),
+            });
+        }
+
+        Ok(restrictions)
     }
 
     fn structural_variable_decl(

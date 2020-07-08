@@ -205,16 +205,22 @@ impl std::fmt::Display for NodeType {
             NodeType::Byte => String::from("byte"),
             NodeType::Any => String::from("any"),
             NodeType::Function(func_type) => func_type.to_string(),
-            NodeType::Pointer(ty) => format!("ptr<{}>", ty),
-            NodeType::Array(ty, size) => format!("Array<{}, count={}>", ty, size),
+            NodeType::Pointer(ty) => format!("ptr {}", ty),
+            NodeType::Array(ty, size) => format!("Array[{}, count={}]", ty, size),
             NodeType::Instance(ty, specialization) => {
-                let mut string = ty.mangled().clone();
+                let mut string = ty.name().to_owned();
                 if !specialization.map.is_empty() {
                     string += &format!("[{}]", specialization.display_list());
                 }
                 string
             }
-            NodeType::Metatype(ty, spec) => format!("Metatype({}, spec: {})", ty.mangled(), spec),
+            NodeType::Metatype(ty, specialization) => {
+                let mut string = format!("{}.Metatype", ty.name());
+                if !specialization.map.is_empty() {
+                    string += &format!("[{}]", specialization.display_list());
+                }
+                string
+            },
             NodeType::Ambiguous => String::from("_"),
         };
         write!(f, "{}", kind)
