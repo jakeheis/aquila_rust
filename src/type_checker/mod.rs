@@ -5,7 +5,7 @@ mod type_resolver;
 
 pub use symbol_table_builder::SymbolTableBuilder;
 pub use type_checker::TypeChecker;
-pub use type_resolver::{TypeResolution, TypeResolutionError};
+pub use type_resolver::{TypeResolution, TypeResolutionError, TypeResolutionResult};
 
 use crate::diagnostic::*;
 use crate::library::*;
@@ -81,9 +81,17 @@ pub enum ScopeType {
     InsideFunction(FunctionMetadata),
 }
 
+#[derive(Clone)]
+pub enum ScopeDefinition {
+    Variable(Symbol, NodeType),
+    Function(Symbol),
+    SelfVar(Symbol, NodeType),
+    ExplicitType(DiagnosticResult<NodeType>),
+}
+
 pub struct Scope {
     id: Symbol,
-    variable_types: HashMap<Symbol, NodeType>,
+    variable_types: HashMap<String, ScopeDefinition>,
     scope_type: ScopeType,
 }
 
@@ -94,10 +102,6 @@ impl Scope {
             variable_types: HashMap::new(),
             scope_type,
         }
-    }
-
-    fn type_of(&self, symbol: &Symbol) -> Option<&NodeType> {
-        self.variable_types.get(symbol)
     }
 }
 
@@ -209,13 +213,17 @@ impl ContextTracker {
 
     // Variables
 
-    pub fn put_in_scope(&mut self, symbol: Symbol, var_type: NodeType) {
+    pub fn put_in_scope(&mut self, name: String, definition: ScopeDefinition) {
         self.current_scope()
             .variable_types
-            .insert(symbol, var_type);
+            .insert(name, definition);
     }
 
-    pub fn define_var(&mut self, name: &SymbolicToken, var_type: &NodeType) {
+    pub fn put_func_in_scope(&mut self, name: String, symbol: Symbol) {
+        self.current_scope().variable_types.insert(name, ScopeDefinition::Function(symbol));
+    }
+
+    pub fn define_variable(&mut self, name: &SymbolicToken, var_type: &NodeType) {
         if var_type.contains_ambiguity() {
             panic!("Should never define var as ambiguous");
         }
@@ -224,25 +232,34 @@ impl ContextTracker {
 
         trace!(target: "type_checker", "Defining {} (symbol = {}) as {}", name.span().lexeme(), new_symbol, var_type);
 
+        let definition = ScopeDefinition::Variable(new_symbol.clone(), var_type.clone());
         self.current_scope()
             .variable_types
-            .insert(new_symbol.clone(), var_type.clone());
+            .insert(name.token.lexeme().to_owned(), definition);
 
         name.set_symbol(new_symbol);
     }
 
-    pub fn resolve_var(&self, name: &str) -> Option<(Symbol, NodeType)> {
+    pub fn resolve_token(&self, token: &SpecializedToken) -> Option<ScopeDefinition> {
         for scope in self.scopes.iter().rev() {
-            let possible_symbol = scope.id.child(name);
-            if let Some(node_type) = scope.type_of(&possible_symbol) {
-                return Some((possible_symbol, node_type.clone()));
+            if let Some(definition) = scope.variable_types.get(token.token.lexeme()) {
+                return Some(definition.clone());
             }
         }
 
-        if let Some(metadata) = self.lib.top_level_function_named(name) {
-            Some((metadata.symbol.clone(), metadata.node_type()))
-        } else {
-            None
+        if let Some(metadata) = self.lib.top_level_function_named(token.token.lexeme()) {
+            return Some(ScopeDefinition::Function(metadata.symbol.clone()));
+        }
+
+        let context = self.symbolic_context();
+        let enclosing_func = self.enclosing_function().map(|f| &f.symbol);
+        let resolver = TypeResolution::new(&self.lib, &self.lib.symbols, &context, enclosing_func);
+        match resolver.resolve_simple(token) {
+            Ok(resolved_type) => Some(ScopeDefinition::ExplicitType(Ok(resolved_type))),
+            Err(TypeResolutionError::NotFound) => None,
+            Err(TypeResolutionError::Inaccessible(diag)) | Err(TypeResolutionError::IncorrectlySpecialized(diag)) => {
+                Some(ScopeDefinition::ExplicitType(Err(diag)))
+            }
         }
     }
 
@@ -258,15 +275,5 @@ impl ContextTracker {
                 TypeResolutionError::NotFound => Diagnostic::error(explicit_type, "Type not found"),
             }),
         }
-    }
-
-    fn resolve_token_as_type(
-        &self,
-        token: &SpecializedToken,
-    ) -> Result<NodeType, TypeResolutionError> {
-        let context = self.symbolic_context();
-        let enclosing_func = self.enclosing_function().map(|f| &f.symbol);
-        let resolver = TypeResolution::new(&self.lib, &self.lib.symbols, &context, enclosing_func);
-        resolver.resolve_simple(token)
     }
 }

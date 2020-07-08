@@ -5,6 +5,7 @@ use crate::library::*;
 use crate::parsing::{ExplicitType, ExplicitTypeKind, SpecializedToken};
 use log::trace;
 
+#[derive(Clone)]
 pub enum TypeResolutionError {
     IncorrectlySpecialized(Diagnostic),
     Inaccessible(Diagnostic),

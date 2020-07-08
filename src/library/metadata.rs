@@ -52,8 +52,18 @@ impl TypeMetadata {
         self.methods.iter().find(|m| m.as_str() == name)
     }
 
+    pub fn method_symbols<'a>(&'a self) -> impl Iterator<Item = Symbol> + 'a {
+        let sym = self.symbol.clone();
+        self.methods.iter().map(move |m| sym.child(&m))
+    }
+
     pub fn meta_method_named(&self, name: &str) -> Option<&String> {
         self.meta_methods.iter().find(|m| m.as_str() == name)
+    }
+
+    pub fn meta_method_symbols<'a>(&'a self) -> impl Iterator<Item = Symbol> + 'a {
+        let sym = self.symbol.meta_symbol();
+        self.meta_methods.iter().map(move |m| sym.child(&m))
     }
 
     pub fn symbol_for_field(&self, var: &VarMetadata) -> Symbol {

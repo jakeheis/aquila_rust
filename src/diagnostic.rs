@@ -3,7 +3,7 @@ use colored::*;
 use std::cell::Cell;
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Severity {
     Error,
     Warning,
@@ -11,7 +11,7 @@ pub enum Severity {
 
 pub type DiagnosticResult<T> = Result<T, Diagnostic>;
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Diagnostic {
     pub severity: Severity,
     pub span: Span,

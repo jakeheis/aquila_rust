@@ -1,4 +1,4 @@
-use super::{check, ContextTracker};
+use super::{check, ContextTracker, ScopeDefinition};
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::library::*;
@@ -17,7 +17,7 @@ impl ExprChecker {
     }
 
     fn retrieve_method<S: ContainsSpan>(
-        &mut self,
+        &self,
         span: &S,
         target: &NodeType,
         method: &str,
@@ -68,40 +68,43 @@ impl ExprChecker {
         span: &S,
         function: &SpecializedToken,
     ) -> DiagnosticResult<(&FunctionMetadata, GenericSpecialization, bool)> {
-        match self.context.resolve_var(function.token.lexeme()) {
-            Some((found_symbol, NodeType::Function(_))) => {
-                let func_metadata = self.lib.function_metadata(&found_symbol).unwrap();
-                match &func_metadata.kind {
+        match self.context.resolve_token(function) {
+            Some(ScopeDefinition::Function(sym)) => {
+                let metadata = self.lib.function_metadata(&sym).unwrap();
+                match &metadata.kind {
                     FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
                         let implicit_self = self.lib.type_metadata(owner).unwrap();
                         let implicit_spec = implicit_self.dummy_specialization();
-                        return Ok((func_metadata, implicit_spec, false));
+                        return Ok((metadata, implicit_spec, false));
                     }
-                    _ => return Ok((func_metadata, GenericSpecialization::empty(), false)),
+                    _ => return Ok((metadata, GenericSpecialization::empty(), false)),
                 }
             }
-            Some((_, node_type)) => {
+            Some(ScopeDefinition::Variable(_, node_type)) => {
                 return Err(Diagnostic::error(
                     span,
                     &format!("Cannot call object of type {}", node_type),
                 ))
             }
-            _ => (),
-        }
-
-        match self.context.resolve_token_as_type(function) {
-            Ok(NodeType::Instance(type_symbol, specs)) => {
-                let meta_symbol = Symbol::meta_symbol(&type_symbol);
-                let init_metadata = self
-                    .lib
-                    .function_metadata(&Symbol::init_symbol(&meta_symbol));
-                Ok((init_metadata.unwrap(), specs.clone(), true))
+            Some(ScopeDefinition::SelfVar(..)) => {
+                return Err(Diagnostic::error(
+                    span,
+                    "Cannot call self",
+                ))
             }
-            Ok(..) => Err(Diagnostic::error(
-                function.span(),
-                "Cannot call a primitive",
-            )),
-            _ => Err(Diagnostic::error(function.span(), "Undefined function")),
+            Some(ScopeDefinition::ExplicitType(result)) => {
+                match result {
+                    Ok(NodeType::Instance(type_symbol, specs)) => {
+                        let init_metadata = self
+                            .lib
+                            .function_metadata(&type_symbol.meta_symbol().init_symbol());
+                        Ok((init_metadata.unwrap(), specs.clone(), true))
+                    }
+                    Ok(..) => Err(Diagnostic::error(function.span(), "Cannot call a primitive")),
+                    Err(diag) => Err(diag)
+                }
+            }
+            None => Err(Diagnostic::error(function.span(), "Undefined function")),
         }
     }
 
@@ -409,22 +412,29 @@ impl ExprVisitor for ExprChecker {
             }
         }
 
-        if let Some((found_symbol, node_type)) = self.context.resolve_var(name.span().lexeme()) {
-            if !name.specialization.is_empty() {
-                return Err(Diagnostic::error(expr, "Cannot specialize variable"));
-            }
-            name.set_symbol(found_symbol);
-            expr.set_type(node_type.clone())
-        } else {
-            let explicit_type = self.context.resolve_token_as_type(name);
-            match &explicit_type {
-                Ok(NodeType::Instance(symbol, spec)) => {
-                    trace!(target: "type_checker", "Treating variable as metatype of {}", symbol);
-                    name.set_symbol(symbol.clone());
-                    expr.set_type(NodeType::Metatype(symbol.clone(), spec.clone()))
+        match self.context.resolve_token(name) {
+            Some(ScopeDefinition::Variable(sym, var_type)) | Some(ScopeDefinition::SelfVar(sym, var_type)) => {
+                if !name.specialization.is_empty() {
+                    return Err(Diagnostic::error(expr, "Cannot specialize variable"));
                 }
-                _ => Err(Diagnostic::error(name.span(), "Undefined variable")),
+                name.set_symbol(sym);
+                expr.set_type(var_type.clone())
             }
+            Some(ScopeDefinition::Function(..)) => {
+                Err(Diagnostic::error(expr, "Cannot use function as variable"))
+            }
+            Some(ScopeDefinition::ExplicitType(result)) => {
+                match result {
+                    Ok(NodeType::Instance(symbol, spec)) => {
+                        trace!(target: "type_checker", "Treating variable as metatype of {}", symbol);
+                        name.set_symbol(symbol.clone());
+                        expr.set_type(NodeType::Metatype(symbol.clone(), spec.clone()))
+                    },
+                    Ok(_) => Err(Diagnostic::error(expr, "Type not allowed here")),
+                    Err(diag) => Err(diag),
+                }
+            }
+            None => Err(Diagnostic::error(name.span(), "Undefined variable")),
         }
     }
 

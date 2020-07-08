@@ -56,10 +56,6 @@ impl SymbolTableBuilder {
         }
     }
 
-    fn insert_func_metadata(&mut self, symbol: Symbol, metadata: FunctionMetadata) {
-        self.symbols.insert_func_metadata(symbol, metadata)
-    }
-
     fn build_type_header(&mut self, decl: &TypeDecl) {
         let new_symbol = self.current_symbol().child_token(&decl.name.token);
 
@@ -118,7 +114,7 @@ impl SymbolTableBuilder {
 
         let init_symbol = self.current_symbol().init_symbol();
         type_metadata.meta_methods.push(init_symbol.name().to_owned());
-        self.insert_func_metadata(
+        self.symbols.insert_func_metadata(
             init_symbol.clone(),
             FunctionMetadata {
                 symbol: init_symbol,
@@ -136,7 +132,7 @@ impl SymbolTableBuilder {
 
         let deinit_symbol = self.current_symbol().deinit_symbol();
         type_metadata.methods.push(deinit_symbol.name().to_owned());
-        self.insert_func_metadata(
+        self.symbols.insert_func_metadata(
             deinit_symbol.clone(),
             FunctionMetadata {
                 symbol: deinit_symbol,
@@ -211,7 +207,7 @@ impl SymbolTableBuilder {
             generic_restrictions,
             is_public: force_public || decl.is_public,
         };
-        self.insert_func_metadata(function_symbol.clone(), function_metadata);
+        self.symbols.insert_func_metadata(function_symbol.clone(), function_metadata);
 
         trace!(target: "symbol_table", "Finished building function {}", decl.name.token.lexeme());
 
@@ -249,9 +245,15 @@ impl SymbolTableBuilder {
 
     fn build_conformance(&mut self, decl: &ConformanceDecl) {
         let type_symbol = self.current_symbol().child_token(&decl.target.token);
-        self.context.push(type_symbol);
-        self.build_functions(&decl.implementations, true);
+        let mut type_metadata = self.symbols.get_type_metadata(&type_symbol).unwrap().clone();
+
+        self.context.push(type_symbol.clone());
+        let impls = self.build_functions(&decl.implementations, true);
         self.context.pop();
+
+        type_metadata.methods.extend(impls);
+
+        self.symbols.insert_type_metadata(type_symbol, type_metadata);
     }
 
     fn current_symbol(&self) -> &Symbol {

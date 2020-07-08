@@ -1,5 +1,5 @@
 use super::expr_checker::*;
-use super::{check, ContextTracker, ScopeType};
+use super::{check, ContextTracker, ScopeType, ScopeDefinition};
 use crate::diagnostic::*;
 use crate::library::*;
 use crate::parsing::*;
@@ -90,14 +90,8 @@ impl TypeChecker {
         let (type_symbol, metadata) = self.context.push_type_scope(&decl.name);
 
         self.context.push_scope_meta(&metadata);
-        for meta_method in &metadata.meta_methods {
-            let meta_method = type_symbol.meta_symbol().child(&meta_method);
-            let method_metadata = self
-                .lib
-                .function_metadata(&meta_method)
-                .expect(&format!("metadata for method {}", meta_method));
-            self.context
-                .put_in_scope(meta_method.clone(), method_metadata.node_type());
+        for method in metadata.meta_method_symbols() {
+            self.context.put_in_scope(method.name().to_owned(), ScopeDefinition::Function(method));
         }
         for meta_method in &decl.meta_methods {
             self.check_function_decl(meta_method);
@@ -105,18 +99,15 @@ impl TypeChecker {
         self.context.pop_scope();
 
         for field in &metadata.fields {
-            let symbol = type_symbol.child(&field.name);
-            self.context.put_in_scope(symbol, field.var_type.clone());
+            let definition = ScopeDefinition::Variable(type_symbol.child(&field.name), field.var_type.clone());
+            self.context.put_in_scope(field.name.clone(), definition);
         }
 
-        let self_symbol = Symbol::self_symbol(&type_symbol);
-        self.context.put_in_scope(self_symbol, metadata.unspecialized_type());
+        let def = ScopeDefinition::SelfVar(Symbol::self_symbol(&type_symbol), metadata.unspecialized_type());
+        self.context.put_in_scope("self".to_owned(), def);
 
-        for method in &metadata.methods {
-            let method = type_symbol.child(&method);
-            let method_metadata = self.lib.function_metadata(&method).unwrap();
-            self.context
-                .put_in_scope(method.clone(), method_metadata.node_type());
+        for method in metadata.method_symbols() {
+            self.context.put_in_scope(method.name().to_owned(), ScopeDefinition::Function(method));
         }
         for method in &decl.methods {
             self.check_function_decl(method);
@@ -159,8 +150,8 @@ impl TypeChecker {
         };
 
         for (index, param) in metadata.parameters.iter().enumerate() {
-            let symbol = func_symbol.child(&param.name);
-            self.context.put_in_scope(symbol.clone(), param.var_type.clone());
+            let def = ScopeDefinition::Variable(func_symbol.child(&param.name), param.var_type.clone());
+            self.context.put_in_scope(param.name.clone(), def);
 
             if let NodeType::Array(_, 0) = param.var_type {
                 self.report_error(Diagnostic::error(
@@ -171,8 +162,8 @@ impl TypeChecker {
         }
 
         if decl.include_caller {
-            let symbol = func_symbol.caller_symbol();
-            self.context.put_in_scope(symbol, NodeType::pointer_to(NodeType::Byte));
+            let def = ScopeDefinition::Variable(func_symbol.caller_symbol(), NodeType::pointer_to(NodeType::Byte));
+            self.context.put_in_scope("caller".to_owned(), def);
         }
 
         let analysis = self.check_list(&decl.body);
@@ -206,7 +197,7 @@ impl TypeChecker {
             self.report_error(Diagnostic::error(&decl.trait_name, "Trait not found"));
             return;
         }
-        let trait_metadata = trait_metadata.unwrap();
+        let trait_metadata = trait_metadata.unwrap().clone();
 
         let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
         type_metadata.add_trait_impl(trait_metadata.symbol.clone());
@@ -218,8 +209,8 @@ impl TypeChecker {
         );
 
         for field in &type_metadata.fields {
-            let symbol = type_symbol.child(&field.name);
-            self.context.put_in_scope(symbol, field.var_type.clone());
+            let definition = ScopeDefinition::Variable(type_symbol.child(&field.name), field.var_type.clone());
+            self.context.put_in_scope(field.name.clone(), definition);
         }
 
         for function in &decl.implementations {
@@ -308,7 +299,7 @@ impl StmtVisitor for TypeChecker {
             }
         };
 
-        self.context.define_var(&decl.name, &var_type);
+        self.context.define_variable(&decl.name, &var_type);
         decl.set_type(var_type);
 
         Analysis {
@@ -392,7 +383,7 @@ impl StmtVisitor for TypeChecker {
         };
 
         self.context.push_scope_named("for");
-        self.context.define_var(variable, &array_element_type);
+        self.context.define_variable(variable, &array_element_type);
         let body_analysis = self.check_list(body);
         self.context.pop_scope();
 
