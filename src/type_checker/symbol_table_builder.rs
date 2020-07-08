@@ -170,7 +170,7 @@ impl SymbolTableBuilder {
 
         self.context.push(function_symbol.clone());
 
-        let (generic_symbols, generic_restrictions) = self.insert_generics(&function_symbol, &decl.generics, &decl.generic_restrctions);
+        let (generics, generic_restrictions) = self.insert_generics(&function_symbol, &decl.generics, &decl.generic_restrctions);
 
         let mut params: Vec<VarMetadata> = Vec::new();
         for param in &decl.parameters {
@@ -205,7 +205,7 @@ impl SymbolTableBuilder {
         let function_metadata = FunctionMetadata {
             symbol: function_symbol.clone(),
             kind: function_kind,
-            generics: generic_symbols,
+            generics,
             parameters: params,
             return_type: return_type,
             include_caller: decl.include_caller,
@@ -259,19 +259,19 @@ impl SymbolTableBuilder {
         self.context.last().unwrap()
     }
 
-    fn insert_placeholder_generics(&mut self, owner: &Symbol, generics: &[Token]) -> Vec<Symbol> {
-        let mut generic_symbols = Vec::new();
+    fn insert_placeholder_generics(&mut self, owner: &Symbol, generics: &[Token]) -> Vec<String> {
+        let mut generic_names = Vec::new();
         for generic in generics {
             let generic_symbol = self.current_symbol().child_token(&generic);
             let generic_type = TypeMetadata::generic(owner, generic.lexeme());
             self.symbols.insert_type_metadata(generic_symbol.clone(), generic_type);
-            generic_symbols.push(generic_symbol);
+            generic_names.push(generic.lexeme().to_owned());
         }
-        generic_symbols
+        generic_names
     }
 
-    fn insert_generics(&mut self, owner: &Symbol, generics: &[Token], restrictions: &[GenericRestriction]) -> (Vec<Symbol>, Vec<(Symbol, Symbol)>) {
-        let mut generic_symbols = Vec::new();
+    fn insert_generics(&mut self, owner: &Symbol, generics: &[Token], restrictions: &[GenericRestriction]) -> (Vec<String>, Vec<(Symbol, Symbol)>) {
+        let mut generic_names = Vec::new();
 
         for generic in generics {
             let generic_symbol = self.current_symbol().child_token(&generic);
@@ -312,7 +312,7 @@ impl SymbolTableBuilder {
                 .insert_type_metadata(generic_symbol.clone(), generic_type);
 
             trace!(target: "symbol_table", "Inserting generic {} (symbol = {})", generic.lexeme(), generic_symbol);
-            generic_symbols.push(generic_symbol);
+            generic_names.push(generic.lexeme().to_owned());
         }
 
         let mut restriction_symbols: Vec<(Symbol, Symbol)> = Vec::new();
@@ -326,7 +326,7 @@ impl SymbolTableBuilder {
             }
         }
 
-        (generic_symbols, restriction_symbols)
+        (generic_names, restriction_symbols)
     }
 
     fn resolve_type(

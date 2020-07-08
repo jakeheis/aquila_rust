@@ -305,7 +305,7 @@ impl ExprVisitor for ExprChecker {
                 .iter()
                 .map(|s| self.context.resolve_type(s))
                 .collect();
-            GenericSpecialization::new(&metadata.generics, specialization?)
+            GenericSpecialization::new(&metadata.symbol, &metadata.generics, specialization?)
         };
 
         let full_call_specialization = function_specialization.merge(&target_specialization);

@@ -19,7 +19,7 @@ impl fmt::Display for VarMetadata {
 #[derive(Clone, Debug)]
 pub struct TypeMetadata {
     pub symbol: Symbol,
-    pub generics: Vec<Symbol>,
+    pub generics: Vec<String>,
     pub fields: Vec<VarMetadata>,
     pub methods: Vec<Symbol>,
     pub meta_methods: Vec<Symbol>,
@@ -82,9 +82,12 @@ impl TypeMetadata {
         let dummy_generics = self
             .generics
             .iter()
-            .map(|g| NodeType::Instance(g.clone(), GenericSpecialization::empty()))
+            .map(|g| {
+                let sym = self.symbol.child(&g);
+                NodeType::Instance(sym, GenericSpecialization::empty())
+            })
             .collect();
-        GenericSpecialization::new(&self.generics, dummy_generics)
+        GenericSpecialization::new(&self.symbol, &self.generics, dummy_generics)
     }
 
     pub fn unspecialized_type(&self) -> NodeType {
@@ -101,12 +104,7 @@ impl std::fmt::Display for TypeMetadata {
             self.is_public
         )?;
         if !self.generics.is_empty() {
-            let gens = self
-                .generics
-                .iter()
-                .map(|symbol| format!("{}", symbol.name()))
-                .collect::<Vec<_>>()
-                .join(",");
+            let gens = self.generics.join(",");
             writeln!(f, "  generics: {}", gens)?;
         }
         let fields = self
@@ -154,7 +152,7 @@ pub enum FunctionKind {
 pub struct FunctionMetadata {
     pub symbol: Symbol,
     pub kind: FunctionKind,
-    pub generics: Vec<Symbol>,
+    pub generics: Vec<String>,
     pub parameters: Vec<VarMetadata>,
     pub return_type: NodeType,
     pub generic_restrictions: Vec<(Symbol, Symbol)>,
@@ -203,15 +201,10 @@ impl fmt::Display for FunctionMetadata {
         };
         writeln!(f, "{}, public: {})", line, self.is_public)?;
 
-        let generics: Vec<&str> = self
-            .generics
-            .iter()
-            .map(|g| g.name())
-            .collect();
-        let generic_porition = if generics.is_empty() {
+        let generic_porition = if self.generics.is_empty() {
             String::new()
         } else {
-            format!("[{}]", generics.join(","))
+            format!("[{}]", self.generics.join(","))
         };
         let parameters: Vec<String> = self
             .parameters
@@ -255,10 +248,11 @@ pub struct GenericSpecialization {
 }
 
 impl GenericSpecialization {
-    pub fn new(generic_list: &[Symbol], node_types: Vec<NodeType>) -> Self {
+    pub fn new(owner: &Symbol, generic_list: &[String], node_types: Vec<NodeType>) -> Self {
         let mut map: HashMap<Symbol, NodeType> = HashMap::new();
-        for (symbol, node_type) in generic_list.iter().zip(node_types) {
-            map.insert(symbol.clone(), node_type.clone());
+        for (g, node_type) in generic_list.iter().zip(node_types) {
+            let symbol = owner.child(&g);
+            map.insert(symbol, node_type.clone());
         }
         GenericSpecialization { map }
     }
@@ -276,7 +270,8 @@ impl GenericSpecialization {
     ) -> Result<Self, Symbol> {
         let mut spec_map: HashMap<Symbol, NodeType> = HashMap::new();
         for gen in &metadata.generics {
-            spec_map.insert(gen.clone(), NodeType::Ambiguous);
+            let sym = metadata.symbol.child(&gen);
+            spec_map.insert(sym, NodeType::Ambiguous);
         }
 
         for (param, arg_type) in metadata.parameters.iter().zip(arg_types).rev() {
