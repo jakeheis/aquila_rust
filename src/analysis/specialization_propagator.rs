@@ -86,7 +86,7 @@ impl<'a> SpecializationPropagator<'a> {
     }
 
     fn propagate_through_function(&mut self, cur: &Symbol, current_spec: &GenericSpecialization) {
-        let func_id = cur.specialized(current_spec);
+        let func_id = cur.add_spec_suffix(current_spec);
         if self.visited.contains(&func_id) {
             return;
         }
@@ -140,7 +140,7 @@ impl<'a> SpecializationPropagator<'a> {
     }
 
     fn propagate_through_type(&mut self, cur: &Symbol, current_spec: &GenericSpecialization) {
-        let type_id = cur.specialized(current_spec);
+        let type_id = cur.add_spec_suffix(current_spec);
 
         if self.visited.insert(type_id) == false {
             return;

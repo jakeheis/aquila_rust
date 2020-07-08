@@ -44,7 +44,7 @@ impl CodeWriter {
         for struct_def in structures {
             if let Some(specs) = self.spec_map.specs_for(&struct_def.name) {
                 for spec in specs {
-                    let struct_name = struct_def.name.specialized(spec);
+                    let struct_name = struct_def.name.add_spec_suffix(spec);
                     self.writeln("");
 
                     if prototype {
@@ -169,12 +169,12 @@ impl CodeWriter {
             IRExprKind::Call(function, spec, args) => {
                 let spec = spec.resolve_generics_using(enclosing_spec);
                 
-                let mut function_name = function.specialized(&spec);
+                let mut function_name = function.add_spec_suffix(&spec);
                 for (key, value) in &enclosing_spec.map {
                     if key.directly_owns(&function) {
                         // TODO: doesn't support meta requirements
                         if let NodeType::Instance(instance_sym, instance_spec) = value {
-                            function_name = instance_sym.child(function.name()).specialized(instance_spec);
+                            function_name = instance_sym.child(function.name()).add_spec_suffix(instance_spec);
                             break;
                         }
                     }
@@ -242,7 +242,7 @@ impl CodeWriter {
             .map(|param| self.type_and_name(&param.var_type.specialize(spec), &param.name))
             .collect();
 
-        let function_name = function.name.specialized(spec);
+        let function_name = function.name.add_spec_suffix(spec);
         let param_str = param_str.join(",");
 
         self.writeln("");

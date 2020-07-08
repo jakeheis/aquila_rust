@@ -112,7 +112,7 @@ impl Symbol {
 
     // }
 
-    pub fn specialized(&self, spec: &GenericSpecialization) -> String {
+    pub fn add_spec_suffix(&self, spec: &GenericSpecialization) -> String {
         let spec = spec.symbolic_list();
         if spec.len() > 0 {
             self.mangled() + "__" + &spec
