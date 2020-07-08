@@ -6,11 +6,13 @@ use crate::library::*;
 use crate::parsing::*;
 use log::trace;
 use std::rc::Rc;
+use super::memory;
 
 pub struct IRGen {
     lib: Rc<Lib>,
     writer: IRWriter,
     current_type: Option<TypeMetadata>,
+    current_func: Option<Symbol>,
 }
 
 impl IRGen {
@@ -21,6 +23,7 @@ impl IRGen {
             lib,
             writer: IRWriter::new(lib_copy),
             current_type: None,
+            current_func: None,
         }
     }
 
@@ -36,6 +39,7 @@ impl IRGen {
         }
 
         if !lib.main.is_empty() {
+            self.current_func = Some(Symbol::main_symbol());
             self.writer.start_block();
             for s in &lib.main {
                 s.accept(&mut self);
@@ -43,12 +47,8 @@ impl IRGen {
             self.writer.return_value(IRExpr::int_literal("0"));
             self.writer.end_decl_main();
         }
-
-        let (lib_copy, structs, funcs) = (
-            self.writer.lib,
-            self.writer.structures,
-            self.writer.functions,
-        );
+        
+        let IRWriter { lib: lib_copy, structures, functions, .. } = self.writer;
 
         std::mem::drop(lib);
         std::mem::drop(lib_copy);
@@ -61,13 +61,18 @@ impl IRGen {
             lib.dependencies,
         );
 
-        let new = Module {
+        let mut new = Module {
             name,
-            structures: structs,
-            functions: funcs,
+            structures,
+            functions,
             symbols: Rc::new(symbols),
             specialization_tracker: tracker,
         };
+        let tables: Vec<_> = modules.iter().map(|m| Rc::clone(&m.symbols)).collect();
+        for func in &mut new.functions {
+            let mut writer = memory::FreeWriter::new(&tables, func, &new.specialization_tracker);
+            writer.write();
+        }
         modules.push(new);
         modules
     }
@@ -141,9 +146,11 @@ impl IRGen {
         if decl.is_builtin {
             builtins::write_special_function(&mut self.writer, &func_metadata)
         } else {
+            self.current_func = Some(func_symbol);
             self.writer.start_block();
             self.gen_stmts(&decl.body);
             self.writer.end_decl_func(&func_metadata);
+            self.current_func = None;
         }
     }
 
@@ -444,6 +451,7 @@ impl ExprVisitor for IRGen {
         } else if builtins::can_write_special_call(&function_symbol) {
             builtins::write_special_call(
                 &mut self.writer,
+                self.current_func.as_ref().unwrap(),
                 &function_symbol,
                 &specialization,
                 arg_exprs,

@@ -19,7 +19,6 @@ use std::rc::Rc;
 
 pub fn generate(lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {
     let ir_libs = compile(lib);
-    // ir.dump();
 
     let spec_map = SpecializationPropagator::propagate(&ir_libs);
 
@@ -51,13 +50,5 @@ pub fn generate(lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str
 }
 
 pub fn compile(lib: Lib) -> Vec<Module> {
-    let mut mods = IRGen::new(lib).generate();
-    let tables: Vec<_> = mods.iter().map(|m| Rc::clone(&m.symbols)).collect();
-    for module in &mut mods {
-        for func in &mut module.functions {
-            let mut writer = memory::FreeWriter::new(&tables, func, &module.specialization_tracker);
-            writer.write();
-        }
-    }
-    mods
+    IRGen::new(lib).generate()
 }

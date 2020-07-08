@@ -49,6 +49,12 @@ pub type Memory {
 
 pub builtin def print(obj: any);
 
+def print_object[T](obj: T) where T: Writable {
+    let builder = StringBuilder.new();
+    obj.write(&builder);
+    print(builder.content.storage);
+}
+
 pub def read_line(): String {
     return String.literal(_read_line());
 }
@@ -83,6 +89,10 @@ pub type String {
         return String(lit, size, false);
     }
 
+    pub meta def empty(): String {
+        return String.literal("");
+    }
+
     pub def append_literal(lit: ptr byte): String {
         let new_size = size + strlen(lit);
 
@@ -102,8 +112,8 @@ pub type String {
 }
 
 impl String: Writable {
-    def write() {
-        print(storage);
+    def write(builder: ptr StringBuilder) {
+        (*builder).add_literal(storage);
     }
 }
 
@@ -199,6 +209,12 @@ pub type Vec[T] {
 
 }
 
+impl Vec: Writable {
+    def write(builder: ptr StringBuilder) {
+        (*builder).add_literal("Vec");
+    }
+}
+
 impl Vec: Iterable {}
 
 impl Vec: Freeable {
@@ -250,17 +266,40 @@ pub type Optional[T] {
 }
 
 impl Optional: Writable {
-    def write() {
+    def write(builder: ptr StringBuilder) {
         if _is_some {
-            print("Some");
+            (*builder).add_literal("Some");
         } else {
-            print("None");
+            (*builder).add_literal("None");
         }
     }
 }
 
+pub type StringBuilder {
+    
+    let content: String;
+
+    meta def new(): StringBuilder {
+        return StringBuilder(String.empty());
+    }
+
+    def add(str: String) {
+        content = content.append(str);
+    }
+
+    def addln(line: String) {
+        add(line);
+        add_literal("\n");
+    }
+
+    def add_literal(str: ptr byte) {
+        content = content.append_literal(str);
+    }
+
+}
+
 trait Writable {
-    def write();
+    def write(builder: ptr StringBuilder);
 }
 
 trait Freeable {

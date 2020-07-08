@@ -30,12 +30,12 @@ impl SymbolTableBuilder {
             builder.build_trait_header(decl);
         }
 
-        builder.build_type_internals(&lib.type_decls);
-        builder.build_functions(&lib.function_decls, false);
-
         for decl in &lib.trait_decls {
             builder.build_trait_body(decl);
         }
+
+        builder.build_type_internals(&lib.type_decls);
+        builder.build_functions(&lib.function_decls, false);
 
         for decl in &lib.conformance_decls {
             builder.build_conformance(decl);
@@ -296,6 +296,7 @@ impl SymbolTableBuilder {
                             } else {
                                 self.lib.function_metadata(&requirement).unwrap()
                             }.clone();
+
                             let symbol = generic_symbol.child(requirement.name());
                             req_metadata.symbol = symbol.clone();
                             req_metadata.kind = FunctionKind::Method(generic_symbol.clone());
@@ -354,7 +355,7 @@ impl SymbolTableBuilder {
     }
 
     fn resolve_trait(&self, trait_name: &str) -> Option<&TraitMetadata> {
-        let same_lib_symbol = self.current_symbol().child(trait_name);
+        let same_lib_symbol = Symbol::lib_root(&self.lib.name).child(trait_name);
         
         if let Some(metadata) = self.symbols.get_trait_metadata(&same_lib_symbol) {
             Some(metadata)

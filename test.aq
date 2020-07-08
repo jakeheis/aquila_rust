@@ -6,15 +6,20 @@
 
 // let str = add[ptr byte]("hi", "byte");
 
-pub def print_object[T](obj: T) where T: Writable {
-    obj.write();
-}
+// pub def print_object[T](obj: T) where T: Writable {
+//     obj.write();
+// }
 
-// let vector = Vec[int].new();
+let vector = Vec[int].new();
+print(vector);
+
 // print_object[Vec[int]](vector);
 
-let obj = String.literal("hello");
-print_object[String](obj);
+// let obj = String.literal("hello");
+
+// let
+
+// print_object[String](obj);
 
 // let heap = box Adder[int](3, 4);
 // let stack = Adder[ptr byte]("hi", "byte");

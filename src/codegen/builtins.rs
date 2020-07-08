@@ -4,7 +4,7 @@ use crate::library::*;
 
 struct Builtin {
     write: Option<fn(&mut IRWriter, &Symbol) -> ()>,
-    special_call: Option<fn(&mut IRWriter, &Symbol, &GenericSpecialization, Vec<IRExpr>) -> IRExpr>,
+    special_call: Option<fn(&mut IRWriter, &Symbol, &Symbol, &GenericSpecialization, Vec<IRExpr>) -> IRExpr>,
 }
 
 impl Builtin {
@@ -70,13 +70,14 @@ pub fn can_write_special_call(symbol: &Symbol) -> bool {
 
 pub fn write_special_call(
     writer: &mut IRWriter,
-    symbol: &Symbol,
+    caller: &Symbol,
+    func_symbol: &Symbol,
     spec: &GenericSpecialization,
     args: Vec<IRExpr>,
 ) -> IRExpr {
-    if let Some(builtin) = Builtin::named(&symbol) {
+    if let Some(builtin) = Builtin::named(&func_symbol) {
         if let Some(call) = &builtin.special_call {
-            return call(writer, symbol, spec, args);
+            return call(writer, caller, func_symbol, spec, args);
         }
     }
     panic!()
@@ -224,11 +225,12 @@ pub fn write_type_deinit(writer: &mut IRWriter, type_metadata: &TypeMetadata, tr
 
 fn size_call(
     _writer: &mut IRWriter,
-    symbol: &Symbol,
+    _caller: &Symbol,
+    func_symbol: &Symbol,
     spec: &GenericSpecialization,
     _args: Vec<IRExpr>,
 ) -> IRExpr {
-    let mem_type = symbol.child("T");
+    let mem_type = func_symbol.child("T");
     let expr_type = spec.type_for(&mem_type).unwrap().clone();
     let arg = IRExpr {
         kind: IRExprKind::ExplicitType,
@@ -239,15 +241,21 @@ fn size_call(
 
 fn print_call(
     writer: &mut IRWriter,
-    _symbol: &Symbol,
+    caller: &Symbol,
+    _func_symbol: &Symbol,
     _spec: &GenericSpecialization,
     mut args: Vec<IRExpr>,
 ) -> IRExpr {
     let node_type = args[0].expr_type.clone();
-    if let NodeType::Instance(type_symbol, spec) = &node_type {
-        let full_symbol = type_symbol.write_symbol();
-        let arg = writer.addres_of_expr(args.remove(0));
-        IRExpr::call_generic(full_symbol, spec.clone(), vec![arg], NodeType::Void)
+    if let NodeType::Instance(..) = &node_type {
+        let print_object = Symbol::stdlib("print_object");
+        let spec = GenericSpecialization::new(
+            &print_object, 
+            &["T".to_owned()],
+            vec![node_type.clone()]
+        );
+        writer.lib.specialization_tracker.add_call(caller.clone(), print_object.clone(), spec.clone());
+        IRExpr::call_generic(print_object, spec.clone(), args, NodeType::Void)
     } else {
         let format_specificer = match node_type {
             NodeType::Int | NodeType::Bool => "%i",
