@@ -157,13 +157,16 @@ pub fn write_type_init(writer: &mut IRWriter, type_metadata: &TypeMetadata) {
     writer.start_block();
     writer.declare_var(&new_item);
 
-    for (field, field_type) in type_metadata
-        .field_symbols
-        .iter()
-        .zip(&type_metadata.field_types)
-    {
-        let field_expr = IRExpr::field(&new_item, &field.mangled(), field_type.clone());
-        let param = IRVariable::new_sym(&field, field_type.clone());
+    for field in &type_metadata.fields {
+        let field_expr = IRExpr::field(
+            &new_item, 
+            &type_metadata.symbol_for_field(&field).mangled(), 
+            field.var_type.clone()
+        );
+        let param = IRVariable::new_sym(
+            &init_symbol.child(&field.name), 
+            field.var_type.clone()
+        );
         writer.assign(field_expr, IRExpr::variable(&param));
     }
     writer.return_value(IRExpr::variable(&new_item));
@@ -191,19 +194,21 @@ pub fn write_type_deinit(writer: &mut IRWriter, type_metadata: &TypeMetadata, tr
     }
 
     let self_var = IRVariable::new("self", type_metadata.unspecialized_type());
-    for (field_symbol, field_type) in type_metadata.field_symbols.iter().zip(&type_metadata.field_types) {
-        if let NodeType::Instance(type_sym, spec) = field_type {
-            let field = IRExpr::field_deref(&self_var, &field_symbol.mangled(), field_type.clone());
-            let field = IRExpr {
-                kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(field)),
-                expr_type: NodeType::pointer_to(field_type.clone())
+    for field in &type_metadata.fields {
+        if let NodeType::Instance(type_sym, spec) = &field.var_type {
+            let field_symbol = type_metadata.symbol_for_field(field);
+
+            let field_expr = IRExpr::field_deref(&self_var, &field_symbol.mangled(), field.var_type.clone());
+            let field_expr = IRExpr {
+                kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(field_expr)),
+                expr_type: NodeType::pointer_to(field.var_type.clone())
             };
 
             let deinit_sym = Symbol::deinit_symbol(&type_sym);
             let deinit = IRExpr::call_generic(
                 deinit_sym.clone(),
                 spec.clone(),
-                vec![field],
+                vec![field_expr],
                 NodeType::Void,
             );
             writer.expr(deinit);

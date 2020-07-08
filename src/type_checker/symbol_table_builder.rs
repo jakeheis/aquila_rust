@@ -99,19 +99,16 @@ impl SymbolTableBuilder {
         type_metadata.generics = generics;
 
         let mut any_private_fields = false;
-        for field in &decl.fields {
-            let (token, field_type) = self.var_decl_type(field, None);
-            type_metadata.field_types.push(field_type.clone());
+        for field in &decl.fields {            
+            type_metadata.fields.push(VarMetadata {
+                name: field.name.lexeme().to_owned(),
+                var_type: self.resolve_type(&field.explicit_type, None),
+                public: field.is_public
+            });
 
-            let field_symbol = self.current_symbol().child_token(&token);
-            type_metadata.field_symbols.push(field_symbol.clone());
-
-            type_metadata.field_visibilities.push(field.is_public);
             if !field.is_public {
                 any_private_fields = true;
             }
-
-            trace!(target: "symbol_table", "Inserting field {} (symbol = {})", token.lexeme(), field_symbol);
         }
 
         type_metadata.methods = self.build_functions(&decl.methods, false);
@@ -128,8 +125,7 @@ impl SymbolTableBuilder {
                 symbol: init_symbol,
                 kind: FunctionKind::MetaMethod(type_symbol.clone()),
                 generics: Vec::new(),
-                parameter_symbols: type_metadata.field_symbols.clone(),
-                parameter_types: type_metadata.field_types.clone(),
+                parameters: type_metadata.fields.clone(),
                 return_type: type_metadata.unspecialized_type(),
                 is_public: !any_private_fields,
                 generic_restrictions: Vec::new(),
@@ -147,8 +143,7 @@ impl SymbolTableBuilder {
                 symbol: deinit_symbol,
                 kind: FunctionKind::Method(type_symbol.clone()),
                 generics: Vec::new(),
-                parameter_symbols: Vec::new(),
-                parameter_types: Vec::new(),
+                parameters: Vec::new(),
                 return_type: NodeType::Void,
                 is_public: !any_private_fields,
                 generic_restrictions: Vec::new(),
@@ -177,12 +172,14 @@ impl SymbolTableBuilder {
 
         let (generic_symbols, generic_restrictions) = self.insert_generics(&function_symbol, &decl.generics, &decl.generic_restrctions);
 
-        let mut param_types: Vec<NodeType> = Vec::new();
-        let mut param_symbols: Vec<Symbol> = Vec::new();
+        let mut params: Vec<VarMetadata> = Vec::new();
         for param in &decl.parameters {
-            let (token, node_type) = self.var_decl_type(param, Some(&function_symbol));
-            param_types.push(node_type);
-            param_symbols.push(function_symbol.child_token(token));
+            let node_type = self.resolve_type(&param.explicit_type, Some(&function_symbol));
+            params.push(VarMetadata {
+                name: param.name.lexeme().to_owned(),
+                var_type: node_type,
+                public: false
+            });
         }
 
         let return_type = decl
@@ -193,7 +190,6 @@ impl SymbolTableBuilder {
 
         self.context.pop();
 
-        let new_type = NodeType::function(param_types.clone(), return_type.clone());
         let function_kind = match self.context.last() {
             Some(p) if p.is_meta() => FunctionKind::MetaMethod(p.owner_symbol().unwrap()),
             Some(p) => {
@@ -210,8 +206,7 @@ impl SymbolTableBuilder {
             symbol: function_symbol.clone(),
             kind: function_kind,
             generics: generic_symbols,
-            parameter_symbols: param_symbols,
-            parameter_types: param_types,
+            parameters: params,
             return_type: return_type,
             include_caller: decl.include_caller,
             generic_restrictions,
@@ -219,7 +214,7 @@ impl SymbolTableBuilder {
         };
         self.insert_func_metadata(function_symbol.clone(), function_metadata);
 
-        trace!(target: "symbol_table", "Finished building function {} -- {}", decl.name.token.lexeme(), new_type);
+        trace!(target: "symbol_table", "Finished building function {}", decl.name.token.lexeme());
 
         function_symbol
     }
@@ -332,15 +327,6 @@ impl SymbolTableBuilder {
         }
 
         (generic_symbols, restriction_symbols)
-    }
-
-    fn var_decl_type<'b>(
-        &self,
-        var_decl: &'b StructuralVariableDecl,
-        enclosing_func: Option<&Symbol>,
-    ) -> (&'b Token, NodeType) {
-        let resolved_type = self.resolve_type(&var_decl.explicit_type, enclosing_func);
-        (&var_decl.name, resolved_type)
     }
 
     fn resolve_type(

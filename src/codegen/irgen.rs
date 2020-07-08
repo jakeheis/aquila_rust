@@ -131,11 +131,11 @@ impl IRGen {
         let mut func_metadata = self.lib.function_metadata(&func_symbol).unwrap().clone();
 
         if decl.include_caller {
-            let caller_symbol = func_symbol.caller_symbol();
-            func_metadata.parameter_symbols.push(caller_symbol);
-            func_metadata
-                .parameter_types
-                .push(NodeType::pointer_to(NodeType::Byte));
+            func_metadata.parameters.push(VarMetadata {
+                name: String::from("caller"),
+                var_type: NodeType::pointer_to(NodeType::Byte),
+                public: false,
+            });
         }
 
         if decl.is_builtin {

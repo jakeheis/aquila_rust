@@ -4,12 +4,23 @@ use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Clone, Debug)]
+pub struct VarMetadata {
+    pub name: String,
+    pub var_type: NodeType,
+    pub public: bool,
+}
+
+impl fmt::Display for VarMetadata {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: {} (public = {})", self.name, self.var_type, self.public)
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct TypeMetadata {
     pub symbol: Symbol,
     pub generics: Vec<Symbol>,
-    pub field_symbols: Vec<Symbol>,
-    pub field_types: Vec<NodeType>,
-    pub field_visibilities: Vec<bool>,
+    pub fields: Vec<VarMetadata>,
     pub methods: Vec<Symbol>,
     pub meta_methods: Vec<Symbol>,
     pub trait_impls: RefCell<Vec<Symbol>>,
@@ -21,9 +32,7 @@ impl TypeMetadata {
         TypeMetadata {
             symbol: symbol,
             generics: Vec::new(),
-            field_symbols: Vec::new(),
-            field_types: Vec::new(),
-            field_visibilities: Vec::new(),
+            fields: Vec::new(),
             methods: Vec::new(),
             meta_methods: Vec::new(),
             trait_impls: RefCell::new(Vec::new()),
@@ -35,21 +44,8 @@ impl TypeMetadata {
         TypeMetadata::new(owner.child(name), false)
     }
 
-    pub fn field_named(&self, name: &str) -> Option<(Symbol, &NodeType, bool)> {
-        let possible_symbol = self.symbol.child(name);
-        if let Some(index) = self
-            .field_symbols
-            .iter()
-            .position(|s| s == &possible_symbol)
-        {
-            Some((
-                possible_symbol,
-                &self.field_types[index],
-                self.field_visibilities[index],
-            ))
-        } else {
-            None
-        }
+    pub fn field_named(&self, name: &str) -> Option<&VarMetadata> {
+        self.fields.iter().find(|f| &f.name == name)
     }
 
     pub fn method_named(&self, name: &str) -> Option<Symbol> {
@@ -68,6 +64,10 @@ impl TypeMetadata {
         } else {
             None
         }
+    }
+
+    pub fn symbol_for_field(&self, var: &VarMetadata) -> Symbol {
+        self.symbol.child(&var.name)
     }
 
     pub fn add_trait_impl(&self, trait_symbol: Symbol) {
@@ -110,10 +110,9 @@ impl std::fmt::Display for TypeMetadata {
             writeln!(f, "  generics: {}", gens)?;
         }
         let fields = self
-            .field_symbols
+            .fields
             .iter()
-            .zip(&self.field_types)
-            .map(|(symbol, field_type)| format!("{}: {}", symbol.mangled(), field_type))
+            .map(|field| field.to_string())
             .collect::<Vec<_>>()
             .join(",");
         writeln!(f, "  fields: {}", fields)?;
@@ -156,8 +155,7 @@ pub struct FunctionMetadata {
     pub symbol: Symbol,
     pub kind: FunctionKind,
     pub generics: Vec<Symbol>,
-    pub parameter_symbols: Vec<Symbol>,
-    pub parameter_types: Vec<NodeType>,
+    pub parameters: Vec<VarMetadata>,
     pub return_type: NodeType,
     pub generic_restrictions: Vec<(Symbol, Symbol)>,
     pub is_public: bool,
@@ -170,8 +168,7 @@ impl FunctionMetadata {
             symbol: Symbol::main_symbol(),
             kind: FunctionKind::TopLevel,
             generics: Vec::new(),
-            parameter_symbols: Vec::new(),
-            parameter_types: Vec::new(),
+            parameters: Vec::new(),
             generic_restrictions: Vec::new(),
             return_type: NodeType::Int,
             is_public: false,
@@ -180,7 +177,8 @@ impl FunctionMetadata {
     }
 
     pub fn full_type(&self) -> FunctionType {
-        FunctionType::new(self.parameter_types.clone(), self.return_type.clone())
+        let parameter_types: Vec<_> = self.parameters.iter().map(|p| p.var_type.clone()).collect();
+        FunctionType::new(parameter_types, self.return_type.clone())
     }
 
     pub fn node_type(&self) -> NodeType {
@@ -216,10 +214,9 @@ impl fmt::Display for FunctionMetadata {
             format!("[{}]", generics.join(","))
         };
         let parameters: Vec<String> = self
-            .parameter_symbols
+            .parameters
             .iter()
-            .zip(&self.parameter_types)
-            .map(|(symbol, node_type)| format!("{}: {}", symbol.mangled(), node_type))
+            .map(|param| param.to_string())
             .collect();
 
         let parameters = parameters.join(",");
@@ -282,9 +279,9 @@ impl GenericSpecialization {
             spec_map.insert(gen.clone(), NodeType::Ambiguous);
         }
 
-        for (param_type, arg_type) in metadata.parameter_types.iter().zip(arg_types).rev() {
+        for (param, arg_type) in metadata.parameters.iter().zip(arg_types).rev() {
             if let Some((symbol, specialized_type)) =
-                NodeType::infer_generic_type(lib, param_type, arg_type)
+                NodeType::infer_generic_type(lib, &param.var_type, arg_type)
             {
                 spec_map.insert(symbol, specialized_type);
             }

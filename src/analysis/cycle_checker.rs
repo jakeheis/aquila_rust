@@ -15,8 +15,8 @@ impl CycleChecker {
 
         for (type_symbol, type_info) in &lib.symbols.type_metadata {
             let mut field_set: HashSet<Symbol> = HashSet::new();
-            for field in &type_info.field_types {
-                if let NodeType::Instance(field_type, _) = field {
+            for field in &type_info.fields {
+                if let NodeType::Instance(field_type, _) = &field.var_type {
                     field_set.insert(field_type.clone());
                 }
             }

@@ -108,6 +108,10 @@ impl Symbol {
         self.id.rsplit("$").next().unwrap()
     }
 
+    // pub fn is_in_lib(&self, lib: &str) -> bool {
+
+    // }
+
     pub fn specialized(&self, spec: &GenericSpecialization) -> String {
         let spec = spec.symbolic_list();
         if spec.len() > 0 {

@@ -151,8 +151,8 @@ impl<'a> SpecializationPropagator<'a> {
         self.map.add_spec(cur.clone(), current_spec.clone());
 
         let type_metadata = self.type_metadata(cur).clone();
-        for field_type in &type_metadata.field_types {
-            if let NodeType::Instance(target, field_spec) = field_type {
+        for field in &type_metadata.fields {
+            if let NodeType::Instance(target, field_spec) = &field.var_type {
                 let field_spec = field_spec.resolve_generics_using(&current_spec);
                 self.propagate_through_type(target, &field_spec);
             }

@@ -209,10 +209,10 @@ impl ContextTracker {
 
     // Variables
 
-    pub fn put_in_scope(&mut self, symbol: &Symbol, var_type: &NodeType) {
+    pub fn put_in_scope(&mut self, symbol: Symbol, var_type: NodeType) {
         self.current_scope()
             .variable_types
-            .insert(symbol.clone(), var_type.clone());
+            .insert(symbol, var_type);
     }
 
     pub fn define_var(&mut self, name: &SymbolicToken, var_type: &NodeType) {

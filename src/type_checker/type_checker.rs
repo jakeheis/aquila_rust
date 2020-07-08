@@ -93,25 +93,25 @@ impl TypeChecker {
         for meta_method in &metadata.meta_methods {
             let method_metadata = self.lib.function_metadata(&meta_method).unwrap();
             self.context
-                .put_in_scope(meta_method, &method_metadata.node_type());
+                .put_in_scope(meta_method.clone(), method_metadata.node_type());
         }
         for meta_method in &decl.meta_methods {
             self.check_function_decl(meta_method);
         }
         self.context.pop_scope();
 
-        for (symbol, field_type) in metadata.field_symbols.iter().zip(&metadata.field_types) {
-            self.context.put_in_scope(symbol, field_type);
+        for field in &metadata.fields {
+            let symbol = type_symbol.child(&field.name);
+            self.context.put_in_scope(symbol, field.var_type.clone());
         }
 
         let self_symbol = Symbol::self_symbol(&type_symbol);
-        self.context
-            .put_in_scope(&self_symbol, &metadata.unspecialized_type());
+        self.context.put_in_scope(self_symbol, metadata.unspecialized_type());
 
         for method in &metadata.methods {
             let method_metadata = self.lib.function_metadata(&method).unwrap();
             self.context
-                .put_in_scope(method, &method_metadata.node_type());
+                .put_in_scope(method.clone(), method_metadata.node_type());
         }
         for method in &decl.methods {
             self.check_function_decl(method);
@@ -153,27 +153,21 @@ impl TypeChecker {
             value => value,
         };
 
-        for (symbol, param_type) in metadata
-            .parameter_symbols
-            .iter()
-            .zip(&metadata.parameter_types)
-        {
-            self.context.put_in_scope(symbol, param_type);
-        }
+        for (index, param) in metadata.parameters.iter().enumerate() {
+            let symbol = func_symbol.child(&param.name);
+            self.context.put_in_scope(symbol.clone(), param.var_type.clone());
 
-        if decl.include_caller {
-            let symbol = func_symbol.caller_symbol();
-            self.context
-                .put_in_scope(&symbol, &NodeType::pointer_to(NodeType::Byte));
-        }
-
-        for (index, param_type) in metadata.parameter_types.iter().enumerate() {
-            if let NodeType::Array(_, 0) = param_type {
+            if let NodeType::Array(_, 0) = param.var_type {
                 self.report_error(Diagnostic::error(
                     &decl.parameters[index],
                     "A zero length array cannot be a parameter",
                 ));
             }
+        }
+
+        if decl.include_caller {
+            let symbol = func_symbol.caller_symbol();
+            self.context.put_in_scope(symbol, NodeType::pointer_to(NodeType::Byte));
         }
 
         let analysis = self.check_list(&decl.body);
@@ -218,12 +212,9 @@ impl TypeChecker {
             ScopeType::InsideType(type_metadata.clone()),
         );
 
-        for (symbol, field_type) in type_metadata
-            .field_symbols
-            .iter()
-            .zip(&type_metadata.field_types)
-        {
-            self.context.put_in_scope(symbol, field_type);
+        for field in &type_metadata.fields {
+            let symbol = type_symbol.child(&field.name);
+            self.context.put_in_scope(symbol, field.var_type.clone());
         }
 
         for function in &decl.implementations {

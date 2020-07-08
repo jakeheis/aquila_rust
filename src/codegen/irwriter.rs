@@ -24,12 +24,11 @@ impl IRWriter {
 
     pub fn declare_struct(&mut self, type_metadata: &TypeMetadata) {
         let fields: Vec<_> = type_metadata
-            .field_types
+            .fields
             .iter()
-            .zip(&type_metadata.field_symbols)
-            .map(|(node_type, symbol)| IRVariable {
-                name: symbol.mangled(),
-                var_type: node_type.clone(),
+            .map(|field| {
+                let sym = type_metadata.symbol.child(&field.name);
+                IRVariable::new_sym(&sym, field.var_type.clone())
             })
             .collect();
 
@@ -56,13 +55,9 @@ impl IRWriter {
 
     pub fn end_decl_func(&mut self, function: &FunctionMetadata) {
         let mut parameters: Vec<_> = function
-            .parameter_types
+            .parameters
             .iter()
-            .zip(&function.parameter_symbols)
-            .map(|(param_type, symbol)| IRVariable {
-                name: symbol.mangled(),
-                var_type: param_type.clone(),
-            })
+            .map(|param| IRVariable::new_meta(param, &function.symbol))
             .collect();
 
         if let FunctionKind::Method(owner) = &function.kind {

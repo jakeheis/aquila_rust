@@ -267,10 +267,10 @@ impl ExprVisitor for ExprChecker {
 
         trace!(target: "type_checker", "Callee metadata: {}", metadata);
 
-        if metadata.parameter_types.len() != arg_types.len() {
+        if metadata.parameters.len() != arg_types.len() {
             let message = format!(
                 "Expected {} argument(s), got {}",
-                metadata.parameter_types.len(),
+                metadata.parameters.len(),
                 arg_types.len()
             );
             return Err(Diagnostic::error(expr, &message));
@@ -353,31 +353,28 @@ impl ExprVisitor for ExprChecker {
         &mut self,
         expr: &Expr,
         target: &Expr,
-        field: &SpecializedToken,
+        field_token: &SpecializedToken,
     ) -> Self::ExprResult {
         let target_type = target.accept(self)?;
-        let field_name = field.token.lexeme();
+        let field_name = field_token.token.lexeme();
 
         match target_type {
             NodeType::Instance(type_symbol, specialization) => {
                 let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
-                if let Some((field_symbol, field_type, is_public)) =
-                    type_metadata.field_named(field_name)
-                {
-                    if is_public == false
-                        && check::symbol_accessible(self.lib.as_ref(), &field_symbol) == false
-                    {
-                        return Err(Diagnostic::error(field, "Field is private"));
+                if let Some(field) = type_metadata.field_named(field_name) {
+                    if field.public || check::symbol_accessible(self.lib.as_ref(), &type_symbol) {
+                        field_token.set_symbol(type_symbol.child(&field.name));
+                        expr.set_type(field.var_type.specialize(&specialization))
+                    } else {
+                        Err(Diagnostic::error(field_token, "Field is private"))
                     }
-                    field.set_symbol(field_symbol);
-                    expr.set_type(field_type.specialize(&specialization))
                 } else {
                     Err(Diagnostic::error(
-                        &Span::join(target, field.span()),
+                        &Span::join(target, field_token.span()),
                         &format!(
                             "Type '{}' does not has field '{}'",
                             type_symbol.name(),
-                            field.span().lexeme()
+                            field_token.span().lexeme()
                         ),
                     ))
                 }
