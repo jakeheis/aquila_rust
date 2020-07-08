@@ -36,9 +36,11 @@ impl ExprChecker {
         let target_metadata = self.lib.type_metadata(target_symbol).unwrap();
 
         let method_metadata = if is_meta {
-            target_metadata.meta_method_named(method)
+            let name = target_metadata.meta_method_named(method);
+            name.map(|n| target_symbol.meta_symbol().child(&n))
         } else {
-            target_metadata.method_named(method)
+            let name = target_metadata.method_named(method);
+            name.map(|n| target_symbol.child(&n))
         };
 
         // if method_metadata.is_none() {

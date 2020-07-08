@@ -21,8 +21,8 @@ pub struct TypeMetadata {
     pub symbol: Symbol,
     pub generics: Vec<String>,
     pub fields: Vec<VarMetadata>,
-    pub methods: Vec<Symbol>,
-    pub meta_methods: Vec<Symbol>,
+    pub methods: Vec<String>,
+    pub meta_methods: Vec<String>,
     pub trait_impls: RefCell<Vec<Symbol>>,
     pub is_public: bool,
 }
@@ -48,22 +48,12 @@ impl TypeMetadata {
         self.fields.iter().find(|f| &f.name == name)
     }
 
-    pub fn method_named(&self, name: &str) -> Option<Symbol> {
-        let possible_symbol = self.symbol.child(name);
-        if self.methods.contains(&possible_symbol) {
-            Some(possible_symbol)
-        } else {
-            None
-        }
+    pub fn method_named(&self, name: &str) -> Option<&String> {
+        self.methods.iter().find(|m| m.as_str() == name)
     }
 
-    pub fn meta_method_named(&self, name: &str) -> Option<Symbol> {
-        let possible_symbol = self.symbol.meta_symbol().child(name);
-        if self.meta_methods.contains(&possible_symbol) {
-            Some(possible_symbol)
-        } else {
-            None
-        }
+    pub fn meta_method_named(&self, name: &str) -> Option<&String> {
+        self.meta_methods.iter().find(|m| m.as_str() == name)
     }
 
     pub fn symbol_for_field(&self, var: &VarMetadata) -> Symbol {
@@ -116,16 +106,10 @@ impl std::fmt::Display for TypeMetadata {
         writeln!(f, "  fields: {}", fields)?;
         let methods = self
             .methods
-            .iter()
-            .map(|m| m.mangled())
-            .collect::<Vec<_>>()
             .join(",");
         writeln!(f, "  methods: {}", methods)?;
         let meta_methods = self
             .meta_methods
-            .iter()
-            .map(|m| m.mangled())
-            .collect::<Vec<_>>()
             .join(",");
         writeln!(f, "  meta methods: {}", meta_methods)?;
         let trait_impls = self
@@ -229,14 +213,14 @@ impl fmt::Display for FunctionMetadata {
 #[derive(Clone, Debug)]
 pub struct TraitMetadata {
     pub symbol: Symbol,
-    pub function_requirements: Vec<Symbol>,
+    pub function_requirements: Vec<String>,
 }
 
 impl fmt::Display for TraitMetadata {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "Trait({})", self.symbol.mangled())?;
         for req in &self.function_requirements {
-            writeln!(f, "  {}", req.mangled())?;
+            writeln!(f, "  {}", req)?;
         }
         Ok(())
     }

@@ -91,7 +91,11 @@ impl TypeChecker {
 
         self.context.push_scope_meta(&metadata);
         for meta_method in &metadata.meta_methods {
-            let method_metadata = self.lib.function_metadata(&meta_method).unwrap();
+            let meta_method = type_symbol.meta_symbol().child(&meta_method);
+            let method_metadata = self
+                .lib
+                .function_metadata(&meta_method)
+                .expect(&format!("metadata for method {}", meta_method));
             self.context
                 .put_in_scope(meta_method.clone(), method_metadata.node_type());
         }
@@ -109,6 +113,7 @@ impl TypeChecker {
         self.context.put_in_scope(self_symbol, metadata.unspecialized_type());
 
         for method in &metadata.methods {
+            let method = type_symbol.child(&method);
             let method_metadata = self.lib.function_metadata(&method).unwrap();
             self.context
                 .put_in_scope(method.clone(), method_metadata.node_type());
@@ -225,9 +230,11 @@ impl TypeChecker {
 
         let trait_metadata = self.lib.trait_metadata(decl.trait_name.lexeme()).unwrap();
         for requirement in &trait_metadata.function_requirements {
-            let requirement_metadata = self.lib.function_metadata(&requirement).unwrap();
-            let impl_symbol = type_metadata.symbol.child(requirement.name());
+            let trait_symbol = trait_metadata.symbol.child(&requirement);
+            let requirement_metadata = self.lib.function_metadata(&trait_symbol).unwrap();
+            let impl_symbol = type_metadata.symbol.child(&requirement);
             let impl_metadata = self.lib.function_metadata(&impl_symbol);
+
             if let Some(impl_metadata) = impl_metadata {
                 if !impl_metadata
                     .node_type()
@@ -235,14 +242,14 @@ impl TypeChecker {
                 {
                     let message = format!(
                         "Type implements requirement '{}' but with wrong signature",
-                        requirement.name()
+                        requirement
                     );
                     self.report_error(Diagnostic::error(&decl.target, &message));
                 }
             } else {
                 let message = format!(
                     "Type doesn't implement requirement '{}'",
-                    requirement.name()
+                    requirement
                 );
                 self.report_error(Diagnostic::error(&decl.target, &message));
             }

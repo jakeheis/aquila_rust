@@ -91,7 +91,7 @@ impl SymbolTableBuilder {
         let mut type_metadata = self
             .symbols
             .get_type_metadata(&type_symbol)
-            .unwrap()
+            .expect(&format!("metadata for symbol {}", type_symbol))
             .clone();
 
         let (generics, _) = self.insert_generics(&type_symbol, &decl.generics, &[]);
@@ -110,15 +110,14 @@ impl SymbolTableBuilder {
                 any_private_fields = true;
             }
         }
-
+        
         type_metadata.methods = self.build_functions(&decl.methods, false);
 
-        self.context
-            .push(Symbol::meta_symbol(self.current_symbol()));
+        self.context.push(self.current_symbol().meta_symbol());
         type_metadata.meta_methods = self.build_functions(&decl.meta_methods, false);
 
-        let init_symbol = Symbol::init_symbol(self.current_symbol());
-        type_metadata.meta_methods.push(init_symbol.clone());
+        let init_symbol = self.current_symbol().init_symbol();
+        type_metadata.meta_methods.push(init_symbol.name().to_owned());
         self.insert_func_metadata(
             init_symbol.clone(),
             FunctionMetadata {
@@ -135,8 +134,8 @@ impl SymbolTableBuilder {
 
         self.context.pop(); // Meta pop
 
-        let deinit_symbol = Symbol::deinit_symbol(self.current_symbol());
-        type_metadata.meta_methods.push(deinit_symbol.clone());
+        let deinit_symbol = self.current_symbol().deinit_symbol();
+        type_metadata.methods.push(deinit_symbol.name().to_owned());
         self.insert_func_metadata(
             deinit_symbol.clone(),
             FunctionMetadata {
@@ -159,11 +158,11 @@ impl SymbolTableBuilder {
         trace!(target: "symbol_table", "Finished building type {}", decl.name.token.lexeme());
     }
 
-    fn build_functions(&mut self, decls: &[FunctionDecl], force_public: bool) -> Vec<Symbol> {
+    fn build_functions(&mut self, decls: &[FunctionDecl], force_public: bool) -> Vec<String> {
         decls.iter().map(|decl| self.build_function(decl, force_public)).collect()
     }
 
-    fn build_function(&mut self, decl: &FunctionDecl, force_public: bool) -> Symbol {
+    fn build_function(&mut self, decl: &FunctionDecl, force_public: bool) -> String {
         let function_symbol = self.current_symbol().child_token(&decl.name.token);
 
         trace!(target: "symbol_table", "Building function {} (symbol = {})", decl.name.token.lexeme(), function_symbol);
@@ -216,7 +215,7 @@ impl SymbolTableBuilder {
 
         trace!(target: "symbol_table", "Finished building function {}", decl.name.token.lexeme());
 
-        function_symbol
+        function_symbol.name().to_owned()
     }
 
     fn build_trait_header(&mut self, decl: &TraitDecl) {
@@ -289,16 +288,17 @@ impl SymbolTableBuilder {
 
                         // TODO: doesn't support meta requirements
                         for requirement in &trait_metadata.function_requirements {
-                            let mut req_metadata = if let Some(func) = self.symbols.get_func_metadata(requirement) {
+                            let requirement = trait_metadata.symbol.child(&requirement);
+                            let mut req_metadata = if let Some(func) = self.symbols.get_func_metadata(&requirement) {
                                 func
                             } else {
-                                self.lib.function_metadata(requirement).unwrap()
+                                self.lib.function_metadata(&requirement).unwrap()
                             }.clone();
                             let symbol = generic_symbol.child(requirement.name());
                             req_metadata.symbol = symbol.clone();
                             req_metadata.kind = FunctionKind::Method(generic_symbol.clone());
                             self.symbols.insert_func_metadata(symbol.clone(), req_metadata);
-                            generic_type.methods.push(symbol);
+                            generic_type.methods.push(symbol.name().to_owned());
                         }
     
                         generic_type.add_trait_impl(trait_metadata.symbol.clone());
