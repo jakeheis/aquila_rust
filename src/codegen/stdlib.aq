@@ -219,11 +219,11 @@ impl Vec: Iterable {}
 
 impl Vec: Freeable {
     def free() {
-        // #if_conforms(T: Freeable) {
-            //for object in self {
-                // object.deinit();
-            //}
-        // }
+        #if(T: Freeable) {
+            for object in self {
+                object.deinit();
+            }
+        }
         if capacity > 0 {
             Memory.drop[T](storage);
         }

@@ -73,11 +73,13 @@ impl Lexer {
             ']' => self.make_token(TokenKind::RightBracket),
             '#' => {
                 self.identifier();
-                if self.current_span().lexeme() == "#caller" {
-                    self.make_token(TokenKind::Caller)
-                } else {
-                    self.error("unrecognized compiler directive");
-                    None
+                match self.current_span().lexeme() {
+                    "#caller" => self.make_token(TokenKind::Caller),
+                    "#if" => self.make_token(TokenKind::CompileTimeIf),
+                    _ => {
+                        self.error("unrecognized compiler directive");
+                        None
+                    }
                 }
             }
             '0'..='9' => self.number(),

@@ -258,6 +258,14 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
+    fn visit_conformance_condition_stmt(&mut self, type_name: &Token, trait_name: &Token, body: &[Stmt]) {
+        let message = format!("Conformance(type: {}, trait: {})", type_name.lexeme(), trait_name.lexeme());
+        self.write_ln(&message);
+        self.indent(|visitor| {
+            body.iter().for_each(|s| s.accept(visitor));
+        });
+    }
+
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) {
         self.write_ln("While");
         self.indent(|visitor| {
@@ -374,7 +382,7 @@ impl ExprVisitor for ASTPrinter {
     fn visit_variable_expr(&mut self, _expr: &Expr, name: &SpecializedToken) {
         let symbol = name.get_symbol().unwrap_or(Symbol::lib_root("<none>"));
         self.write_ln(&format!(
-            "Variable(name: {}, symbol: {})",
+            "VariableAccess(name: {}, symbol: {})",
             name.span().lexeme(),
             symbol.unique_id()
         ))

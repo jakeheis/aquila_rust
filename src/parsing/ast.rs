@@ -175,6 +175,7 @@ pub enum StmtKind {
     LocalVariableDecl(LocalVariableDecl),
     Assignment(Box<Expr>, Box<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
+    ConformanceConditionStmt(Token, Token, Vec<Stmt>),
     WhileStmt(Expr, Vec<Stmt>),
     ForStmt(SymbolicToken, Expr, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
@@ -200,6 +201,7 @@ impl Stmt {
             StmtKind::IfStmt(condition, body, else_body) => {
                 visitor.visit_if_stmt(&condition, &body, &else_body)
             }
+            StmtKind::ConformanceConditionStmt(type_name, trait_name, body) => visitor.visit_conformance_condition_stmt(type_name, trait_name, &body),
             StmtKind::WhileStmt(condition, body) => visitor.visit_while_stmt(condition, &body),
             StmtKind::ForStmt(variable, array, body) => {
                 visitor.visit_for_stmt(variable, array, &body)
@@ -242,6 +244,17 @@ impl Stmt {
     ) -> Self {
         let span = Span::join(&if_span, &end_brace_span);
         Stmt::new(StmtKind::IfStmt(condition, body, else_body), span)
+    }
+
+    pub fn conformance_condition(
+        if_span: Span,
+        type_name: Token,
+        trait_name: Token,
+        body: Vec<Stmt>,
+        end_brace: &Token,
+    ) -> Self {
+        let span = Span::join(&if_span, end_brace);
+        Stmt::new(StmtKind::ConformanceConditionStmt(type_name, trait_name, body), span)
     }
 
     pub fn while_stmt(
@@ -303,6 +316,8 @@ pub trait StmtVisitor {
         body: &[Stmt],
         else_body: &[Stmt],
     ) -> Self::StmtResult;
+
+    fn visit_conformance_condition_stmt(&mut self, type_name: &Token, trait_name: &Token, body: &[Stmt]) -> Self::StmtResult;
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) -> Self::StmtResult;
 

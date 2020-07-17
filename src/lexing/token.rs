@@ -46,6 +46,7 @@ pub enum TokenKind {
     Let,
     If,
     Else,
+    CompileTimeIf,
     Return,
     Break,
     Ptr,

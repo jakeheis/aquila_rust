@@ -3,6 +3,7 @@ use super::{check, ContextTracker, ScopeType, ScopeDefinition};
 use crate::diagnostic::*;
 use crate::library::*;
 use crate::parsing::*;
+use crate::lexing::Token;
 use std::rc::Rc;
 
 pub struct TypeChecker {
@@ -325,6 +326,10 @@ impl StmtVisitor for TypeChecker {
 
         let guarantees_return = body_analysis.guarantees_return && else_analysis.guarantees_return;
         Analysis { guarantees_return }
+    }
+
+    fn visit_conformance_condition_stmt(&mut self, type_name: &Token, trait_name: &Token, body: &[Stmt]) -> Analysis {
+        Analysis { guarantees_return: false }
     }
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) -> Analysis {

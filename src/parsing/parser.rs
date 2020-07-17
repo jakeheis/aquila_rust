@@ -126,6 +126,8 @@ impl Parser {
             Ok(decl)
         } else if self.matches(TokenKind::If) {
             self.if_stmt()
+        } else if self.matches(TokenKind::CompileTimeIf) {
+            self.conformance_condition()
         } else if self.matches(TokenKind::While) {
             self.while_stmt()
         } else if self.matches(TokenKind::For) {
@@ -470,6 +472,24 @@ impl Parser {
             else_body,
             end_brace_span,
         ))
+    }
+
+    fn conformance_condition(&mut self) -> DiagnosticResult<Stmt> {
+        let if_span = self.previous().span.clone();
+
+        self.consume(TokenKind::LeftParen, "Expect '(' after #if")?;
+        
+        let type_name = self.consume(TokenKind::Identifier, "Expect type name")?.clone();
+        self.consume(TokenKind::Colon, "Expect ':' after type name")?;
+        let trait_name = self.consume(TokenKind::Identifier, "Expect trait name")?.clone();
+        
+        self.consume(TokenKind::RightParen, "Expect ')' after condition")?;
+
+        self.consume(TokenKind::LeftBrace, "Expect '{' after condition")?;
+        let body = self.block();
+        let end_brace = self.consume(TokenKind::RightBrace, "Expect '}' after if body")?;
+
+        Ok(Stmt::conformance_condition(if_span, type_name, trait_name, body, end_brace))
     }
 
     fn while_stmt(&mut self) -> DiagnosticResult<Stmt> {
