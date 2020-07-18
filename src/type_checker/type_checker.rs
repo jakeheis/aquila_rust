@@ -88,9 +88,11 @@ impl TypeChecker {
     }
 
     fn check_type_decl(&mut self, decl: &TypeDecl) {
-        let (type_symbol, metadata) = self.context.push_type_scope(&decl.name);
+        let type_symbol = self.context.current_symbol().child_token(&decl.name.token);
+        self.context.push_scope(type_symbol.clone(), ScopeType::InsideType);
 
-        self.context.push_scope_meta();
+        self.context.push_meta_scope();
+        let metadata = self.lib.type_metadata(&type_symbol).unwrap();
         for method in metadata.meta_method_symbols() {
             self.context
                 .put_in_scope(method.name().to_owned(), ScopeDefinition::Function(method));
@@ -100,6 +102,7 @@ impl TypeChecker {
         }
         self.context.pop_scope();
 
+        let metadata = self.lib.type_metadata(&type_symbol).unwrap();
         for field in &metadata.fields {
             let definition =
                 ScopeDefinition::Variable(type_symbol.child(&field.name), field.var_type.clone());
@@ -124,30 +127,31 @@ impl TypeChecker {
     }
 
     fn check_function_decl(&mut self, decl: &FunctionDecl) {
-        let (func_symbol, metadata) = self.context.push_function_scope(&decl.name);
-        decl.name.set_symbol(func_symbol.clone());
+        let func_symbol = self.context.current_symbol().child_token(&decl.name.token);
+        self.context.push_scope(func_symbol.clone(), ScopeType::InsideFunction);
 
         if decl.is_builtin {
             self.context.pop_scope();
             return;
         }
 
+        let metadata = self.lib.function_metadata(&func_symbol).unwrap();
         let return_type = match &metadata.return_type {
             NodeType::Array(..) => {
                 self.report_error(Diagnostic::error(
                     decl.return_type.as_ref().unwrap(),
                     "Cannot return an array",
                 ));
-                &NodeType::Ambiguous
+                NodeType::Ambiguous
             }
             NodeType::Ambiguous => {
                 self.report_error(Diagnostic::error(
                     decl.return_type.as_ref().unwrap(),
                     "Undefined type",
                 ));
-                &NodeType::Ambiguous
+                NodeType::Ambiguous
             }
-            value => value,
+            value => value.clone(),
         };
 
         for (index, param) in metadata.parameters.iter().enumerate() {

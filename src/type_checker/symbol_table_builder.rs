@@ -112,7 +112,7 @@ impl SymbolTableBuilder {
 
         type_metadata.methods = self.build_functions(&decl.methods, false);
 
-        self.context.push_scope_meta();
+        self.context.push_meta_scope();
         type_metadata.meta_methods = self.build_functions(&decl.meta_methods, false);
 
         let init_symbol = self.current_symbol().init_symbol();
@@ -168,6 +168,7 @@ impl SymbolTableBuilder {
 
     fn build_function(&mut self, decl: &FunctionDecl, force_public: bool) -> String {
         let function_symbol = self.current_symbol().child_token(&decl.name.token);
+        decl.name.set_symbol(function_symbol.clone());
 
         trace!(target: "symbol_table", "Building function {} (symbol = {})", decl.name.token.lexeme(), function_symbol);
 

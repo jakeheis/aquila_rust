@@ -143,7 +143,7 @@ impl<'a> FreeWriter<'a> {
             }
             if let NodeType::Instance(sym, spec) = &var.var_type {
                 let deinit_sym = Symbol::deinit_symbol(&sym);
-                let deinit = IRExpr::call_generic(
+                let deinit = IRExpr::call(
                     deinit_sym.clone(),
                     spec.clone(),
                     vec![IRExpr::address_of(&var)],

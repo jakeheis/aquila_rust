@@ -101,7 +101,7 @@ impl IRExpr {
         }
     }
 
-    pub fn call_generic(
+    pub fn call(
         func: Symbol,
         spec: GenericSpecialization,
         args: Vec<IRExpr>,

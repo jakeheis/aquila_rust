@@ -481,7 +481,7 @@ impl ExprVisitor for IRGen {
                 arg_exprs,
             )
         } else {
-            IRExpr::call_generic(
+            IRExpr::call(
                 function_symbol,
                 specialization,
                 arg_exprs,

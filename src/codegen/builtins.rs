@@ -186,7 +186,7 @@ pub fn write_type_deinit(
     if type_metadata.conforms_to(&Symbol::stdlib("Freeable")) {
         let self_var = IRVariable::new("self", type_metadata.unspecialized_type());
         let free_sym = type_metadata.symbol.child("free");
-        let free = IRExpr::call_generic(
+        let free = IRExpr::call(
             free_sym.clone(),
             type_metadata.dummy_specialization(),
             vec![IRExpr::variable(&self_var)],
@@ -214,7 +214,7 @@ pub fn write_type_deinit(
             };
 
             let deinit_sym = Symbol::deinit_symbol(&type_sym);
-            let deinit = IRExpr::call_generic(
+            let deinit = IRExpr::call(
                 deinit_sym.clone(),
                 spec.clone(),
                 vec![field_expr],
@@ -264,7 +264,7 @@ fn print_call(
             print_object.clone(),
             spec.clone(),
         );
-        IRExpr::call_generic(print_object, spec.clone(), args, NodeType::Void)
+        IRExpr::call(print_object, spec.clone(), args, NodeType::Void)
     } else {
         let format_specificer = match node_type {
             NodeType::Int | NodeType::Bool => "%i",

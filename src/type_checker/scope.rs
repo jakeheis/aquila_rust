@@ -70,25 +70,11 @@ impl ContextTracker {
         self.push_scope(symbol, copied);
     }
 
-    pub fn push_scope_meta(&mut self) {
+    pub fn push_meta_scope(&mut self) {
         let symbol = Symbol::meta_symbol(self.current_symbol());
         self.push_scope(symbol, ScopeType::InsideMetatype);
     }
-
-    pub fn push_type_scope(&mut self, name: &SymbolicToken) -> (Symbol, TypeMetadata) {
-        let symbol = self.current_symbol().child_token(&name.token);
-        let metadata = self.lib.type_metadata(&symbol).unwrap().clone();
-        self.push_scope(symbol.clone(), ScopeType::InsideType);
-        (symbol, metadata)
-    }
-
-    pub fn push_function_scope(&mut self, name: &SymbolicToken) -> (Symbol, FunctionMetadata) {
-        let symbol = self.current_symbol().child_token(&name.token);
-        let metadata = self.lib.function_metadata(&symbol).unwrap().clone();
-        self.push_scope(symbol.clone(), ScopeType::InsideFunction);
-        (symbol, metadata)
-    }
-
+    
     pub fn push_scope(&mut self, id: Symbol, scope_type: ScopeType) {
         trace!(target: "type_checker", "Pushing scope -- {}", id);
         self.scopes.push(Scope::new(id, scope_type));
