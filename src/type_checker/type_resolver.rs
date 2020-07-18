@@ -3,7 +3,7 @@ use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::{ExplicitType, ExplicitTypeKind, SpecializedToken};
-use super::ContextTracker;
+use super::scope::ContextTracker;
 use log::trace;
 
 #[derive(Clone)]

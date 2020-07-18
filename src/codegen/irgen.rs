@@ -198,7 +198,7 @@ impl StmtVisitor for IRGen {
         }
     }
 
-    fn visit_conformance_condition_stmt(&mut self, type_name: &Token, trait_name: &Token, body: &[Stmt]) {}
+    fn visit_conformance_condition_stmt(&mut self, _type_name: &Token, _trait_name: &Token, _body: &[Stmt]) {}
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) {
         self.writer.start_block();

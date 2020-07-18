@@ -1,5 +1,6 @@
 use super::expr_checker::*;
-use super::{check, ContextTracker, ScopeType, ScopeDefinition};
+use super::check;
+use super::scope::{ContextTracker, ScopeType, ScopeDefinition};
 use crate::diagnostic::*;
 use crate::library::*;
 use crate::parsing::*;
@@ -318,7 +319,7 @@ impl StmtVisitor for TypeChecker {
         Analysis { guarantees_return }
     }
 
-    fn visit_conformance_condition_stmt(&mut self, type_name: &Token, trait_name: &Token, body: &[Stmt]) -> Analysis {
+    fn visit_conformance_condition_stmt(&mut self, _type_name: &Token, _trait_name: &Token, _body: &[Stmt]) -> Analysis {
         Analysis { guarantees_return: false }
     }
 

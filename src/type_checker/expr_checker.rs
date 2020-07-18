@@ -1,4 +1,5 @@
-use super::{check, ContextTracker, ScopeDefinition, ScopeType};
+use super::check;
+use super::scope::{ContextTracker, ScopeDefinition, ScopeType};
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::library::*;

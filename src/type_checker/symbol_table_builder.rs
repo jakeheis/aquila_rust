@@ -1,4 +1,5 @@
-use super::{TypeResolution, TypeResolutionError, ContextTracker, ScopeType};
+use super::type_resolver::{TypeResolution, TypeResolutionError};
+use super::scope::{ContextTracker, ScopeType};
 use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::library::*;
