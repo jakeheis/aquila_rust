@@ -1,4 +1,4 @@
-use super::type_resolver::{TypeResolution, TypeResolutionError};
+use super::type_resolver::{TypeResolution, TypeResolutionResult};
 use crate::diagnostic::*;
 use crate::library::*;
 use crate::parsing::*;
@@ -51,7 +51,7 @@ impl Scope {
 }
 
 pub struct ContextTracker {
-    lib: Rc<Lib>,
+    pub lib: Rc<Lib>,
     pub scopes: Vec<Scope>,
 }
 
@@ -74,7 +74,7 @@ impl ContextTracker {
         let symbol = Symbol::meta_symbol(self.current_symbol());
         self.push_scope(symbol, ScopeType::InsideMetatype);
     }
-    
+
     pub fn push_scope(&mut self, id: Symbol, scope_type: ScopeType) {
         trace!(target: "type_checker", "Pushing scope -- {}", id);
         self.scopes.push(Scope::new(id, scope_type));
@@ -138,29 +138,25 @@ impl ContextTracker {
         }
 
         let enclosing_func = self.enclosing_function();
-        let resolver =
-            TypeResolution::new(&self.lib, &self.lib.symbols, &self, Some(&enclosing_func));
+        let resolver = TypeResolution::new(self, &self.lib.symbols, Some(&enclosing_func));
         match resolver.resolve_simple(token) {
-            Ok(resolved_type) => Some(ScopeDefinition::ExplicitType(Ok(resolved_type))),
-            Err(TypeResolutionError::NotFound) => None,
-            Err(TypeResolutionError::Inaccessible(diag))
-            | Err(TypeResolutionError::IncorrectlySpecialized(diag)) => {
-                Some(ScopeDefinition::ExplicitType(Err(diag)))
+            TypeResolutionResult::Found(resolved_type) => {
+                Some(ScopeDefinition::ExplicitType(Ok(resolved_type)))
             }
+            TypeResolutionResult::NotFound => None,
+            TypeResolutionResult::Error(diag) => Some(ScopeDefinition::ExplicitType(Err(diag))),
         }
     }
 
     pub fn resolve_type(&self, explicit_type: &ExplicitType) -> DiagnosticResult<NodeType> {
         let enclosing_func = self.enclosing_function();
-        let resolver =
-            TypeResolution::new(&self.lib, &self.lib.symbols, &self, Some(&enclosing_func));
+        let resolver = TypeResolution::new(self, &self.lib.symbols, Some(&enclosing_func));
         match resolver.resolve(explicit_type) {
-            Ok(resolved_type) => Ok(resolved_type),
-            Err(error) => Err(match error {
-                TypeResolutionError::IncorrectlySpecialized(diag)
-                | TypeResolutionError::Inaccessible(diag) => diag,
-                TypeResolutionError::NotFound => Diagnostic::error(explicit_type, "Type not found"),
-            }),
+            TypeResolutionResult::Found(resolved_type) => Ok(resolved_type),
+            TypeResolutionResult::NotFound => {
+                Err(Diagnostic::error(explicit_type, "Type not found"))
+            }
+            TypeResolutionResult::Error(diag) => Err(diag),
         }
     }
 }

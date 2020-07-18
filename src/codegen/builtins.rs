@@ -147,8 +147,7 @@ fn write_read_line(writer: &mut IRWriter, _func_symbol: &Symbol) {
 }
 
 pub fn write_type_init(writer: &mut IRWriter, type_metadata: &TypeMetadata) {
-    let meta_symbol = Symbol::meta_symbol(&type_metadata.symbol);
-    let init_symbol = Symbol::init_symbol(&meta_symbol);
+    let init_symbol = type_metadata.symbol.meta_symbol().init_symbol();
     let init_metadata = writer.lib.function_metadata(&init_symbol).unwrap().clone();
 
     let new_item = IRVariable::new("new_item", init_metadata.return_type.clone());

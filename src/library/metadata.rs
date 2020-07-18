@@ -155,19 +155,6 @@ pub struct FunctionMetadata {
 }
 
 impl FunctionMetadata {
-    pub fn main() -> Self {
-        FunctionMetadata {
-            symbol: Symbol::main_symbol(),
-            kind: FunctionKind::TopLevel,
-            generics: Vec::new(),
-            parameters: Vec::new(),
-            generic_restrictions: Vec::new(),
-            return_type: NodeType::Int,
-            is_public: false,
-            include_caller: false,
-        }
-    }
-
     pub fn full_type(&self) -> FunctionType {
         let parameter_types: Vec<_> = self.parameters.iter().map(|p| p.var_type.clone()).collect();
         FunctionType::new(parameter_types, self.return_type.clone())

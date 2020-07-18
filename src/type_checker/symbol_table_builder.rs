@@ -1,5 +1,5 @@
 use super::scope::{ContextTracker, ScopeType};
-use super::type_resolver::{TypeResolution, TypeResolutionError};
+use super::type_resolver::{TypeResolution, TypeResolutionResult};
 use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::library::*;
@@ -372,18 +372,16 @@ impl SymbolTableBuilder {
         explicit_type: &ExplicitType,
         enclosing_func: Option<&Symbol>,
     ) -> NodeType {
-        let resolver = TypeResolution::new(&self.lib, &self.symbols, &self.context, enclosing_func);
+        let resolver = TypeResolution::new(&self.context, &self.symbols, enclosing_func);
         match resolver.resolve(explicit_type) {
-            Ok(resolved_type) => resolved_type,
-            Err(error) => {
-                let diag = match error {
-                    TypeResolutionError::IncorrectlySpecialized(diag)
-                    | TypeResolutionError::Inaccessible(diag) => diag,
-                    TypeResolutionError::NotFound => {
-                        Diagnostic::error(explicit_type, "Type not found")
-                    }
-                };
+            TypeResolutionResult::Found(resolved_type) => resolved_type,
+            TypeResolutionResult::Error(diag) => {
                 self.reporter.report(diag);
+                NodeType::Ambiguous
+            }
+            TypeResolutionResult::NotFound => {
+                self.reporter
+                    .report(Diagnostic::error(explicit_type, "Type not found"));
                 NodeType::Ambiguous
             }
         }

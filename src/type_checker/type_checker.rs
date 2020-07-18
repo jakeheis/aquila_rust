@@ -37,10 +37,9 @@ impl TypeChecker {
             checker.check_conformance_decl(decl);
         }
 
-        let main_func = FunctionMetadata::main();
         checker
             .context
-            .push_scope(main_func.symbol.clone(), ScopeType::InsideFunction);
+            .push_scope(Symbol::main_symbol(), ScopeType::InsideFunction);
         checker.check_list(&lib.main);
         checker.context.pop_scope();
 
@@ -89,7 +88,8 @@ impl TypeChecker {
 
     fn check_type_decl(&mut self, decl: &TypeDecl) {
         let type_symbol = self.context.current_symbol().child_token(&decl.name.token);
-        self.context.push_scope(type_symbol.clone(), ScopeType::InsideType);
+        self.context
+            .push_scope(type_symbol.clone(), ScopeType::InsideType);
 
         self.context.push_meta_scope();
         let metadata = self.lib.type_metadata(&type_symbol).unwrap();
@@ -128,7 +128,8 @@ impl TypeChecker {
 
     fn check_function_decl(&mut self, decl: &FunctionDecl) {
         let func_symbol = self.context.current_symbol().child_token(&decl.name.token);
-        self.context.push_scope(func_symbol.clone(), ScopeType::InsideFunction);
+        self.context
+            .push_scope(func_symbol.clone(), ScopeType::InsideFunction);
 
         if decl.is_builtin {
             self.context.pop_scope();

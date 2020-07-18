@@ -425,21 +425,12 @@ pub enum ExplicitTypeKind {
 pub struct ExplicitType {
     pub kind: ExplicitTypeKind,
     pub span: Span,
-    pub cached_type: RefCell<Option<NodeType>>,
 }
 
 impl ExplicitType {
     pub fn new(start: Span, kind: ExplicitTypeKind, end: &Span) -> Self {
         let span = Span::join(&start, end);
-        ExplicitType {
-            kind,
-            span,
-            cached_type: RefCell::new(None),
-        }
-    }
-
-    pub fn guarantee_resolved(&self) -> NodeType {
-        self.cached_type.borrow().as_ref().unwrap().clone()
+        ExplicitType { kind, span }
     }
 }
 
