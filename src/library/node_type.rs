@@ -220,7 +220,7 @@ impl std::fmt::Display for NodeType {
                     string += &format!("[{}]", specialization.display_list());
                 }
                 string
-            },
+            }
             NodeType::Ambiguous => String::from("_"),
         };
         write!(f, "{}", kind)

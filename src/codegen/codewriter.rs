@@ -168,13 +168,15 @@ impl CodeWriter {
             }
             IRExprKind::Call(function, spec, args) => {
                 let spec = spec.resolve_generics_using(enclosing_spec);
-                
+
                 let mut function_name = function.add_spec_suffix(&spec);
                 for (key, value) in &enclosing_spec.map {
                     if key.directly_owns(&function) {
                         // TODO: doesn't support meta requirements
                         if let NodeType::Instance(instance_sym, instance_spec) = value {
-                            function_name = instance_sym.child(function.name()).add_spec_suffix(instance_spec);
+                            function_name = instance_sym
+                                .child(function.name())
+                                .add_spec_suffix(instance_spec);
                             break;
                         }
                     }

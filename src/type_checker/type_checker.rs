@@ -1,10 +1,10 @@
-use super::expr_checker::*;
 use super::check;
-use super::scope::{ContextTracker, ScopeType, ScopeDefinition};
+use super::expr_checker::*;
+use super::scope::{ContextTracker, ScopeDefinition, ScopeType};
 use crate::diagnostic::*;
+use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::*;
-use crate::lexing::Token;
 use std::rc::Rc;
 
 pub struct TypeChecker {
@@ -38,10 +38,9 @@ impl TypeChecker {
         }
 
         let main_func = FunctionMetadata::main();
-        checker.context.push_scope(
-            main_func.symbol.clone(),
-            ScopeType::InsideFunction,
-        );
+        checker
+            .context
+            .push_scope(main_func.symbol.clone(), ScopeType::InsideFunction);
         checker.check_list(&lib.main);
         checker.context.pop_scope();
 
@@ -93,7 +92,8 @@ impl TypeChecker {
 
         self.context.push_scope_meta();
         for method in metadata.meta_method_symbols() {
-            self.context.put_in_scope(method.name().to_owned(), ScopeDefinition::Function(method));
+            self.context
+                .put_in_scope(method.name().to_owned(), ScopeDefinition::Function(method));
         }
         for meta_method in &decl.meta_methods {
             self.check_function_decl(meta_method);
@@ -101,15 +101,20 @@ impl TypeChecker {
         self.context.pop_scope();
 
         for field in &metadata.fields {
-            let definition = ScopeDefinition::Variable(type_symbol.child(&field.name), field.var_type.clone());
+            let definition =
+                ScopeDefinition::Variable(type_symbol.child(&field.name), field.var_type.clone());
             self.context.put_in_scope(field.name.clone(), definition);
         }
 
-        let def = ScopeDefinition::SelfVar(Symbol::self_symbol(&type_symbol), metadata.unspecialized_type());
+        let def = ScopeDefinition::SelfVar(
+            Symbol::self_symbol(&type_symbol),
+            metadata.unspecialized_type(),
+        );
         self.context.put_in_scope("self".to_owned(), def);
 
         for method in metadata.method_symbols() {
-            self.context.put_in_scope(method.name().to_owned(), ScopeDefinition::Function(method));
+            self.context
+                .put_in_scope(method.name().to_owned(), ScopeDefinition::Function(method));
         }
         for method in &decl.methods {
             self.check_function_decl(method);
@@ -146,7 +151,8 @@ impl TypeChecker {
         };
 
         for (index, param) in metadata.parameters.iter().enumerate() {
-            let def = ScopeDefinition::Variable(func_symbol.child(&param.name), param.var_type.clone());
+            let def =
+                ScopeDefinition::Variable(func_symbol.child(&param.name), param.var_type.clone());
             self.context.put_in_scope(param.name.clone(), def);
 
             if let NodeType::Array(_, 0) = param.var_type {
@@ -158,7 +164,10 @@ impl TypeChecker {
         }
 
         if decl.include_caller {
-            let def = ScopeDefinition::Variable(func_symbol.caller_symbol(), NodeType::pointer_to(NodeType::Byte));
+            let def = ScopeDefinition::Variable(
+                func_symbol.caller_symbol(),
+                NodeType::pointer_to(NodeType::Byte),
+            );
             self.context.put_in_scope("caller".to_owned(), def);
         }
 
@@ -195,13 +204,12 @@ impl TypeChecker {
         type_metadata.add_trait_impl(trait_metadata.symbol.clone());
         let type_metadata = type_metadata.clone();
 
-        self.context.push_scope(
-            type_metadata.symbol.clone(),
-            ScopeType::InsideType,
-        );
+        self.context
+            .push_scope(type_metadata.symbol.clone(), ScopeType::InsideType);
 
         for field in &type_metadata.fields {
-            let definition = ScopeDefinition::Variable(type_symbol.child(&field.name), field.var_type.clone());
+            let definition =
+                ScopeDefinition::Variable(type_symbol.child(&field.name), field.var_type.clone());
             self.context.put_in_scope(field.name.clone(), definition);
         }
 
@@ -230,10 +238,7 @@ impl TypeChecker {
                     self.report_error(Diagnostic::error(&decl.target, &message));
                 }
             } else {
-                let message = format!(
-                    "Type doesn't implement requirement '{}'",
-                    requirement
-                );
+                let message = format!("Type doesn't implement requirement '{}'", requirement);
                 self.report_error(Diagnostic::error(&decl.target, &message));
             }
         }
@@ -319,8 +324,15 @@ impl StmtVisitor for TypeChecker {
         Analysis { guarantees_return }
     }
 
-    fn visit_conformance_condition_stmt(&mut self, _type_name: &Token, _trait_name: &Token, _body: &[Stmt]) -> Analysis {
-        Analysis { guarantees_return: false }
+    fn visit_conformance_condition_stmt(
+        &mut self,
+        _type_name: &Token,
+        _trait_name: &Token,
+        _body: &[Stmt],
+    ) -> Analysis {
+        Analysis {
+            guarantees_return: false,
+        }
     }
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) -> Analysis {
@@ -350,7 +362,10 @@ impl StmtVisitor for TypeChecker {
                 let metadata = self.lib.type_metadata(&instance_symbol).unwrap();
                 if metadata.conforms_to(&Symbol::iterable_symbol()) {
                     if instance_symbol == Symbol::stdlib("Vec") {
-                        let object_type = spec.type_for(&instance_symbol.child("T")).unwrap().specialize(&spec);
+                        let object_type = spec
+                            .type_for(&instance_symbol.child("T"))
+                            .unwrap()
+                            .specialize(&spec);
                         NodeType::pointer_to(object_type)
                     } else if instance_symbol == Symbol::stdlib("Range") {
                         NodeType::Int
@@ -358,11 +373,14 @@ impl StmtVisitor for TypeChecker {
                         unimplemented!()
                     }
                 } else {
-                    let message = format!("Type '{}' does not implement Iterable", instance_symbol.mangled());
+                    let message = format!(
+                        "Type '{}' does not implement Iterable",
+                        instance_symbol.mangled()
+                    );
                     self.report_error(Diagnostic::error(array, &message));
                     return Analysis {
                         guarantees_return: false,
-                    }
+                    };
                 }
             }
             None => {
@@ -392,7 +410,9 @@ impl StmtVisitor for TypeChecker {
             .and_then(|e| self.check_expr(e))
             .unwrap_or(NodeType::Void);
 
-        let enclosing_metadata = self.lib.function_metadata(&self.context.enclosing_function());
+        let enclosing_metadata = self
+            .lib
+            .function_metadata(&self.context.enclosing_function());
         let expected_return = enclosing_metadata
             .map(|m| &m.return_type)
             .unwrap_or(&NodeType::Void);

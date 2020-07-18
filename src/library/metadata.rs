@@ -12,7 +12,11 @@ pub struct VarMetadata {
 
 impl fmt::Display for VarMetadata {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {} (public = {})", self.name, self.var_type, self.public)
+        write!(
+            f,
+            "{}: {} (public = {})",
+            self.name, self.var_type, self.public
+        )
     }
 }
 
@@ -114,13 +118,9 @@ impl std::fmt::Display for TypeMetadata {
             .collect::<Vec<_>>()
             .join(",");
         writeln!(f, "  fields: {}", fields)?;
-        let methods = self
-            .methods
-            .join(",");
+        let methods = self.methods.join(",");
         writeln!(f, "  methods: {}", methods)?;
-        let meta_methods = self
-            .meta_methods
-            .join(",");
+        let meta_methods = self.meta_methods.join(",");
         writeln!(f, "  meta methods: {}", meta_methods)?;
         let trait_impls = self
             .trait_impls
@@ -330,13 +330,7 @@ impl GenericSpecialization {
         let mut keys: Vec<_> = self.map.keys().collect();
         keys.sort();
         keys.iter()
-            .map(|symbol| {
-                format!(
-                    "{}={}",
-                    symbol.name(),
-                    self.map.get(symbol).unwrap()
-                )
-            })
+            .map(|symbol| format!("{}={}", symbol.name(), self.map.get(symbol).unwrap()))
             .collect::<Vec<String>>()
             .join(",")
     }

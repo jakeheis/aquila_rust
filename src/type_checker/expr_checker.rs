@@ -88,23 +88,21 @@ impl ExprChecker {
                 ))
             }
             Some(ScopeDefinition::SelfVar(..)) => {
-                return Err(Diagnostic::error(
-                    span,
-                    "Cannot call self",
-                ))
+                return Err(Diagnostic::error(span, "Cannot call self"))
             }
-            Some(ScopeDefinition::ExplicitType(result)) => {
-                match result {
-                    Ok(NodeType::Instance(type_symbol, specs)) => {
-                        let init_metadata = self
-                            .lib
-                            .function_metadata(&type_symbol.meta_symbol().init_symbol());
-                        Ok((init_metadata.unwrap(), specs.clone(), true))
-                    }
-                    Ok(..) => Err(Diagnostic::error(function.span(), "Cannot call a primitive")),
-                    Err(diag) => Err(diag)
+            Some(ScopeDefinition::ExplicitType(result)) => match result {
+                Ok(NodeType::Instance(type_symbol, specs)) => {
+                    let init_metadata = self
+                        .lib
+                        .function_metadata(&type_symbol.meta_symbol().init_symbol());
+                    Ok((init_metadata.unwrap(), specs.clone(), true))
                 }
-            }
+                Ok(..) => Err(Diagnostic::error(
+                    function.span(),
+                    "Cannot call a primitive",
+                )),
+                Err(diag) => Err(diag),
+            },
             None => Err(Diagnostic::error(function.span(), "Undefined function")),
         }
     }
@@ -122,9 +120,7 @@ impl ExprChecker {
                 let metadata = self.lib.type_metadata(&sym).unwrap();
                 if metadata.conforms_to(&Symbol::writable_symbol()) {
                     let write_sym = sym.write_symbol();
-                    let enclosing_func = self
-                        .context
-                        .enclosing_function();
+                    let enclosing_func = self.context.enclosing_function();
                     self.lib.specialization_tracker.add_call(
                         enclosing_func,
                         write_sym,
@@ -145,8 +141,8 @@ impl ExprChecker {
     }
 
     fn check_specialization_restrictions(
-        &self, 
-        specialization: &GenericSpecialization, 
+        &self,
+        specialization: &GenericSpecialization,
         restrictions: &[(Symbol, Symbol)],
         span: &Span,
     ) -> DiagnosticResult<()> {
@@ -155,7 +151,11 @@ impl ExprChecker {
             if let NodeType::Instance(type_sym, ..) = specialized_type {
                 let metadata = self.lib.type_metadata(&type_sym).unwrap();
                 if !metadata.conforms_to(trait_symbol) {
-                    let message = format!("Type '{}' does not implement '{}'", type_sym.name(), trait_symbol.name());
+                    let message = format!(
+                        "Type '{}' does not implement '{}'",
+                        type_sym.name(),
+                        trait_symbol.name()
+                    );
                     return Err(Diagnostic::error(span, &message));
                 }
             } else {
@@ -315,9 +315,9 @@ impl ExprVisitor for ExprChecker {
         let full_call_specialization = function_specialization.merge(&target_specialization);
 
         self.check_specialization_restrictions(
-            &full_call_specialization, 
+            &full_call_specialization,
             &metadata.generic_restrictions,
-            call.name.span()
+            call.name.span(),
         )?;
 
         call.set_specialization(full_call_specialization.clone());
@@ -325,9 +325,7 @@ impl ExprVisitor for ExprChecker {
         if metadata.symbol == Symbol::stdlib("print") {
             self.visit_print(&call.arguments[0], &arg_types[0], &full_call_specialization)?;
         } else {
-            let enclosing_func = self
-                .context
-                .enclosing_function();
+            let enclosing_func = self.context.enclosing_function();
             trace!(target: "type_checker", "Adding call from {} to {} with {}", enclosing_func, metadata.symbol, full_call_specialization);
             self.lib.specialization_tracker.add_call(
                 enclosing_func,
@@ -413,7 +411,8 @@ impl ExprVisitor for ExprChecker {
         }
 
         match self.context.resolve_token(name) {
-            Some(ScopeDefinition::Variable(sym, var_type)) | Some(ScopeDefinition::SelfVar(sym, var_type)) => {
+            Some(ScopeDefinition::Variable(sym, var_type))
+            | Some(ScopeDefinition::SelfVar(sym, var_type)) => {
                 if !name.specialization.is_empty() {
                     return Err(Diagnostic::error(expr, "Cannot specialize variable"));
                 }
@@ -423,17 +422,15 @@ impl ExprVisitor for ExprChecker {
             Some(ScopeDefinition::Function(..)) => {
                 Err(Diagnostic::error(expr, "Cannot use function as variable"))
             }
-            Some(ScopeDefinition::ExplicitType(result)) => {
-                match result {
-                    Ok(NodeType::Instance(symbol, spec)) => {
-                        trace!(target: "type_checker", "Treating variable as metatype of {}", symbol);
-                        name.set_symbol(symbol.clone());
-                        expr.set_type(NodeType::Metatype(symbol.clone(), spec.clone()))
-                    },
-                    Ok(_) => Err(Diagnostic::error(expr, "Type not allowed here")),
-                    Err(diag) => Err(diag),
+            Some(ScopeDefinition::ExplicitType(result)) => match result {
+                Ok(NodeType::Instance(symbol, spec)) => {
+                    trace!(target: "type_checker", "Treating variable as metatype of {}", symbol);
+                    name.set_symbol(symbol.clone());
+                    expr.set_type(NodeType::Metatype(symbol.clone(), spec.clone()))
                 }
-            }
+                Ok(_) => Err(Diagnostic::error(expr, "Type not allowed here")),
+                Err(diag) => Err(diag),
+            },
             None => Err(Diagnostic::error(name.span(), "Undefined variable")),
         }
     }

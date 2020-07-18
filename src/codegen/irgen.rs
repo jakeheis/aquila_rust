@@ -1,12 +1,12 @@
 use super::builtins;
 use super::ir::*;
 use super::irwriter::IRWriter;
+use super::memory;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
 use log::trace;
 use std::rc::Rc;
-use super::memory;
 
 pub struct IRGen {
     lib: Rc<Lib>,
@@ -47,8 +47,13 @@ impl IRGen {
             self.writer.return_value(IRExpr::int_literal("0"));
             self.writer.end_decl_main();
         }
-        
-        let IRWriter { lib: lib_copy, structures, functions, .. } = self.writer;
+
+        let IRWriter {
+            lib: lib_copy,
+            structures,
+            functions,
+            ..
+        } = self.writer;
 
         std::mem::drop(lib);
         std::mem::drop(lib_copy);
@@ -118,7 +123,11 @@ impl IRGen {
         self.writer.declare_struct(&type_metadata);
 
         builtins::write_type_init(&mut self.writer, &type_metadata);
-        builtins::write_type_deinit(&mut self.writer, &type_metadata, &self.lib.specialization_tracker);
+        builtins::write_type_deinit(
+            &mut self.writer,
+            &type_metadata,
+            &self.lib.specialization_tracker,
+        );
 
         trace!("Writing methods for {}", type_symbol);
 
@@ -198,7 +207,13 @@ impl StmtVisitor for IRGen {
         }
     }
 
-    fn visit_conformance_condition_stmt(&mut self, _type_name: &Token, _trait_name: &Token, _body: &[Stmt]) {}
+    fn visit_conformance_condition_stmt(
+        &mut self,
+        _type_name: &Token,
+        _trait_name: &Token,
+        _body: &[Stmt],
+    ) {
+    }
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) {
         self.writer.start_block();
@@ -221,31 +236,42 @@ impl StmtVisitor for IRGen {
 
         let iterator = iter_expr.accept(self);
         let iterator_type = iter_expr.get_type().unwrap();
-        
+
         let limit = match &iterator_type {
             NodeType::Instance(symbol, _) if symbol == &Symbol::stdlib("Range") => {
                 let start = IRExpr {
-                    kind: IRExprKind::FieldAccess(Box::new(iterator.clone()), "stdlib__Range__start".to_owned()),
+                    kind: IRExprKind::FieldAccess(
+                        Box::new(iterator.clone()),
+                        "stdlib__Range__start".to_owned(),
+                    ),
                     expr_type: NodeType::Int,
                 };
                 self.writer.assign(IRExpr::variable(&counter), start);
                 IRExpr {
-                    kind: IRExprKind::FieldAccess(Box::new(iterator.clone()), "stdlib__Range__end".to_owned()),
+                    kind: IRExprKind::FieldAccess(
+                        Box::new(iterator.clone()),
+                        "stdlib__Range__end".to_owned(),
+                    ),
                     expr_type: NodeType::Int,
                 }
-            },
+            }
             NodeType::Instance(symbol, _) if symbol == &Symbol::stdlib("Vec") => {
-                self.writer.assign(IRExpr::variable(&counter), IRExpr::int_literal("0"));
+                self.writer
+                    .assign(IRExpr::variable(&counter), IRExpr::int_literal("0"));
                 IRExpr {
-                    kind: IRExprKind::FieldAccess(Box::new(iterator.clone()), "stdlib__Vec__count".to_owned()),
+                    kind: IRExprKind::FieldAccess(
+                        Box::new(iterator.clone()),
+                        "stdlib__Vec__count".to_owned(),
+                    ),
                     expr_type: NodeType::Int,
                 }
             }
             NodeType::Array(_, count) => {
-                self.writer.assign(IRExpr::variable(&counter), IRExpr::int_literal("0"));
+                self.writer
+                    .assign(IRExpr::variable(&counter), IRExpr::int_literal("0"));
                 IRExpr::int_literal(&count.to_string())
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         };
 
         self.writer.start_block();
@@ -266,13 +292,10 @@ impl StmtVisitor for IRGen {
                 let local = self
                     .writer
                     .declare_local(variable.get_symbol().unwrap(), NodeType::Int);
-    
-                self.writer.assign(
-                    IRExpr::variable(&local),
-                    IRExpr::variable(&counter),
-                );
 
-            },
+                self.writer
+                    .assign(IRExpr::variable(&local), IRExpr::variable(&counter));
+            }
             NodeType::Instance(symbol, spec) if symbol == Symbol::stdlib("Vec") => {
                 let element_ty = spec.type_for(&symbol.child("T")).unwrap().clone();
                 let element_ty = NodeType::pointer_to(element_ty);
@@ -282,7 +305,10 @@ impl StmtVisitor for IRGen {
                     .declare_local(variable.get_symbol().unwrap(), element_ty.clone());
 
                 let storage = IRExpr {
-                    kind: IRExprKind::FieldAccess(Box::new(iterator.clone()), "stdlib__Vec__storage".to_owned()),
+                    kind: IRExprKind::FieldAccess(
+                        Box::new(iterator.clone()),
+                        "stdlib__Vec__storage".to_owned(),
+                    ),
                     expr_type: element_ty.clone(),
                 };
 
@@ -316,8 +342,8 @@ impl StmtVisitor for IRGen {
                         expr_type: element_ty,
                     },
                 );
-            },
-            _ => unimplemented!()
+            }
+            _ => unimplemented!(),
         };
 
         self.gen_stmts(body);
@@ -445,11 +471,7 @@ impl ExprVisitor for IRGen {
         }
 
         if builtins::is_direct_c_binding(&function_symbol) {
-            IRExpr::call_extern(
-                function_symbol.name(),
-                arg_exprs,
-                self.get_expr_type(expr),
-            )
+            IRExpr::call_extern(function_symbol.name(), arg_exprs, self.get_expr_type(expr))
         } else if builtins::can_write_special_call(&function_symbol) {
             builtins::write_special_call(
                 &mut self.writer,

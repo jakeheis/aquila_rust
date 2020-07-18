@@ -37,7 +37,7 @@ impl TypeDecl {
 #[derive(Debug)]
 pub struct GenericRestriction {
     pub generic: SymbolicToken,
-    pub trait_name: SymbolicToken
+    pub trait_name: SymbolicToken,
 }
 
 #[derive(Debug)]
@@ -201,7 +201,9 @@ impl Stmt {
             StmtKind::IfStmt(condition, body, else_body) => {
                 visitor.visit_if_stmt(&condition, &body, &else_body)
             }
-            StmtKind::ConformanceConditionStmt(type_name, trait_name, body) => visitor.visit_conformance_condition_stmt(type_name, trait_name, &body),
+            StmtKind::ConformanceConditionStmt(type_name, trait_name, body) => {
+                visitor.visit_conformance_condition_stmt(type_name, trait_name, &body)
+            }
             StmtKind::WhileStmt(condition, body) => visitor.visit_while_stmt(condition, &body),
             StmtKind::ForStmt(variable, array, body) => {
                 visitor.visit_for_stmt(variable, array, &body)
@@ -254,7 +256,10 @@ impl Stmt {
         end_brace: &Token,
     ) -> Self {
         let span = Span::join(&if_span, end_brace);
-        Stmt::new(StmtKind::ConformanceConditionStmt(type_name, trait_name, body), span)
+        Stmt::new(
+            StmtKind::ConformanceConditionStmt(type_name, trait_name, body),
+            span,
+        )
     }
 
     pub fn while_stmt(
@@ -317,7 +322,12 @@ pub trait StmtVisitor {
         else_body: &[Stmt],
     ) -> Self::StmtResult;
 
-    fn visit_conformance_condition_stmt(&mut self, type_name: &Token, trait_name: &Token, body: &[Stmt]) -> Self::StmtResult;
+    fn visit_conformance_condition_stmt(
+        &mut self,
+        type_name: &Token,
+        trait_name: &Token,
+        body: &[Stmt],
+    ) -> Self::StmtResult;
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) -> Self::StmtResult;
 

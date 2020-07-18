@@ -119,7 +119,7 @@ impl<'a> SpecializationPropagator<'a> {
                         continue;
                     }
                 }
-                
+
                 let call_spec = call_spec.resolve_generics_using(current_spec);
                 self.propagate_through_function(&callee_function_symbol, &call_spec);
             }

@@ -1,9 +1,9 @@
 use super::check;
+use super::scope::ContextTracker;
 use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::{ExplicitType, ExplicitTypeKind, SpecializedToken};
-use super::scope::ContextTracker;
 use log::trace;
 
 #[derive(Clone)]
@@ -121,7 +121,11 @@ impl<'a> TypeResolution<'a> {
             )));
         }
 
-        let specialization = GenericSpecialization::new(&type_metadata.symbol, &type_metadata.generics, specialization);
+        let specialization = GenericSpecialization::new(
+            &type_metadata.symbol,
+            &type_metadata.generics,
+            specialization,
+        );
 
         if let Some(enclosing_func) = self.enclosing_function {
             self.lib.specialization_tracker.add_required_type_spec(

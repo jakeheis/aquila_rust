@@ -1,8 +1,8 @@
 mod expr_checker;
+mod scope;
 mod symbol_table_builder;
 mod type_checker;
 mod type_resolver;
-mod scope;
 
 pub use symbol_table_builder::SymbolTableBuilder;
 pub use type_checker::TypeChecker;

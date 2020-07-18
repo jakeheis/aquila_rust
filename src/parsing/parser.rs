@@ -338,9 +338,13 @@ impl Parser {
         let mut restrictions: Vec<GenericRestriction> = Vec::new();
 
         while !self.is_at_end() && self.peek() != TokenKind::LeftBrace {
-            let generic = self.consume(TokenKind::Identifier, "Expect generic type")?.clone();
+            let generic = self
+                .consume(TokenKind::Identifier, "Expect generic type")?
+                .clone();
             self.consume(TokenKind::Colon, "Expect ':' after generic type")?;
-            let trait_name = self.consume(TokenKind::Identifier, "Expect trait name")?.clone();
+            let trait_name = self
+                .consume(TokenKind::Identifier, "Expect trait name")?
+                .clone();
             restrictions.push(GenericRestriction {
                 generic: SymbolicToken::new(generic),
                 trait_name: SymbolicToken::new(trait_name),
@@ -478,18 +482,24 @@ impl Parser {
         let if_span = self.previous().span.clone();
 
         self.consume(TokenKind::LeftParen, "Expect '(' after #if")?;
-        
-        let type_name = self.consume(TokenKind::Identifier, "Expect type name")?.clone();
+
+        let type_name = self
+            .consume(TokenKind::Identifier, "Expect type name")?
+            .clone();
         self.consume(TokenKind::Colon, "Expect ':' after type name")?;
-        let trait_name = self.consume(TokenKind::Identifier, "Expect trait name")?.clone();
-        
+        let trait_name = self
+            .consume(TokenKind::Identifier, "Expect trait name")?
+            .clone();
+
         self.consume(TokenKind::RightParen, "Expect ')' after condition")?;
 
         self.consume(TokenKind::LeftBrace, "Expect '{' after condition")?;
         let body = self.block();
         let end_brace = self.consume(TokenKind::RightBrace, "Expect '}' after if body")?;
 
-        Ok(Stmt::conformance_condition(if_span, type_name, trait_name, body, end_brace))
+        Ok(Stmt::conformance_condition(
+            if_span, type_name, trait_name, body, end_brace,
+        ))
     }
 
     fn while_stmt(&mut self) -> DiagnosticResult<Stmt> {

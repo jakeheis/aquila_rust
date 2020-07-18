@@ -21,7 +21,7 @@ impl Symbol {
 
     pub fn child(&self, name: &str) -> Self {
         Symbol {
-            id: self.id.clone() + "$" + name
+            id: self.id.clone() + "$" + name,
         }
     }
 
@@ -29,7 +29,7 @@ impl Symbol {
         let mut components = self.id.split("$").collect::<Vec<_>>();
         if components.pop().is_some() {
             Some(Symbol {
-                id: components.join("$")
+                id: components.join("$"),
             })
         } else {
             None

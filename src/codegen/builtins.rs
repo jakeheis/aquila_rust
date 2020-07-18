@@ -4,7 +4,8 @@ use crate::library::*;
 
 struct Builtin {
     write: Option<fn(&mut IRWriter, &Symbol) -> ()>,
-    special_call: Option<fn(&mut IRWriter, &Symbol, &Symbol, &GenericSpecialization, Vec<IRExpr>) -> IRExpr>,
+    special_call:
+        Option<fn(&mut IRWriter, &Symbol, &Symbol, &GenericSpecialization, Vec<IRExpr>) -> IRExpr>,
 }
 
 impl Builtin {
@@ -106,10 +107,7 @@ fn write_ptr_offset(writer: &mut IRWriter, func_symbol: &Symbol) {
         &func_symbol.child("pointer"),
         NodeType::pointer_to(NodeType::Any),
     );
-    let distance = IRVariable::new_sym(
-        &func_symbol.child("distance"), 
-        NodeType::Int
-    );
+    let distance = IRVariable::new_sym(&func_symbol.child("distance"), NodeType::Int);
 
     let casted = IRExpr::cast(
         IRExpr::variable(&pointer),
@@ -160,23 +158,28 @@ pub fn write_type_init(writer: &mut IRWriter, type_metadata: &TypeMetadata) {
 
     for field in &type_metadata.fields {
         let field_expr = IRExpr::field(
-            &new_item, 
-            &type_metadata.symbol_for_field(&field).mangled(), 
-            field.var_type.clone()
+            &new_item,
+            &type_metadata.symbol_for_field(&field).mangled(),
+            field.var_type.clone(),
         );
-        let param = IRVariable::new_sym(
-            &init_symbol.child(&field.name), 
-            field.var_type.clone()
-        );
+        let param = IRVariable::new_sym(&init_symbol.child(&field.name), field.var_type.clone());
         writer.assign(field_expr, IRExpr::variable(&param));
     }
     writer.return_value(IRExpr::variable(&new_item));
     writer.end_decl_func(&init_metadata);
 }
 
-pub fn write_type_deinit(writer: &mut IRWriter, type_metadata: &TypeMetadata, tracker: &SpecializationTracker) {
+pub fn write_type_deinit(
+    writer: &mut IRWriter,
+    type_metadata: &TypeMetadata,
+    tracker: &SpecializationTracker,
+) {
     let deinit_symbol = Symbol::deinit_symbol(&type_metadata.symbol);
-    let deinit_metadata = writer.lib.function_metadata(&deinit_symbol).unwrap().clone();
+    let deinit_metadata = writer
+        .lib
+        .function_metadata(&deinit_symbol)
+        .unwrap()
+        .clone();
 
     writer.start_block();
 
@@ -191,7 +194,11 @@ pub fn write_type_deinit(writer: &mut IRWriter, type_metadata: &TypeMetadata, tr
         );
         writer.expr(free);
 
-        tracker.add_call(deinit_symbol.clone(), free_sym, type_metadata.dummy_specialization());
+        tracker.add_call(
+            deinit_symbol.clone(),
+            free_sym,
+            type_metadata.dummy_specialization(),
+        );
     }
 
     let self_var = IRVariable::new("self", type_metadata.unspecialized_type());
@@ -199,10 +206,11 @@ pub fn write_type_deinit(writer: &mut IRWriter, type_metadata: &TypeMetadata, tr
         if let NodeType::Instance(type_sym, spec) = &field.var_type {
             let field_symbol = type_metadata.symbol_for_field(field);
 
-            let field_expr = IRExpr::field_deref(&self_var, &field_symbol.mangled(), field.var_type.clone());
+            let field_expr =
+                IRExpr::field_deref(&self_var, &field_symbol.mangled(), field.var_type.clone());
             let field_expr = IRExpr {
                 kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(field_expr)),
-                expr_type: NodeType::pointer_to(field.var_type.clone())
+                expr_type: NodeType::pointer_to(field.var_type.clone()),
             };
 
             let deinit_sym = Symbol::deinit_symbol(&type_sym);
@@ -213,7 +221,7 @@ pub fn write_type_deinit(writer: &mut IRWriter, type_metadata: &TypeMetadata, tr
                 NodeType::Void,
             );
             writer.expr(deinit);
-    
+
             tracker.add_call(deinit_symbol.clone(), deinit_sym, spec.clone());
         }
     }
@@ -249,12 +257,13 @@ fn print_call(
     let node_type = args[0].expr_type.clone();
     if let NodeType::Instance(..) = &node_type {
         let print_object = Symbol::stdlib("print_object");
-        let spec = GenericSpecialization::new(
-            &print_object, 
-            &["T".to_owned()],
-            vec![node_type.clone()]
+        let spec =
+            GenericSpecialization::new(&print_object, &["T".to_owned()], vec![node_type.clone()]);
+        writer.lib.specialization_tracker.add_call(
+            caller.clone(),
+            print_object.clone(),
+            spec.clone(),
         );
-        writer.lib.specialization_tracker.add_call(caller.clone(), print_object.clone(), spec.clone());
         IRExpr::call_generic(print_object, spec.clone(), args, NodeType::Void)
     } else {
         let format_specificer = match node_type {

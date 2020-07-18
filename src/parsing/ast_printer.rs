@@ -1,7 +1,7 @@
 use super::*;
 use crate::lexing::Token;
-use crate::source::*;
 use crate::library::Symbol;
+use crate::source::*;
 use log::trace;
 
 enum ASTPrinterMode {
@@ -258,8 +258,17 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
-    fn visit_conformance_condition_stmt(&mut self, type_name: &Token, trait_name: &Token, body: &[Stmt]) {
-        let message = format!("Conformance(type: {}, trait: {})", type_name.lexeme(), trait_name.lexeme());
+    fn visit_conformance_condition_stmt(
+        &mut self,
+        type_name: &Token,
+        trait_name: &Token,
+        body: &[Stmt],
+    ) {
+        let message = format!(
+            "Conformance(type: {}, trait: {})",
+            type_name.lexeme(),
+            trait_name.lexeme()
+        );
         self.write_ln(&message);
         self.indent(|visitor| {
             body.iter().for_each(|s| s.accept(visitor));

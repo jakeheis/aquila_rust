@@ -1,8 +1,8 @@
+use super::type_resolver::{TypeResolution, TypeResolutionError};
 use crate::diagnostic::*;
 use crate::library::*;
 use crate::parsing::*;
 use crate::source::ContainsSpan;
-use super::type_resolver::{TypeResolution, TypeResolutionError};
 use log::trace;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -122,9 +122,7 @@ impl ContextTracker {
     // Variables
 
     pub fn put_in_scope(&mut self, name: String, definition: ScopeDefinition) {
-        self.current_scope()
-            .definitions
-            .insert(name, definition);
+        self.current_scope().definitions.insert(name, definition);
     }
 
     pub fn define_variable(&mut self, name: &SymbolicToken, var_type: &NodeType) {
@@ -154,11 +152,13 @@ impl ContextTracker {
         }
 
         let enclosing_func = self.enclosing_function();
-        let resolver = TypeResolution::new(&self.lib, &self.lib.symbols, &self, Some(&enclosing_func));
+        let resolver =
+            TypeResolution::new(&self.lib, &self.lib.symbols, &self, Some(&enclosing_func));
         match resolver.resolve_simple(token) {
             Ok(resolved_type) => Some(ScopeDefinition::ExplicitType(Ok(resolved_type))),
             Err(TypeResolutionError::NotFound) => None,
-            Err(TypeResolutionError::Inaccessible(diag)) | Err(TypeResolutionError::IncorrectlySpecialized(diag)) => {
+            Err(TypeResolutionError::Inaccessible(diag))
+            | Err(TypeResolutionError::IncorrectlySpecialized(diag)) => {
                 Some(ScopeDefinition::ExplicitType(Err(diag)))
             }
         }
@@ -166,7 +166,8 @@ impl ContextTracker {
 
     pub fn resolve_type(&self, explicit_type: &ExplicitType) -> DiagnosticResult<NodeType> {
         let enclosing_func = self.enclosing_function();
-        let resolver = TypeResolution::new(&self.lib, &self.lib.symbols, &self, Some(&enclosing_func));
+        let resolver =
+            TypeResolution::new(&self.lib, &self.lib.symbols, &self, Some(&enclosing_func));
         match resolver.resolve(explicit_type) {
             Ok(resolved_type) => Ok(resolved_type),
             Err(error) => Err(match error {
