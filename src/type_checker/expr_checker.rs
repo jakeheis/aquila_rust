@@ -1,4 +1,4 @@
-use super::{check, ContextTracker, ScopeDefinition};
+use super::{check, ContextTracker, ScopeDefinition, ScopeType};
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::library::*;
@@ -123,9 +123,7 @@ impl ExprChecker {
                     let write_sym = sym.write_symbol();
                     let enclosing_func = self
                         .context
-                        .enclosing_function()
-                        .map(|e| e.symbol.clone())
-                        .unwrap_or(Symbol::main_symbol());
+                        .enclosing_function();
                     self.lib.specialization_tracker.add_call(
                         enclosing_func,
                         write_sym,
@@ -328,9 +326,7 @@ impl ExprVisitor for ExprChecker {
         } else {
             let enclosing_func = self
                 .context
-                .enclosing_function()
-                .map(|e| e.symbol.clone())
-                .unwrap_or(Symbol::main_symbol());
+                .enclosing_function();
             trace!(target: "type_checker", "Adding call from {} to {} with {}", enclosing_func, metadata.symbol, full_call_specialization);
             self.lib.specialization_tracker.add_call(
                 enclosing_func,
@@ -404,12 +400,15 @@ impl ExprVisitor for ExprChecker {
 
     fn visit_variable_expr(&mut self, expr: &Expr, name: &SpecializedToken) -> Self::ExprResult {
         if let TokenKind::SelfKeyword = name.token.kind {
-            if let Some(enclosing_type) = self.context.enclosing_type() {
-                name.set_symbol(Symbol::self_symbol(&enclosing_type.symbol));
-                return expr.set_type(enclosing_type.unspecialized_type());
-            } else {
-                return Err(Diagnostic::error(expr, "Self illegal here"));
+            if let ScopeType::InsideFunction = self.context.current_scope().scope_type {
+                let parent_scope = &self.context.scopes[self.context.scopes.len() - 2];
+                if let ScopeType::InsideType = parent_scope.scope_type {
+                    let metadata = self.lib.type_metadata(&parent_scope.id).unwrap();
+                    name.set_symbol(Symbol::self_symbol(&parent_scope.id));
+                    return expr.set_type(metadata.unspecialized_type());
+                }
             }
+            return Err(Diagnostic::error(expr, "'self' illegal here"));
         }
 
         match self.context.resolve_token(name) {

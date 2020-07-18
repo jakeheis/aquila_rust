@@ -1,0 +1,24 @@
+type Resolve {
+    let a: int;
+
+    def shadow() {
+        print(a);
+        let a = 4;
+        print(a);
+
+        if true {
+            let a = 6;
+            print(a);
+        }
+
+        print(a);
+    }
+}
+
+let resolve = Resolve(2);
+
+/// -> 2
+/// -> 4
+/// -> 6
+/// -> 4
+resolve.shadow();

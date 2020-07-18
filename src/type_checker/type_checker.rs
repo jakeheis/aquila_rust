@@ -39,7 +39,7 @@ impl TypeChecker {
         let main_func = FunctionMetadata::main();
         checker.context.push_scope(
             main_func.symbol.clone(),
-            ScopeType::InsideFunction(main_func),
+            ScopeType::InsideFunction,
         );
         checker.check_list(&lib.main);
         checker.context.pop_scope();
@@ -87,10 +87,10 @@ impl TypeChecker {
         self.reporter.report(diag);
     }
 
-    fn check_type_decl(&mut self, decl: &TypeDecl) -> Analysis {
+    fn check_type_decl(&mut self, decl: &TypeDecl) {
         let (type_symbol, metadata) = self.context.push_type_scope(&decl.name);
 
-        self.context.push_scope_meta(&metadata);
+        self.context.push_scope_meta();
         for method in metadata.meta_method_symbols() {
             self.context.put_in_scope(method.name().to_owned(), ScopeDefinition::Function(method));
         }
@@ -115,21 +115,15 @@ impl TypeChecker {
         }
 
         self.context.pop_scope();
-
-        Analysis {
-            guarantees_return: false,
-        }
     }
 
-    fn check_function_decl(&mut self, decl: &FunctionDecl) -> Analysis {
+    fn check_function_decl(&mut self, decl: &FunctionDecl) {
         let (func_symbol, metadata) = self.context.push_function_scope(&decl.name);
         decl.name.set_symbol(func_symbol.clone());
 
         if decl.is_builtin {
             self.context.pop_scope();
-            return Analysis {
-                guarantees_return: false,
-            };
+            return;
         }
 
         let return_type = match &metadata.return_type {
@@ -177,10 +171,6 @@ impl TypeChecker {
             let span = Span::join_opt(&span_params, &decl.return_type);
             self.report_error(Diagnostic::error(&span, "Function may not return"));
         }
-
-        Analysis {
-            guarantees_return: false,
-        }
     }
 
     fn check_conformance_decl(&mut self, decl: &ConformanceDecl) {
@@ -206,7 +196,7 @@ impl TypeChecker {
 
         self.context.push_scope(
             type_metadata.symbol.clone(),
-            ScopeType::InsideType(type_metadata.clone()),
+            ScopeType::InsideType,
         );
 
         for field in &type_metadata.fields {
@@ -316,11 +306,11 @@ impl StmtVisitor for TypeChecker {
             let _ = condition.set_type(NodeType::Bool);
         }
 
-        self.context.push_scope_named("if");
+        self.context.push_subscope();
         let body_analysis = self.check_list(body);
         self.context.pop_scope();
 
-        self.context.push_scope_named("else");
+        self.context.push_subscope();
         let else_analysis = self.check_list(else_body);
         self.context.pop_scope();
 
@@ -340,7 +330,7 @@ impl StmtVisitor for TypeChecker {
             let _ = condition.set_type(NodeType::Bool);
         }
 
-        self.context.push_scope_named("while");
+        self.context.push_subscope();
         let body_analysis = self.check_list(body);
         self.context.pop_scope();
 
@@ -387,7 +377,7 @@ impl StmtVisitor for TypeChecker {
             }
         };
 
-        self.context.push_scope_named("for");
+        self.context.push_subscope();
         self.context.define_variable(variable, &array_element_type);
         let body_analysis = self.check_list(body);
         self.context.pop_scope();
@@ -401,12 +391,10 @@ impl StmtVisitor for TypeChecker {
             .and_then(|e| self.check_expr(e))
             .unwrap_or(NodeType::Void);
 
-        let expected_return = self
-            .context
-            .enclosing_function()
-            .as_ref()
-            .map(|m| &m.return_type);
-        let expected_return = expected_return.unwrap_or(&NodeType::Void);
+        let enclosing_metadata = self.lib.function_metadata(&self.context.enclosing_function());
+        let expected_return = enclosing_metadata
+            .map(|m| &m.return_type)
+            .unwrap_or(&NodeType::Void);
 
         if let Some(expr) = expr.as_ref() {
             let _ = expr.set_type(expected_return.clone());

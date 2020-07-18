@@ -84,10 +84,6 @@ impl Symbol {
         self.id.replace("$", "__")
     }
 
-    pub fn is_meta(&self) -> bool {
-        self.name() == "Meta"
-    }
-
     pub fn is_self(&self) -> bool {
         self.name() == "self"
     }

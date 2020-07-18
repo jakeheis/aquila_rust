@@ -3,6 +3,7 @@ use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::{ExplicitType, ExplicitTypeKind, SpecializedToken};
+use super::ContextTracker;
 use log::trace;
 
 #[derive(Clone)]
@@ -17,7 +18,7 @@ pub type TypeResolutionResult = Result<NodeType, TypeResolutionError>;
 pub struct TypeResolution<'a> {
     lib: &'a Lib,
     symbols: &'a SymbolTable,
-    context: &'a [Symbol],
+    context: &'a ContextTracker,
     enclosing_function: Option<&'a Symbol>,
 }
 
@@ -25,7 +26,7 @@ impl<'a> TypeResolution<'a> {
     pub fn new(
         lib: &'a Lib,
         symbols: &'a SymbolTable,
-        context: &'a [Symbol],
+        context: &'a ContextTracker,
         enclosing_function: Option<&'a Symbol>,
     ) -> Self {
         TypeResolution {
@@ -79,8 +80,8 @@ impl<'a> TypeResolution<'a> {
     ) -> TypeResolutionResult {
         trace!(target: "symbol_table", "Trying to find symbol for {} -- ({})", token.lexeme(), token.span.entire_line().0);
 
-        for parent in self.context.iter().rev() {
-            let non_top_level_symbol = parent.child_token(token);
+        for parent in self.context.scopes.iter().rev() {
+            let non_top_level_symbol = parent.id.child_token(token);
             if let Some(type_metadata) = self.symbols.get_type_metadata(&non_top_level_symbol) {
                 trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), non_top_level_symbol);
                 return self.create_instance(token, type_metadata, specialization);

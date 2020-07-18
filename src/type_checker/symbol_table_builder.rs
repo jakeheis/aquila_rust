@@ -1,4 +1,4 @@
-use super::{TypeResolution, TypeResolutionError};
+use super::{TypeResolution, TypeResolutionError, ContextTracker, ScopeType};
 use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::library::*;
@@ -9,7 +9,7 @@ use std::rc::Rc;
 pub struct SymbolTableBuilder {
     lib: Rc<Lib>,
     symbols: SymbolTable,
-    context: Vec<Symbol>,
+    context: ContextTracker,
     reporter: Rc<dyn Reporter>,
 }
 
@@ -20,7 +20,7 @@ impl SymbolTableBuilder {
         let mut builder = SymbolTableBuilder {
             lib: Rc::clone(&lib),
             symbols: SymbolTable::new(),
-            context: vec![Symbol::lib_root(&lib.name)],
+            context: ContextTracker::new(Rc::clone(&lib)),
             reporter,
         };
 
@@ -61,9 +61,9 @@ impl SymbolTableBuilder {
 
         let mut metadata = TypeMetadata::new(new_symbol.clone(), decl.is_public);
 
-        self.context.push(new_symbol.clone());
+        self.context.push_scope(new_symbol.clone(), ScopeType::InsideType);
         metadata.generics = self.insert_placeholder_generics(&new_symbol, &decl.generics);
-        self.context.pop();
+        self.context.pop_scope();
 
         self.symbols
             .insert_type_metadata(new_symbol.clone(), metadata);
@@ -82,13 +82,13 @@ impl SymbolTableBuilder {
 
         trace!(target: "symbol_table", "Building type {} (symbol = {})", decl.name.token.lexeme(), type_symbol);
 
-        self.context.push(type_symbol.clone());
-
         let mut type_metadata = self
             .symbols
             .get_type_metadata(&type_symbol)
             .expect(&format!("metadata for symbol {}", type_symbol))
             .clone();
+
+        self.context.push_scope(type_symbol.clone(), ScopeType::InsideType);
 
         let (generics, _) = self.insert_generics(&type_symbol, &decl.generics, &[]);
 
@@ -109,7 +109,7 @@ impl SymbolTableBuilder {
         
         type_metadata.methods = self.build_functions(&decl.methods, false);
 
-        self.context.push(self.current_symbol().meta_symbol());
+        self.context.push_scope_meta();
         type_metadata.meta_methods = self.build_functions(&decl.meta_methods, false);
 
         let init_symbol = self.current_symbol().init_symbol();
@@ -128,7 +128,7 @@ impl SymbolTableBuilder {
             },
         );
 
-        self.context.pop(); // Meta pop
+        self.context.pop_scope(); // Meta pop
 
         let deinit_symbol = self.current_symbol().deinit_symbol();
         type_metadata.methods.push(deinit_symbol.name().to_owned());
@@ -140,13 +140,13 @@ impl SymbolTableBuilder {
                 generics: Vec::new(),
                 parameters: Vec::new(),
                 return_type: NodeType::Void,
-                is_public: !any_private_fields,
+                is_public: true,
                 generic_restrictions: Vec::new(),
                 include_caller: false,
             },
         );
 
-        self.context.pop(); // Type pop
+        self.context.pop_scope(); // Type pop
 
         self.symbols
             .insert_type_metadata(type_symbol, type_metadata);
@@ -163,7 +163,7 @@ impl SymbolTableBuilder {
 
         trace!(target: "symbol_table", "Building function {} (symbol = {})", decl.name.token.lexeme(), function_symbol);
 
-        self.context.push(function_symbol.clone());
+        self.context.push_scope(function_symbol.clone(), ScopeType::InsideFunction);
 
         let (generics, generic_restrictions) = self.insert_generics(&function_symbol, &decl.generics, &decl.generic_restrctions);
 
@@ -183,18 +183,13 @@ impl SymbolTableBuilder {
             .map(|r| self.resolve_type(r, Some(&function_symbol)))
             .unwrap_or(NodeType::Void);
 
-        self.context.pop();
+        self.context.pop_scope();
 
-        let function_kind = match self.context.last() {
-            Some(p) if p.is_meta() => FunctionKind::MetaMethod(p.owner_symbol().unwrap()),
-            Some(p) => {
-                if self.symbols.get_type_metadata(&p).is_some() {
-                    FunctionKind::Method(p.clone())
-                } else {
-                    FunctionKind::TopLevel
-                }
-            }
-            _ => FunctionKind::TopLevel,
+        let function_kind = match self.context.current_scope().scope_type {
+            ScopeType::InsideMetatype => FunctionKind::MetaMethod(self.current_symbol().owner_symbol().unwrap()),
+            ScopeType::InsideType | ScopeType::InsideTrait => FunctionKind::Method(self.current_symbol().clone()),
+            ScopeType::TopLevel => FunctionKind::TopLevel,
+            ScopeType::InsideFunction => panic!()
         };
 
         let function_metadata = FunctionMetadata {
@@ -230,9 +225,9 @@ impl SymbolTableBuilder {
         trace!("Building trait body {}", decl.name.lexeme());
 
         let trait_symbol = self.current_symbol().child_token(&decl.name);
-        self.context.push(trait_symbol.clone());
+        self.context.push_scope(trait_symbol.clone(), ScopeType::InsideTrait);
         let requirements = self.build_functions(&decl.requirements, true);
-        self.context.pop();
+        self.context.pop_scope();
 
         let metadata = TraitMetadata {
             symbol: trait_symbol.clone(),
@@ -247,9 +242,9 @@ impl SymbolTableBuilder {
         let type_symbol = self.current_symbol().child_token(&decl.target.token);
         let mut type_metadata = self.symbols.get_type_metadata(&type_symbol).unwrap().clone();
 
-        self.context.push(type_symbol.clone());
+        self.context.push_scope(type_symbol.clone(), ScopeType::InsideType);
         let impls = self.build_functions(&decl.implementations, true);
-        self.context.pop();
+        self.context.pop_scope();
 
         type_metadata.methods.extend(impls);
 
@@ -257,7 +252,7 @@ impl SymbolTableBuilder {
     }
 
     fn current_symbol(&self) -> &Symbol {
-        self.context.last().unwrap()
+        self.context.current_symbol()
     }
 
     fn insert_placeholder_generics(&mut self, owner: &Symbol, generics: &[Token]) -> Vec<String> {

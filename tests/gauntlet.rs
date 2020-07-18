@@ -29,6 +29,11 @@ fn optional() -> Result<(), &'static str> {
 }
 
 #[test]
+fn resolution() -> Result<(), &'static str> {
+    test_file("resolution")
+}
+
+#[test]
 fn string() -> Result<(), &'static str> {
     test_file("string")
 }
