@@ -136,7 +136,7 @@ impl IRGen {
         self.gen_function_decls(&decl.meta_methods);
         self.current_type = None;
 
-        trace!(target: "codegen", "Finished methods for {}", type_symbol);
+        trace!("Finished methods for {}", type_symbol);
     }
 
     fn gen_function_decl(&mut self, decl: &FunctionDecl) {
@@ -209,10 +209,15 @@ impl StmtVisitor for IRGen {
 
     fn visit_conformance_condition_stmt(
         &mut self,
-        _type_name: &Token,
-        _trait_name: &Token,
-        _body: &[Stmt],
+        type_name: &SymbolicToken,
+        trait_name: &SymbolicToken,
+        body: &[Stmt],
     ) {
+        self.writer.start_block();
+        self.gen_stmts(body);
+        self
+            .writer
+            .end_conformance_check(type_name.get_symbol().unwrap(), trait_name.get_symbol().unwrap())
     }
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) {
@@ -442,6 +447,8 @@ impl ExprVisitor for IRGen {
 
         let function_symbol = call.name.get_symbol().unwrap();
         let mut ir_symbol = function_symbol.clone();
+
+        trace!("Writing call {}", function_symbol);
 
         let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
 

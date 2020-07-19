@@ -13,6 +13,18 @@
 let vector = Vec[int].new();
 print(vector);
 
+def try_print[T](obj: T) {
+    #if(T: Writable) {
+        print_object[T](obj);
+    }
+}
+
+let integer = 4;
+let str = String.literal("hello");
+
+try_print[int](4);
+try_print[String](str);
+
 // print_object[Vec[int]](vector);
 
 // let obj = String.literal("hello");

@@ -1,5 +1,5 @@
 use super::check;
-use super::scope::{ContextTracker, ScopeType};
+use super::scope::ContextTracker;
 use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::library::*;
@@ -16,8 +16,6 @@ pub struct TypeResolution<'a> {
     context: &'a ContextTracker,
     symbols: &'a SymbolTable,
     enclosing_function: Option<&'a Symbol>,
-    // local_generics: &'a [Symbol],
-    // parent_generics: &'a [Symbol],
 }
 
 impl<'a> TypeResolution<'a> {
@@ -25,15 +23,11 @@ impl<'a> TypeResolution<'a> {
         context: &'a ContextTracker,
         symbols: &'a SymbolTable,
         enclosing_function: Option<&'a Symbol>,
-        // local_generics: &'a [Symbol],
-        // parent_generics: &'a [Symbol],
     ) -> Self {
         TypeResolution {
             context,
             symbols,
             enclosing_function,
-            // local_generics,
-            // parent_generics
         }
     }
 
@@ -84,30 +78,9 @@ impl<'a> TypeResolution<'a> {
     ) -> TypeResolutionResult {
         trace!(target: "symbol_table", "Trying to find symbol for {} -- ({})", token.lexeme(), token.span.entire_line().0);
 
-        // if let Some(sym) = self.context.resolve_generic(token.lexeme()) {
-        //     trace!(target: "symbol_table", "Resolving {} as generic {}", token.lexeme(), sym);
-        //     return self.create_gen_instance(token, &sym, specialization);
-        // }
-
-        for parent in self.context.scopes.iter().rev() {
-            let generics = match parent.scope_type {
-                ScopeType::InsideFunction => {
-                    // Optional because main doesn't have metadata
-                    let function = self.symbols.get_func_metadata(&parent.id);
-                    function.map(|f| f.generics.as_slice()).unwrap_or(&[])
-                }
-                ScopeType::InsideType => {
-                    let ty = self.symbols.get_type_metadata(&parent.id).unwrap();
-                    &ty.generics
-                }
-                ScopeType::InsideTrait | ScopeType::TopLevel | ScopeType::InsideMetatype => continue,
-            };
-
-            if generics.iter().any(|g| g == token.lexeme()) {
-                let sym = parent.id.child_token(&token);
-                trace!(target: "symbol_table", "Resolving {} as generic {}", token.lexeme(), sym);
-                return self.create_gen_instance(token, &sym, specialization);
-            }
+        if let Some(sym) = self.context.resolve_generic(token.lexeme(), self.symbols) {
+            trace!(target: "symbol_table", "Resolving {} as generic {}", token.lexeme(), sym);
+            return self.create_gen_instance(token, &sym, specialization);
         }
 
         let top_level = self.context.scopes[0].id.child(token.lexeme());

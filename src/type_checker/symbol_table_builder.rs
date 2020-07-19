@@ -201,7 +201,7 @@ impl SymbolTableBuilder {
 
             let generic_symbol = if function_metadata.generics.iter().any(|g| g == generic_name) {
                 function_metadata.symbol.child(generic_name)
-            } else if let Some(g) = self.context.resolve_generic(generic_name) {
+            } else if let Some(g) = self.context.resolve_generic(generic_name, &self.lib.symbols) {
                 g
             } else {
                 self.reporter.report(Diagnostic::error(

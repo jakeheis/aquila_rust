@@ -132,6 +132,16 @@ impl CodeWriter {
 
                 self.writeln("}");
             }
+            IRStatement::ConformanceCheck(gen_sym, trait_sym, block) => {
+                let resolved_type = spec.type_for(gen_sym).unwrap();
+                if let NodeType::Instance(type_sym, _) = resolved_type {
+                    let module = self.programs.iter().find(|m| &m.name == type_sym.lib()).unwrap();
+                    let metadata = module.symbols.get_type_metadata(type_sym).unwrap();
+                    if metadata.conforms_to(trait_sym) {
+                        self.write_block(block, spec);
+                    }
+                }
+            }
             IRStatement::Execute(expr) => {
                 let line = format!("{};", self.form_expression(expr, spec));
                 self.writeln(&line);

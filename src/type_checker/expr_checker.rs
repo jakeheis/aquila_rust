@@ -153,15 +153,34 @@ impl ExprChecker {
     ) -> DiagnosticResult<()> {
         for (generic_symbol, trait_symbol) in restrictions {
             let specialized_type = specialization.type_for(&generic_symbol).unwrap();
-            if let NodeType::Instance(type_sym, ..) = specialized_type {
-                let metadata = self.lib.type_metadata(&type_sym).unwrap();
-                if !metadata.conforms_to(trait_symbol) {
-                    let message = format!(
-                        "Type '{}' does not implement '{}'",
-                        type_sym.name(),
-                        trait_symbol.name()
-                    );
-                    return Err(Diagnostic::error(span, &message));
+            if let NodeType::Instance(type_sym, ..) = specialized_type {                
+                if let Some(metadata) = self.lib.type_metadata(&type_sym) {
+                    if !metadata.conforms_to(trait_symbol) {
+                        let message = format!(
+                            "Type '{}' does not implement '{}'",
+                            type_sym.name(),
+                            trait_symbol.name()
+                        );
+                        return Err(Diagnostic::error(span, &message));
+                    }
+                } else {
+                    let mut implements = false;
+                    for scope in self.context.scopes.iter().rev() {
+                        let generic_restrictions = &scope.generic_restrictions;
+                        let known_conformances = generic_restrictions.get(type_sym).map(|g| g.as_slice()).unwrap_or(&[]);
+                        if known_conformances.contains(trait_symbol) {
+                            implements = true;
+                        }
+                    }
+
+                    if !implements {
+                        let message = format!(
+                            "Generic '{}' is not constrained to types which implement '{}'",
+                            type_sym.name(),
+                            trait_symbol.name()
+                        );
+                        return Err(Diagnostic::error(span, &message));
+                    }
                 }
             } else {
                 let message = format!("Type does not implement '{}'", trait_symbol.name());

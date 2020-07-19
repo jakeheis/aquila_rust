@@ -24,6 +24,17 @@ def takes_greeter[T](greeter: T) where T: Greets {
 /// -> hello
 takes_greeter[Person](person);
 
+def try_greet[T](obj: T) {
+    #if(T: Greets) {
+        takes_greeter[T](obj);
+    }
+}
+
+try_greet[int](4);
+
+/// -> hello
+try_greet[Person](person);
+
 /// error
 takes_greeter[int](4);
 /// end

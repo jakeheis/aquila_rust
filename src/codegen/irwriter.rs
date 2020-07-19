@@ -98,6 +98,12 @@ impl IRWriter {
         self.add_stmt(loop_stmt);
     }
 
+    pub fn end_conformance_check(&mut self, type_name: Symbol, trait_name: Symbol) {
+        let block = self.blocks.pop().unwrap();
+        let check = IRStatement::ConformanceCheck(type_name, trait_name, block);
+        self.add_stmt(check);
+    }
+
     pub fn declare_local(&mut self, symbol: Symbol, var_type: NodeType) -> IRVariable {
         let var = IRVariable {
             name: symbol.mangled(),

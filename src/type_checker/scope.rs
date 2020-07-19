@@ -162,21 +162,19 @@ impl ContextTracker {
         }
     }
 
-    pub fn resolve_generic(&self, name: &str) -> Option<Symbol> {
+    pub fn resolve_generic(&self, name: &str, symbols: &SymbolTable) -> Option<Symbol> {
         for scope in self.scopes.iter().rev() {
             let generics = match scope.scope_type {
                 ScopeType::InsideFunction => {
-                    let function = self.lib.function_metadata(&scope.id);
+                    let function = symbols.get_func_metadata(&scope.id);
                     function.map(|f| f.generics.as_slice()).unwrap_or(&[])
                 }
                 ScopeType::InsideType => {
-                    let ty = self.lib.type_metadata(&scope.id).unwrap();
+                    let ty = symbols.get_type_metadata(&scope.id).unwrap();
                     &ty.generics
                 }
                 ScopeType::InsideTrait | ScopeType::TopLevel | ScopeType::InsideMetatype => continue,
             };
-
-            println!("checking {} in {:?} for gen {}", scope.id, generics, name);
 
             if generics.iter().any(|g| g == name) {
                 return Some(scope.id.child(name));

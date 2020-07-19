@@ -49,6 +49,7 @@ pub enum IRStatement {
     Condition(IRExpr, Vec<IRStatement>, Vec<IRStatement>),
     Execute(IRExpr),
     Return(Option<IRExpr>),
+    ConformanceCheck(Symbol, Symbol, Vec<IRStatement>),
     Break,
 }
 

@@ -175,7 +175,7 @@ pub enum StmtKind {
     LocalVariableDecl(LocalVariableDecl),
     Assignment(Box<Expr>, Box<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
-    ConformanceConditionStmt(Token, Token, Vec<Stmt>),
+    ConformanceConditionStmt(SymbolicToken, SymbolicToken, Vec<Stmt>),
     WhileStmt(Expr, Vec<Stmt>),
     ForStmt(SymbolicToken, Expr, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
@@ -257,7 +257,11 @@ impl Stmt {
     ) -> Self {
         let span = Span::join(&if_span, end_brace);
         Stmt::new(
-            StmtKind::ConformanceConditionStmt(type_name, trait_name, body),
+            StmtKind::ConformanceConditionStmt(
+                SymbolicToken::new(type_name), 
+                SymbolicToken::new(trait_name), 
+                body
+            ),
             span,
         )
     }
@@ -324,8 +328,8 @@ pub trait StmtVisitor {
 
     fn visit_conformance_condition_stmt(
         &mut self,
-        type_name: &Token,
-        trait_name: &Token,
+        type_name: &SymbolicToken,
+        trait_name: &SymbolicToken,
         body: &[Stmt],
     ) -> Self::StmtResult;
 

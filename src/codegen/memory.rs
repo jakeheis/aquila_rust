@@ -68,6 +68,27 @@ impl<'a> FreeWriter<'a> {
                     hit_break = true;
                     done = true;
                 }
+                IRStatement::ConformanceCheck(_, _, body) => {
+                    let mut free_at_return = self.free_at_return.clone();
+                    let mut free_at_break = self.free_at_break.clone();
+
+                    if self.inside_loop {
+                        free_at_break.append(&mut locals.clone());
+                    } else {
+                        free_at_return.append(&mut locals.clone());
+                    }
+
+                    let mut if_writer = FreeWriter {
+                        tables: self.tables,
+                        function_sym: self.function_sym,
+                        lines: body,
+                        tracker: self.tracker,
+                        free_at_return: free_at_return.clone(),
+                        free_at_break: free_at_break.clone(),
+                        inside_loop: self.inside_loop,
+                    };
+                    if_writer.write();
+                }
                 IRStatement::Condition(_, if_body, else_body) => {
                     let mut free_at_return = self.free_at_return.clone();
                     let mut free_at_break = self.free_at_break.clone();

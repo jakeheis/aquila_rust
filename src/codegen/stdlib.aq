@@ -49,7 +49,7 @@ pub type Memory {
 
 pub builtin def print(obj: any);
 
-def print_object[T](obj: T) where T: Writable {
+pub def print_object[T](obj: T) where T: Writable {
     let builder = StringBuilder.new();
     obj.write(&builder);
     print(builder.content.storage);
@@ -220,9 +220,9 @@ impl Vec: Iterable {}
 impl Vec: Freeable {
     def free() {
         #if(T: Freeable) {
-            for object in self {
-                object.deinit();
-            }
+            // for object in self {
+            //     object.deinit();
+            // }
         }
         if capacity > 0 {
             Memory.drop[T](storage);

@@ -2,7 +2,6 @@ use super::check;
 use super::expr_checker::*;
 use super::scope::{ContextTracker, ScopeDefinition, ScopeType};
 use crate::diagnostic::*;
-use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::*;
 use std::rc::Rc;
@@ -388,10 +387,41 @@ impl StmtVisitor for TypeChecker {
 
     fn visit_conformance_condition_stmt(
         &mut self,
-        _type_name: &Token,
-        _trait_name: &Token,
-        _body: &[Stmt],
+        type_name: &SymbolicToken,
+        trait_name: &SymbolicToken,
+        body: &[Stmt],
     ) -> Analysis {
+        let gen = self.context.resolve_generic(type_name.token.lexeme(), &self.lib.symbols);
+        if gen.is_none() {
+            self.report_error(Diagnostic::error(type_name, "Unrecognized generic parameter"));
+            return Analysis {
+                guarantees_return: false,
+            };
+        }
+
+        type_name.set_symbol(gen.as_ref().unwrap().clone());
+
+        let trait_metadata = self.lib.trait_metadata(trait_name.token.lexeme());
+        if trait_metadata.is_none() {
+            self.report_error(Diagnostic::error(trait_name, "Unrecognized trait"));
+            return Analysis {
+                guarantees_return: false,
+            };
+        }
+
+        trait_name.set_symbol(trait_metadata.unwrap().symbol.clone());
+
+        self.context.push_subscope();
+
+        self
+            .context
+            .current_scope()
+            .generic_restrictions
+            .insert(gen.unwrap(), vec![trait_metadata.unwrap().symbol.clone()]);
+
+        self.check_list(body);
+        self.context.pop_scope();
+        
         Analysis {
             guarantees_return: false,
         }

@@ -260,14 +260,14 @@ impl StmtVisitor for ASTPrinter {
 
     fn visit_conformance_condition_stmt(
         &mut self,
-        type_name: &Token,
-        trait_name: &Token,
+        type_name: &SymbolicToken,
+        trait_name: &SymbolicToken,
         body: &[Stmt],
     ) {
         let message = format!(
             "Conformance(type: {}, trait: {})",
-            type_name.lexeme(),
-            trait_name.lexeme()
+            type_name.token.lexeme(),
+            trait_name.token.lexeme()
         );
         self.write_ln(&message);
         self.indent(|visitor| {
