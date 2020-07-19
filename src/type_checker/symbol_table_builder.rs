@@ -1,7 +1,6 @@
 use super::scope::{ContextTracker, ScopeType};
 use super::type_resolver::{TypeResolution, TypeResolutionResult};
 use crate::diagnostic::*;
-use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::*;
 use log::trace;
@@ -62,10 +61,7 @@ impl SymbolTableBuilder {
 
         let mut metadata = TypeMetadata::new(new_symbol.clone(), decl.is_public);
 
-        self.context
-            .push_scope(new_symbol.clone(), ScopeType::InsideType);
-        metadata.generics = self.insert_placeholder_generics(&new_symbol, &decl.generics);
-        self.context.pop_scope();
+        metadata.generics = decl.generics.iter().map(|g| g.lexeme().to_owned()).collect();
 
         self.symbols
             .insert_type_metadata(new_symbol.clone(), metadata);
@@ -92,10 +88,6 @@ impl SymbolTableBuilder {
 
         self.context
             .push_scope(type_symbol.clone(), ScopeType::InsideType);
-
-        let (generics, _) = self.insert_generics(&type_symbol, &decl.generics, &[]);
-
-        type_metadata.generics = generics;
 
         let mut any_private_fields = false;
         for field in &decl.fields {
@@ -172,31 +164,72 @@ impl SymbolTableBuilder {
 
         trace!(target: "symbol_table", "Building function {} (symbol = {})", decl.name.token.lexeme(), function_symbol);
 
+        let mut function_metadata = FunctionMetadata {
+            symbol: function_symbol.clone(),
+            kind: FunctionKind::TopLevel,
+            generics: decl.generics.iter().map(|g| g.lexeme().to_owned()).collect(),
+            parameters: Vec::new(),
+            return_type: NodeType::Ambiguous,
+            include_caller: decl.include_caller,
+            generic_restrictions: Vec::new(),
+            is_public: force_public || decl.is_public,
+        };
+        self.symbols
+            .insert_func_metadata(function_symbol.clone(), function_metadata.clone());
+
         self.context
             .push_scope(function_symbol.clone(), ScopeType::InsideFunction);
 
-        let (generics, generic_restrictions) =
-            self.insert_generics(&function_symbol, &decl.generics, &decl.generic_restrctions);
-
-        let mut params: Vec<VarMetadata> = Vec::new();
         for param in &decl.parameters {
             let node_type = self.resolve_type(&param.explicit_type, Some(&function_symbol));
-            params.push(VarMetadata {
+            function_metadata.parameters.push(VarMetadata {
                 name: param.name.lexeme().to_owned(),
                 var_type: node_type,
                 public: false,
             });
         }
 
-        let return_type = decl
+        function_metadata.return_type = decl
             .return_type
             .as_ref()
             .map(|r| self.resolve_type(r, Some(&function_symbol)))
             .unwrap_or(NodeType::Void);
 
+        for restriction in &decl.generic_restrctions {
+            let generic_name = restriction.generic.token.lexeme();
+            let trait_name = restriction.trait_name.token.lexeme();
+
+            let generic_symbol = if function_metadata.generics.iter().any(|g| g == generic_name) {
+                function_metadata.symbol.child(generic_name)
+            } else if let Some(g) = self.context.resolve_generic(generic_name) {
+                g
+            } else {
+                self.reporter.report(Diagnostic::error(
+                    &restriction.generic,
+                    "Unrecognized generic type",
+                ));
+                continue
+            };
+
+            let this_lib_sym = Symbol::lib_root(&self.lib.name).child(trait_name);
+            let trait_metadata = if let Some(t) = self.symbols.get_trait_metadata(&this_lib_sym) {
+                t
+            } else if let Some(t) = self.lib.trait_metadata(trait_name) {
+                t
+            } else {
+                self.reporter.report(Diagnostic::error(
+                    &restriction.trait_name,
+                    "Unrecognized trait",
+                ));
+                continue
+            };
+            
+            function_metadata.generic_restrictions.push((generic_symbol, trait_metadata.symbol.clone()));
+        }
+
         self.context.pop_scope();
 
-        let function_kind = match self.context.current_scope().scope_type {
+        function_metadata.kind = match self.context.current_scope().scope_type {
             ScopeType::InsideMetatype => {
                 FunctionKind::MetaMethod(self.current_symbol().owner_symbol().unwrap())
             }
@@ -207,16 +240,6 @@ impl SymbolTableBuilder {
             ScopeType::InsideFunction => panic!(),
         };
 
-        let function_metadata = FunctionMetadata {
-            symbol: function_symbol.clone(),
-            kind: function_kind,
-            generics,
-            parameters: params,
-            return_type: return_type,
-            include_caller: decl.include_caller,
-            generic_restrictions,
-            is_public: force_public || decl.is_public,
-        };
         self.symbols
             .insert_func_metadata(function_symbol.clone(), function_metadata);
 
@@ -278,95 +301,6 @@ impl SymbolTableBuilder {
         self.context.current_symbol()
     }
 
-    fn insert_placeholder_generics(&mut self, owner: &Symbol, generics: &[Token]) -> Vec<String> {
-        let mut generic_names = Vec::new();
-        for generic in generics {
-            let generic_symbol = self.current_symbol().child_token(&generic);
-            let generic_type = TypeMetadata::generic(owner, generic.lexeme());
-            self.symbols
-                .insert_type_metadata(generic_symbol.clone(), generic_type);
-            generic_names.push(generic.lexeme().to_owned());
-        }
-        generic_names
-    }
-
-    fn insert_generics(
-        &mut self,
-        owner: &Symbol,
-        generics: &[Token],
-        restrictions: &[GenericRestriction],
-    ) -> (Vec<String>, Vec<(Symbol, Symbol)>) {
-        let mut generic_names = Vec::new();
-
-        for generic in generics {
-            let generic_symbol = self.current_symbol().child_token(&generic);
-            let mut generic_type = TypeMetadata::generic(owner, generic.lexeme());
-
-            for restriction in restrictions {
-                if restriction.generic.token.lexeme() == generic.lexeme() {
-                    restriction.generic.set_symbol(generic_symbol.clone());
-                    let trait_metadata = self.resolve_trait(&restriction.trait_name.token.lexeme());
-
-                    if let Some(trait_metadata) = trait_metadata {
-                        let trait_metadata = trait_metadata.clone();
-
-                        restriction
-                            .trait_name
-                            .set_symbol(trait_metadata.symbol.clone());
-
-                        // TODO: doesn't support meta requirements
-                        for requirement in &trait_metadata.function_requirements {
-                            let requirement = trait_metadata.symbol.child(&requirement);
-                            let mut req_metadata =
-                                if let Some(func) = self.symbols.get_func_metadata(&requirement) {
-                                    func
-                                } else {
-                                    self.lib.function_metadata(&requirement).unwrap()
-                                }
-                                .clone();
-
-                            let symbol = generic_symbol.child(requirement.name());
-                            req_metadata.symbol = symbol.clone();
-                            req_metadata.kind = FunctionKind::Method(generic_symbol.clone());
-                            self.symbols
-                                .insert_func_metadata(symbol.clone(), req_metadata);
-                            generic_type.methods.push(symbol.name().to_owned());
-                        }
-
-                        generic_type.add_trait_impl(trait_metadata.symbol.clone());
-                    } else {
-                        self.reporter.report(Diagnostic::error(
-                            &restriction.trait_name,
-                            "Unrecognized trait",
-                        ));
-                    }
-                }
-            }
-
-            self.symbols
-                .insert_type_metadata(generic_symbol.clone(), generic_type);
-
-            trace!(target: "symbol_table", "Inserting generic {} (symbol = {})", generic.lexeme(), generic_symbol);
-            generic_names.push(generic.lexeme().to_owned());
-        }
-
-        let mut restriction_symbols: Vec<(Symbol, Symbol)> = Vec::new();
-        for restriction in restrictions {
-            if let Some(generic_symbol) = restriction.generic.get_symbol() {
-                if let Some(trait_symbol) = restriction.trait_name.get_symbol() {
-                    restriction_symbols.push((generic_symbol, trait_symbol));
-                }
-            } else {
-                self.reporter.report(Diagnostic::error(
-                    &restriction.generic,
-                    "Unrecognized generic type",
-                ));
-            }
-        }
-
-        (generic_names, restriction_symbols)
-    }
-
     fn resolve_type(
         &self,
         explicit_type: &ExplicitType,
@@ -384,18 +318,6 @@ impl SymbolTableBuilder {
                     .report(Diagnostic::error(explicit_type, "Type not found"));
                 NodeType::Ambiguous
             }
-        }
-    }
-
-    fn resolve_trait(&self, trait_name: &str) -> Option<&TraitMetadata> {
-        let same_lib_symbol = Symbol::lib_root(&self.lib.name).child(trait_name);
-
-        if let Some(metadata) = self.symbols.get_trait_metadata(&same_lib_symbol) {
-            Some(metadata)
-        } else if let Some(trait_meta) = self.lib.trait_metadata(trait_name) {
-            Some(trait_meta)
-        } else {
-            None
         }
     }
 }

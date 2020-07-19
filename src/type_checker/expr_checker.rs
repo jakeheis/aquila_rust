@@ -34,33 +34,38 @@ impl ExprChecker {
             }
         };
 
-        let target_metadata = self.lib.type_metadata(target_symbol).unwrap();
-
-        let method_metadata = if is_meta {
-            let name = target_metadata.meta_method_named(method);
-            name.map(|n| target_symbol.meta_symbol().child(&n))
-        } else {
-            let name = target_metadata.method_named(method);
-            name.map(|n| target_symbol.child(&n))
-        };
-
-        // if method_metadata.is_none() {
-        //     let trait_impls = target_metadata.trait_impls.borrow();
-        //     for impl_trait in trait_impls.as_slice() {
-        //         let trait_metadata = self.lib.trait_metadata_symbol(impl_trait).unwrap();
-        //         let possible_sym = impl_trait.child(method);
-        //         if trait_metadata.function_requirements.contains(&possible_sym) {
-        //             return Ok((possible_sym, specialization.clone()));
-        //         }
-        //     }
-        // }
-
-        match method_metadata {
-            Some(method) => Ok((method, specialization.clone())),
-            None => {
-                let message = format!("Type '{}' does not have method '{}'", target, method);
-                Err(Diagnostic::error(span, &message))
+        if let Some(target_metadata) = self.lib.type_metadata(target_symbol) {
+            let method_metadata = if is_meta {
+                let name = target_metadata.meta_method_named(method);
+                name.map(|n| target_symbol.meta_symbol().child(&n))
+            } else {
+                let name = target_metadata.method_named(method);
+                name.map(|n| target_symbol.child(&n))
+            };
+    
+            match method_metadata {
+                Some(method) => Ok((method, specialization.clone())),
+                None => {
+                    let message = format!("Type '{}' does not have method '{}'", target, method);
+                    Err(Diagnostic::error(span, &message))
+                }
             }
+        } else {
+            for scope in self.context.scopes.iter().rev() {
+                if let Some(restrict) = scope.generic_restrictions.get(target_symbol) {
+                    for trait_name in restrict {
+                        let trait_metadata = self.lib.trait_metadata_symbol(trait_name).unwrap();
+                        if trait_metadata.function_requirements.iter().any(|m| m == method) {
+                            let sym = trait_metadata.symbol.child(method);
+                            return Ok((sym, specialization.clone()));
+                        }
+                    }
+                }
+
+            }
+            
+            let message = format!("Type '{}' does not have method '{}'", target, method);
+            Err(Diagnostic::error(span, &message))
         }
     }
 

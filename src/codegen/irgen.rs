@@ -441,6 +441,8 @@ impl ExprVisitor for IRGen {
         let mut arg_exprs: Vec<_> = call.arguments.iter().map(|a| a.accept(self)).collect();
 
         let function_symbol = call.name.get_symbol().unwrap();
+        let mut ir_symbol = function_symbol.clone();
+
         let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
 
         let specialization = call.get_specialization().unwrap();
@@ -448,10 +450,19 @@ impl ExprVisitor for IRGen {
         if let FunctionKind::Method(..) = function_metadata.kind {
             if let Some(target) = &call.target {
                 let target_expr = target.accept(self);
+
+                let possible_trait = function_symbol.owner_symbol().and_then(|o| self.lib.trait_metadata_symbol(&o));
+                if possible_trait.is_some() {
+                    if let NodeType::Instance(sym, _) = &target_expr.expr_type {
+                        ir_symbol = sym.child(function_symbol.name());
+                    }
+                }
+
                 let target_expr = match &target_expr.kind {
                     IRExprKind::Variable(v) if v == "self" => target_expr,
                     _ => self.writer.addres_of_expr(target_expr),
                 };
+
                 arg_exprs.insert(0, target_expr);
             } else {
                 arg_exprs.insert(
@@ -482,7 +493,7 @@ impl ExprVisitor for IRGen {
             )
         } else {
             IRExpr::call(
-                function_symbol,
+                ir_symbol,
                 specialization,
                 arg_exprs,
                 self.get_expr_type(expr),

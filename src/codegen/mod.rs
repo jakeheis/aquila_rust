@@ -11,13 +11,11 @@ pub use ir::{
 pub use irgen::IRGen;
 
 use crate::analysis::SpecializationPropagator;
-use crate::diagnostic::*;
 use crate::library::{Lib, Module};
 use std::fs::{self, File};
 use std::process::Command;
-use std::rc::Rc;
 
-pub fn generate(lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str> {
+pub fn generate(lib: Lib) -> Result<(), &'static str> {
     let ir_libs = compile(lib);
 
     let spec_map = SpecializationPropagator::propagate(&ir_libs);
@@ -42,8 +40,7 @@ pub fn generate(lib: Lib, reporter: Rc<dyn Reporter>) -> Result<(), &'static str
         .unwrap();
 
     if !status.success() {
-        reporter.report(Diagnostic::error(&Span::unknown(), "C build failed"));
-        Err("C build failed")
+        panic!("C build failed")
     } else {
         Ok(())
     }

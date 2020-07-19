@@ -21,6 +21,6 @@ pub fn run_with_reporter(
     link_stdlib: bool,
 ) -> Result<(), &'static str> {
     let lib = Lib::from_source(source, std::rc::Rc::clone(&reporter), link_stdlib)?;
-    codegen::generate(lib, reporter)?;
+    codegen::generate(lib)?;
     Ok(())
 }

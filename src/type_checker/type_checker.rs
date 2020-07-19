@@ -6,6 +6,7 @@ use crate::lexing::Token;
 use crate::library::*;
 use crate::parsing::*;
 use std::rc::Rc;
+use std::collections::HashMap;
 
 pub struct TypeChecker {
     reporter: Rc<dyn Reporter>,
@@ -128,8 +129,54 @@ impl TypeChecker {
 
     fn check_function_decl(&mut self, decl: &FunctionDecl) {
         let func_symbol = self.context.current_symbol().child_token(&decl.name.token);
+
         self.context
             .push_scope(func_symbol.clone(), ScopeType::InsideFunction);
+
+        // for restrict in &decl.generic_restrctions {
+        //     let trait_metadata = self.lib.trait_metadata(restrict.trait_name.token.lexeme());
+        //     if trait_metadata.is_none() {
+        //         self.reporter.report(Diagnostic::error(
+        //             &restrict.trait_name,
+        //             "Unrecognized trait",
+        //         ));
+        //         continue;
+        //     }
+        //     let trait_metadata = trait_metadata.unwrap();
+
+        //     let mut found = false;
+
+        //     for parent in self.context.scopes.iter().rev() {
+        //         let generics = match parent.scope_type {
+        //             ScopeType::InsideFunction => {
+        //                 let function = self.lib.function_metadata(&parent.id).unwrap();
+        //                 &function.generics
+        //             }
+        //             ScopeType::InsideType => {
+        //                 let ty = self.lib.type_metadata(&parent.id).unwrap();
+        //                 &ty.generics
+        //             }
+        //             ScopeType::InsideTrait | ScopeType::TopLevel | ScopeType::InsideMetatype => continue,
+        //         };
+    
+        //         if generics.iter().any(|g| g == restrict.generic.token.lexeme()) {
+        //             let sym = parent.id.child_token(&restrict.generic.token);
+                    // restrictions.entry(sym)
+                    //     .or_insert(Vec::new())
+                    //     .push(trait_metadata.symbol.clone());   
+        //             found = true;
+        //         }
+        //     }
+
+        //     if !found {
+        //         self.reporter.report(Diagnostic::error(
+        //             &restrict.generic,
+        //             "Unrecognized generic parameter",
+        //         ));
+        //     }
+        // }
+
+        // self.context.current_scope().generic_restrictions = restrictions;
 
         if decl.is_builtin {
             self.context.pop_scope();
@@ -137,6 +184,16 @@ impl TypeChecker {
         }
 
         let metadata = self.lib.function_metadata(&func_symbol).unwrap();
+
+        let mut restrictions: HashMap<Symbol, Vec<Symbol>> = HashMap::new();
+        for (gen, trait_name) in &metadata.generic_restrictions {
+            restrictions.entry(gen.clone())
+               .or_insert(Vec::new())
+               .push(trait_name.clone());   
+        }
+
+        self.context.current_scope().generic_restrictions = restrictions;
+
         let return_type = match &metadata.return_type {
             NodeType::Array(..) => {
                 self.report_error(Diagnostic::error(

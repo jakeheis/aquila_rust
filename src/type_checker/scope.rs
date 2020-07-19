@@ -7,7 +7,7 @@ use log::trace;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ScopeType {
     TopLevel,
     InsideType,
@@ -38,6 +38,7 @@ pub struct Scope {
     pub id: Symbol,
     definitions: HashMap<String, ScopeDefinition>,
     pub scope_type: ScopeType,
+    pub generic_restrictions: HashMap<Symbol, Vec<Symbol>>,
 }
 
 impl Scope {
@@ -46,6 +47,7 @@ impl Scope {
             id,
             definitions: HashMap::new(),
             scope_type,
+            generic_restrictions: HashMap::new()
         }
     }
 }
@@ -158,5 +160,28 @@ impl ContextTracker {
             }
             TypeResolutionResult::Error(diag) => Err(diag),
         }
+    }
+
+    pub fn resolve_generic(&self, name: &str) -> Option<Symbol> {
+        for scope in self.scopes.iter().rev() {
+            let generics = match scope.scope_type {
+                ScopeType::InsideFunction => {
+                    let function = self.lib.function_metadata(&scope.id);
+                    function.map(|f| f.generics.as_slice()).unwrap_or(&[])
+                }
+                ScopeType::InsideType => {
+                    let ty = self.lib.type_metadata(&scope.id).unwrap();
+                    &ty.generics
+                }
+                ScopeType::InsideTrait | ScopeType::TopLevel | ScopeType::InsideMetatype => continue,
+            };
+
+            println!("checking {} in {:?} for gen {}", scope.id, generics, name);
+
+            if generics.iter().any(|g| g == name) {
+                return Some(scope.id.child(name));
+            }
+        }
+        None
     }
 }

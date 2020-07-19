@@ -1,5 +1,5 @@
 use super::check;
-use super::scope::ContextTracker;
+use super::scope::{ContextTracker, ScopeType};
 use crate::diagnostic::*;
 use crate::lexing::Token;
 use crate::library::*;
@@ -16,6 +16,8 @@ pub struct TypeResolution<'a> {
     context: &'a ContextTracker,
     symbols: &'a SymbolTable,
     enclosing_function: Option<&'a Symbol>,
+    // local_generics: &'a [Symbol],
+    // parent_generics: &'a [Symbol],
 }
 
 impl<'a> TypeResolution<'a> {
@@ -23,11 +25,15 @@ impl<'a> TypeResolution<'a> {
         context: &'a ContextTracker,
         symbols: &'a SymbolTable,
         enclosing_function: Option<&'a Symbol>,
+        // local_generics: &'a [Symbol],
+        // parent_generics: &'a [Symbol],
     ) -> Self {
         TypeResolution {
             context,
             symbols,
             enclosing_function,
+            // local_generics,
+            // parent_generics
         }
     }
 
@@ -78,12 +84,36 @@ impl<'a> TypeResolution<'a> {
     ) -> TypeResolutionResult {
         trace!(target: "symbol_table", "Trying to find symbol for {} -- ({})", token.lexeme(), token.span.entire_line().0);
 
+        // if let Some(sym) = self.context.resolve_generic(token.lexeme()) {
+        //     trace!(target: "symbol_table", "Resolving {} as generic {}", token.lexeme(), sym);
+        //     return self.create_gen_instance(token, &sym, specialization);
+        // }
+
         for parent in self.context.scopes.iter().rev() {
-            let non_top_level_symbol = parent.id.child_token(token);
-            if let Some(type_metadata) = self.symbols.get_type_metadata(&non_top_level_symbol) {
-                trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), non_top_level_symbol);
-                return self.create_instance(token, type_metadata, specialization);
+            let generics = match parent.scope_type {
+                ScopeType::InsideFunction => {
+                    // Optional because main doesn't have metadata
+                    let function = self.symbols.get_func_metadata(&parent.id);
+                    function.map(|f| f.generics.as_slice()).unwrap_or(&[])
+                }
+                ScopeType::InsideType => {
+                    let ty = self.symbols.get_type_metadata(&parent.id).unwrap();
+                    &ty.generics
+                }
+                ScopeType::InsideTrait | ScopeType::TopLevel | ScopeType::InsideMetatype => continue,
+            };
+
+            if generics.iter().any(|g| g == token.lexeme()) {
+                let sym = parent.id.child_token(&token);
+                trace!(target: "symbol_table", "Resolving {} as generic {}", token.lexeme(), sym);
+                return self.create_gen_instance(token, &sym, specialization);
             }
+        }
+
+        let top_level = self.context.scopes[0].id.child(token.lexeme());
+        if let Some(ty) = self.symbols.get_type_metadata(&top_level) {
+            trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), top_level);
+            return self.create_instance(token, &ty, specialization);
         }
 
         let found_metadata = self.context.lib.type_metadata_named(token.lexeme());
@@ -93,6 +123,37 @@ impl<'a> TypeResolution<'a> {
         } else {
             TypeResolutionResult::NotFound
         }
+    }
+
+    fn create_gen_instance(&self,
+        token: &Token,
+        name: &Symbol,
+        specialization: Vec<NodeType>,
+    ) -> TypeResolutionResult {
+        if specialization.len() != 0 {
+            let message = format!(
+                "Expected 0 specializations, got {}",
+                specialization.len()
+            );
+            return TypeResolutionResult::Error(Diagnostic::error(token, &message));
+        }
+
+        let specialization = GenericSpecialization::empty();
+
+        // if let Some(enclosing_func) = self.enclosing_function {
+            // self.context
+            //     .lib
+            //     .specialization_tracker
+            //     .add_required_type_spec(
+            //         enclosing_func.clone(),
+            //         name.clone(),
+            //         specialization.clone(),
+            //     );
+        // }
+
+        let instance_type = NodeType::Instance(name.clone(), specialization);
+
+        TypeResolutionResult::Found(instance_type)
     }
 
     fn create_instance(

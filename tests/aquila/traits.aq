@@ -1,0 +1,29 @@
+trait Greets {
+    def greet();
+}
+
+type Person {
+    let nice: bool;
+}
+
+impl Person: Greets {
+    def greet() {
+        print("hello");
+    }
+}
+
+let person = Person(true);
+
+/// -> hello
+person.greet();
+
+def takes_greeter[T](greeter: T) where T: Greets {
+    greeter.greet();
+}
+
+/// -> hello
+takes_greeter[Person](person);
+
+/// error
+takes_greeter[int](4);
+/// end
