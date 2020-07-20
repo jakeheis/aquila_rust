@@ -36,10 +36,10 @@ impl Symbol {
         }
     }
 
-    pub fn main_symbol() -> Self {
-        Symbol::lib_root("main")
+    pub fn main_symbol(lib: &str) -> Self {
+        Symbol::lib_root(lib).child("main")
     }
-
+    
     pub fn stdlib(name: &str) -> Self {
         Symbol::lib_root("stdlib").child(name)
     }
@@ -86,6 +86,10 @@ impl Symbol {
 
     pub fn is_self(&self) -> bool {
         self.name() == "self"
+    }
+    
+    pub fn is_root(&self) -> bool {
+        self.id.contains("$")
     }
 
     pub fn directly_owns(&self, child: &Symbol) -> bool {

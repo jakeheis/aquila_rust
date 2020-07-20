@@ -39,7 +39,7 @@ impl TypeChecker {
 
         checker
             .context
-            .push_scope(Symbol::main_symbol(), ScopeType::InsideFunction);
+            .push_scope(Symbol::main_symbol(&lib.name), ScopeType::InsideFunction);
         checker.check_list(&lib.main);
         checker.context.pop_scope();
 
@@ -502,12 +502,18 @@ impl StmtVisitor for TypeChecker {
             .and_then(|e| self.check_expr(e))
             .unwrap_or(NodeType::Void);
 
-        let enclosing_metadata = self
-            .lib
-            .function_metadata(&self.context.enclosing_function());
-        let expected_return = enclosing_metadata
-            .map(|m| &m.return_type)
-            .unwrap_or(&NodeType::Void);
+        let current_scope = &self.context.current_scope_immut().scope_type;
+        let expected_return = if let ScopeType::InsideFunction = current_scope {
+            self
+                .lib
+                .function_metadata(&self.context.current_symbol())
+                .unwrap()
+                .return_type
+                .clone()
+        } else {
+            // TopLevel
+            NodeType::Void
+        };
 
         if let Some(expr) = expr.as_ref() {
             let _ = expr.set_type(expected_return.clone());

@@ -12,14 +12,14 @@ pub use ir::{
 pub use irgen::IRGen;
 pub use specialize::{SpecializationRecord, SpecializationPropagator};
 
-use crate::library::{Lib, Module};
+use crate::library::{Lib, Module, Symbol};
 use std::fs::{self, File};
 use std::process::Command;
 
 pub fn generate(lib: Lib) -> Result<(), &'static str> {
-    let ir_libs = compile(lib);
+    let (ir_libs, main_sym) = compile(lib);
 
-    let spec_map = SpecializationPropagator::propagate(&ir_libs);
+    let spec_map = SpecializationPropagator::propagate(&ir_libs, main_sym);
 
     fs::create_dir_all("build").unwrap();
     let file = File::create("build/main.c").unwrap();
@@ -47,6 +47,6 @@ pub fn generate(lib: Lib) -> Result<(), &'static str> {
     }
 }
 
-pub fn compile(lib: Lib) -> Vec<Module> {
+pub fn compile(lib: Lib) -> (Vec<Module>, Symbol) {
     IRGen::new(lib).generate()
 }

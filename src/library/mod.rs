@@ -109,7 +109,7 @@ impl Lib {
     }
 
     pub fn compile(self) -> Vec<Module> {
-        codegen::compile(self)
+        codegen::compile(self).0
     }
 
     fn deep_search<'a, F, U>(&'a self, search: &F) -> Option<&U>

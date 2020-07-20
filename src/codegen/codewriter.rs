@@ -254,7 +254,11 @@ impl CodeWriter {
             .map(|param| self.type_and_name(&param.var_type.specialize(spec), &param.name))
             .collect();
 
-        let function_name = function.name.add_spec_suffix(spec);
+        let function_name = if function.name.name() == "main" {
+            "main".to_owned()
+        } else { 
+            function.name.add_spec_suffix(spec)
+        };
         let param_str = param_str.join(",");
 
         self.writeln("");

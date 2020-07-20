@@ -99,14 +99,6 @@ impl ContextTracker {
         &self.scopes.last().unwrap().id
     }
 
-    pub fn enclosing_function(&self) -> Symbol {
-        if let ScopeType::InsideFunction = &self.current_scope_immut().scope_type {
-            self.current_symbol().clone()
-        } else {
-            Symbol::main_symbol()
-        }
-    }
-
     // Variables
 
     pub fn put_in_scope(&mut self, name: String, definition: ScopeDefinition) {

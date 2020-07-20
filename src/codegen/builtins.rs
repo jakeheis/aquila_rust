@@ -5,7 +5,7 @@ use crate::library::*;
 struct Builtin {
     write: Option<fn(&mut IRWriter, &Symbol) -> ()>,
     special_call:
-        Option<fn(&mut IRWriter, &Symbol, &Symbol, &GenericSpecialization, Vec<IRExpr>) -> IRExpr>,
+        Option<fn(&mut IRWriter, &Symbol, &GenericSpecialization, Vec<IRExpr>) -> IRExpr>,
 }
 
 impl Builtin {
@@ -71,14 +71,13 @@ pub fn can_write_special_call(symbol: &Symbol) -> bool {
 
 pub fn write_special_call(
     writer: &mut IRWriter,
-    caller: &Symbol,
     func_symbol: &Symbol,
     spec: &GenericSpecialization,
     args: Vec<IRExpr>,
 ) -> IRExpr {
     if let Some(builtin) = Builtin::named(&func_symbol) {
         if let Some(call) = &builtin.special_call {
-            return call(writer, caller, func_symbol, spec, args);
+            return call(writer, func_symbol, spec, args);
         }
     }
     panic!()
@@ -223,7 +222,6 @@ pub fn write_type_deinit(
 
 fn size_call(
     _writer: &mut IRWriter,
-    _caller: &Symbol,
     func_symbol: &Symbol,
     spec: &GenericSpecialization,
     _args: Vec<IRExpr>,
@@ -239,7 +237,6 @@ fn size_call(
 
 fn print_call(
     _writer: &mut IRWriter,
-    _caller: &Symbol,
     _func_symbol: &Symbol,
     _spec: &GenericSpecialization,
     mut args: Vec<IRExpr>,

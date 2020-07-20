@@ -13,7 +13,6 @@ pub struct IRGen {
     lib: Rc<Lib>,
     writer: IRWriter,
     current_type: Option<TypeMetadata>,
-    current_func: Option<Symbol>,
 }
 
 impl IRGen {
@@ -24,11 +23,10 @@ impl IRGen {
             lib,
             writer: IRWriter::new(lib_copy),
             current_type: None,
-            current_func: None,
         }
     }
 
-    pub fn generate(mut self) -> Vec<Module> {
+    pub fn generate(mut self) -> (Vec<Module>, Symbol) {
         let lib = Rc::clone(&self.lib);
 
         for t in &lib.type_decls {
@@ -40,7 +38,6 @@ impl IRGen {
         }
 
         if !lib.main.is_empty() {
-            self.current_func = Some(Symbol::main_symbol());
             self.writer.start_block();
             for s in &lib.main {
                 s.accept(&mut self);
@@ -60,11 +57,14 @@ impl IRGen {
         std::mem::drop(lib_copy);
 
         let lib = Rc::try_unwrap(self.lib).ok().unwrap();
+
         let (name, symbols, mut modules) = (
             lib.name,
             lib.symbols,
             lib.dependencies,
         );
+
+        let main_symbol = Symbol::main_symbol(&name);
 
         let mut new = Module {
             name,
@@ -80,11 +80,10 @@ impl IRGen {
             writer.write();
         }
 
-        let recorder = SpecializationRecorder::new();
-        new.specialization_record = recorder.record(&new);
+        SpecializationRecorder::record(&mut new);
 
         modules.push(new);
-        modules
+        (modules, main_symbol)
     }
 
     fn gen_stmts(&mut self, stmts: &[Stmt]) {
@@ -159,11 +158,9 @@ impl IRGen {
         if decl.is_builtin {
             builtins::write_special_function(&mut self.writer, &func_metadata)
         } else {
-            self.current_func = Some(func_symbol);
             self.writer.start_block();
             self.gen_stmts(&decl.body);
             self.writer.end_decl_func(&func_metadata);
-            self.current_func = None;
         }
     }
 
@@ -497,7 +494,6 @@ impl ExprVisitor for IRGen {
         } else if builtins::can_write_special_call(&function_symbol) {
             builtins::write_special_call(
                 &mut self.writer,
-                self.current_func.as_ref().unwrap(),
                 &function_symbol,
                 &specialization,
                 arg_exprs,

@@ -45,7 +45,7 @@ impl IRWriter {
 
     pub fn end_decl_main(&mut self) {
         let main = IRFunction {
-            name: Symbol::main_symbol(),
+            name: Symbol::main_symbol(&self.lib.name),
             parameters: Vec::new(),
             return_type: NodeType::Int,
             statements: self.blocks.pop().unwrap(),
