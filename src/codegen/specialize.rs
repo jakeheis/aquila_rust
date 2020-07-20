@@ -22,6 +22,9 @@ impl SpecializationRecord {
             println!("Calls for {}:", caller.unique_id());
             for record in records {
                 println!("  {} -- {}", record.target, record.specialization);
+                for cond in &record.conditions {
+                    println!("    #if {}: {}", cond.gen_sym.unique_id(), cond.trait_sym.unique_id());
+                }
             }
         }
 
@@ -241,6 +244,11 @@ impl<'a> SpecializationPropagator<'a> {
         if let Some(calls) = lib.specialization_record.call_map.get(cur) {
             let calls = calls.clone();
             for call in calls {
+                if !self.should_propagate(&current_spec, &call.conditions) {
+                    trace!("Skipping {} -- {}", call.target, current_spec);
+                    continue;
+                }
+
                 if let Some(owner) = call.target.owner_symbol() {
                     if let Some(NodeType::Instance(sym, spec)) = current_spec.type_for(&owner) {
                         let func_symbol = sym.child(call.target.name());
@@ -290,6 +298,21 @@ impl<'a> SpecializationPropagator<'a> {
         }
 
         trace!("Finished function {}", cur);
+    }
+
+    fn should_propagate(&self, current_spec: &GenericSpecialization, conditions: &[PropagateCondition]) -> bool {
+        for condition in conditions {
+            let resolved_type = current_spec.type_for(&condition.gen_sym).unwrap();
+            if let NodeType::Instance(type_sym, ..) = resolved_type {
+                let metadata = self.type_metadata(&type_sym).unwrap();
+                if !metadata.conforms_to(&condition.trait_sym) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        true
     }
 
     fn type_metadata(&self, symbol: &Symbol) -> Option<&TypeMetadata> {
