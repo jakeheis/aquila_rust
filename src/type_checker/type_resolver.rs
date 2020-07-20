@@ -15,19 +15,16 @@ pub enum TypeResolutionResult {
 pub struct TypeResolution<'a> {
     context: &'a ContextTracker,
     symbols: &'a SymbolTable,
-    enclosing_function: Option<&'a Symbol>,
 }
 
 impl<'a> TypeResolution<'a> {
     pub fn new(
         context: &'a ContextTracker,
         symbols: &'a SymbolTable,
-        enclosing_function: Option<&'a Symbol>,
     ) -> Self {
         TypeResolution {
             context,
             symbols,
-            enclosing_function,
         }
     }
 
@@ -153,17 +150,6 @@ impl<'a> TypeResolution<'a> {
             &type_metadata.generics,
             specialization,
         );
-
-        if let Some(enclosing_func) = self.enclosing_function {
-            self.context
-                .lib
-                .specialization_tracker
-                .add_required_type_spec(
-                    enclosing_func.clone(),
-                    type_metadata.symbol.clone(),
-                    specialization.clone(),
-                );
-        }
 
         let instance_type = NodeType::Instance(type_metadata.symbol.clone(), specialization);
 

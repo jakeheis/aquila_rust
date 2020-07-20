@@ -116,22 +116,13 @@ impl ExprChecker {
         &self,
         arg: &Expr,
         arg_type: &NodeType,
-        context_spec: &GenericSpecialization,
     ) -> DiagnosticResult<()> {
         match arg_type {
             NodeType::Int | NodeType::Double | NodeType::Bool => (),
             arg_type if arg_type.is_pointer_to(NodeType::Byte) => (),
-            NodeType::Instance(sym, spec) => {
+            NodeType::Instance(sym, ..) => {
                 let metadata = self.lib.type_metadata(&sym).unwrap();
-                if metadata.conforms_to(&Symbol::writable_symbol()) {
-                    let write_sym = sym.write_symbol();
-                    let enclosing_func = self.context.enclosing_function();
-                    self.lib.specialization_tracker.add_call(
-                        enclosing_func,
-                        write_sym,
-                        spec.resolve_generics_using(context_spec),
-                    );
-                } else {
+                if !metadata.conforms_to(&Symbol::writable_symbol()) {
                     let message = format!("Can't print object of type {}", sym.mangled());
                     return Err(Diagnostic::error(arg, &message));
                 }
@@ -347,15 +338,7 @@ impl ExprVisitor for ExprChecker {
         call.set_specialization(full_call_specialization.clone());
 
         if metadata.symbol == Symbol::stdlib("print") {
-            self.visit_print(&call.arguments[0], &arg_types[0], &full_call_specialization)?;
-        } else {
-            let enclosing_func = self.context.enclosing_function();
-            trace!(target: "type_checker", "Adding call from {} to {} with {}", enclosing_func, metadata.symbol, full_call_specialization);
-            self.lib.specialization_tracker.add_call(
-                enclosing_func,
-                metadata.symbol.clone(),
-                full_call_specialization.clone(),
-            );
+            self.visit_print(&call.arguments[0], &arg_types[0])?;
         }
 
         let function_type = metadata.full_type().specialize(&full_call_specialization);

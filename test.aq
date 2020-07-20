@@ -1,18 +1,3 @@
-// def add[T](lhs: T, rhs: T): T {
-//     return rhs;
-// }
-
-// let num = add[int](3, 4);
-
-// let str = add[ptr byte]("hi", "byte");
-
-// pub def print_object[T](obj: T) where T: Writable {
-//     obj.write();
-// }
-
-let vector = Vec[int].new();
-print(vector);
-
 def try_print[T](obj: T) {
     #if(T: Writable) {
         print_object[T](obj);
@@ -24,6 +9,7 @@ let str = String.literal("hello");
 
 try_print[int](4);
 try_print[String](str);
+
 
 // print_object[Vec[int]](vector);
 

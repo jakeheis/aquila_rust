@@ -139,8 +139,7 @@ impl ContextTracker {
             return Some(ScopeDefinition::Function(metadata.symbol.clone()));
         }
 
-        let enclosing_func = self.enclosing_function();
-        let resolver = TypeResolution::new(self, &self.lib.symbols, Some(&enclosing_func));
+        let resolver = TypeResolution::new(self, &self.lib.symbols);
         match resolver.resolve_simple(token) {
             TypeResolutionResult::Found(resolved_type) => {
                 Some(ScopeDefinition::ExplicitType(Ok(resolved_type)))
@@ -151,8 +150,7 @@ impl ContextTracker {
     }
 
     pub fn resolve_type(&self, explicit_type: &ExplicitType) -> DiagnosticResult<NodeType> {
-        let enclosing_func = self.enclosing_function();
-        let resolver = TypeResolution::new(self, &self.lib.symbols, Some(&enclosing_func));
+        let resolver = TypeResolution::new(self, &self.lib.symbols);
         match resolver.resolve(explicit_type) {
             TypeResolutionResult::Found(resolved_type) => Ok(resolved_type),
             TypeResolutionResult::NotFound => {

@@ -171,7 +171,6 @@ pub fn write_type_init(writer: &mut IRWriter, type_metadata: &TypeMetadata) {
 pub fn write_type_deinit(
     writer: &mut IRWriter,
     type_metadata: &TypeMetadata,
-    tracker: &SpecializationTracker,
 ) {
     let deinit_symbol = Symbol::deinit_symbol(&type_metadata.symbol);
     let deinit_metadata = writer
@@ -192,12 +191,6 @@ pub fn write_type_deinit(
             NodeType::Void,
         );
         writer.expr(free);
-
-        tracker.add_call(
-            deinit_symbol.clone(),
-            free_sym,
-            type_metadata.dummy_specialization(),
-        );
     }
 
     let self_var = IRVariable::new("self", type_metadata.unspecialized_type());
@@ -220,8 +213,6 @@ pub fn write_type_deinit(
                 NodeType::Void,
             );
             writer.expr(deinit);
-
-            tracker.add_call(deinit_symbol.clone(), deinit_sym, spec.clone());
         }
     }
 
@@ -247,8 +238,8 @@ fn size_call(
 }
 
 fn print_call(
-    writer: &mut IRWriter,
-    caller: &Symbol,
+    _writer: &mut IRWriter,
+    _caller: &Symbol,
     _func_symbol: &Symbol,
     _spec: &GenericSpecialization,
     mut args: Vec<IRExpr>,
@@ -258,11 +249,6 @@ fn print_call(
         let print_object = Symbol::stdlib("print_object");
         let spec =
             GenericSpecialization::new(&print_object, &["T".to_owned()], vec![node_type.clone()]);
-        writer.lib.specialization_tracker.add_call(
-            caller.clone(),
-            print_object.clone(),
-            spec.clone(),
-        );
         IRExpr::call(print_object, spec.clone(), args, NodeType::Void)
     } else {
         let format_specificer = match node_type {

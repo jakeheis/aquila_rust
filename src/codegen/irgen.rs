@@ -1,6 +1,7 @@
 use super::builtins;
 use super::ir::*;
 use super::irwriter::IRWriter;
+use super::specialize::{SpecializationRecorder, SpecializationRecord};
 use super::memory;
 use crate::lexing::*;
 use crate::library::*;
@@ -59,10 +60,9 @@ impl IRGen {
         std::mem::drop(lib_copy);
 
         let lib = Rc::try_unwrap(self.lib).ok().unwrap();
-        let (name, symbols, tracker, mut modules) = (
+        let (name, symbols, mut modules) = (
             lib.name,
             lib.symbols,
-            lib.specialization_tracker,
             lib.dependencies,
         );
 
@@ -71,13 +71,18 @@ impl IRGen {
             structures,
             functions,
             symbols: Rc::new(symbols),
-            specialization_tracker: tracker,
+            specialization_record: SpecializationRecord::new(),
         };
+
         let tables: Vec<_> = modules.iter().map(|m| Rc::clone(&m.symbols)).collect();
         for func in &mut new.functions {
-            let mut writer = memory::FreeWriter::new(&tables, func, &new.specialization_tracker);
+            let mut writer = memory::FreeWriter::new(&tables, func);
             writer.write();
         }
+
+        let recorder = SpecializationRecorder::new();
+        new.specialization_record = recorder.record(&new);
+
         modules.push(new);
         modules
     }
@@ -126,7 +131,6 @@ impl IRGen {
         builtins::write_type_deinit(
             &mut self.writer,
             &type_metadata,
-            &self.lib.specialization_tracker,
         );
 
         trace!("Writing methods for {}", type_symbol);

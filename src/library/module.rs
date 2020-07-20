@@ -1,4 +1,4 @@
-use super::{SpecializationTracker, SymbolTable};
+use super::SymbolTable;
 use crate::codegen::*;
 use std::rc::Rc;
 
@@ -8,20 +8,10 @@ pub struct Module {
     pub structures: Vec<IRStructure>,
     pub functions: Vec<IRFunction>,
     pub symbols: Rc<SymbolTable>,
-    pub specialization_tracker: SpecializationTracker,
+    pub specialization_record: SpecializationRecord,
 }
 
 impl Module {
-    pub fn new() -> Self {
-        Module {
-            name: String::new(),
-            structures: Vec::new(),
-            functions: Vec::new(),
-            symbols: Rc::new(SymbolTable::new()),
-            specialization_tracker: SpecializationTracker::new(),
-        }
-    }
-
     pub fn dump(&self) {
         println!("Structures:");
         for structure in &self.structures {

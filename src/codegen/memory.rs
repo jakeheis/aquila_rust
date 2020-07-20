@@ -6,7 +6,6 @@ pub struct FreeWriter<'a> {
     tables: &'a [Rc<SymbolTable>],
     function_sym: &'a Symbol,
     lines: &'a mut Vec<IRStatement>,
-    tracker: &'a SpecializationTracker,
     free_at_return: Vec<IRVariable>,
     free_at_break: Vec<IRVariable>,
     inside_loop: bool,
@@ -16,13 +15,11 @@ impl<'a> FreeWriter<'a> {
     pub fn new(
         tables: &'a [Rc<SymbolTable>],
         function: &'a mut IRFunction,
-        tracker: &'a SpecializationTracker,
     ) -> Self {
         FreeWriter {
             tables,
             function_sym: &function.name,
             lines: &mut function.statements,
-            tracker,
             free_at_return: Vec::new(),
             free_at_break: Vec::new(),
             inside_loop: false,
@@ -82,7 +79,6 @@ impl<'a> FreeWriter<'a> {
                         tables: self.tables,
                         function_sym: self.function_sym,
                         lines: body,
-                        tracker: self.tracker,
                         free_at_return: free_at_return.clone(),
                         free_at_break: free_at_break.clone(),
                         inside_loop: self.inside_loop,
@@ -103,7 +99,6 @@ impl<'a> FreeWriter<'a> {
                         tables: self.tables,
                         function_sym: self.function_sym,
                         lines: if_body,
-                        tracker: self.tracker,
                         free_at_return: free_at_return.clone(),
                         free_at_break: free_at_break.clone(),
                         inside_loop: self.inside_loop,
@@ -114,7 +109,6 @@ impl<'a> FreeWriter<'a> {
                         tables: self.tables,
                         function_sym: self.function_sym,
                         lines: else_body,
-                        tracker: self.tracker,
                         free_at_return: free_at_return,
                         free_at_break: free_at_break,
                         inside_loop: self.inside_loop,
@@ -130,7 +124,6 @@ impl<'a> FreeWriter<'a> {
                         tables: self.tables,
                         function_sym: self.function_sym,
                         lines: body,
-                        tracker: self.tracker,
                         free_at_return: free_at_return,
                         free_at_break: Vec::new(),
                         inside_loop: true,
@@ -172,9 +165,6 @@ impl<'a> FreeWriter<'a> {
                 );
                 let stmt = IRStatement::Execute(deinit);
                 self.lines.insert(return_index, stmt);
-
-                self.tracker
-                    .add_call(self.function_sym.clone(), deinit_sym, spec.clone());
             }
         }
     }

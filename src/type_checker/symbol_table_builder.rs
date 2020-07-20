@@ -93,7 +93,7 @@ impl SymbolTableBuilder {
         for field in &decl.fields {
             type_metadata.fields.push(VarMetadata {
                 name: field.name.lexeme().to_owned(),
-                var_type: self.resolve_type(&field.explicit_type, None),
+                var_type: self.resolve_type(&field.explicit_type),
                 public: field.is_public,
             });
 
@@ -181,7 +181,7 @@ impl SymbolTableBuilder {
             .push_scope(function_symbol.clone(), ScopeType::InsideFunction);
 
         for param in &decl.parameters {
-            let node_type = self.resolve_type(&param.explicit_type, Some(&function_symbol));
+            let node_type = self.resolve_type(&param.explicit_type);
             function_metadata.parameters.push(VarMetadata {
                 name: param.name.lexeme().to_owned(),
                 var_type: node_type,
@@ -192,7 +192,7 @@ impl SymbolTableBuilder {
         function_metadata.return_type = decl
             .return_type
             .as_ref()
-            .map(|r| self.resolve_type(r, Some(&function_symbol)))
+            .map(|r| self.resolve_type(r))
             .unwrap_or(NodeType::Void);
 
         for restriction in &decl.generic_restrctions {
@@ -304,9 +304,8 @@ impl SymbolTableBuilder {
     fn resolve_type(
         &self,
         explicit_type: &ExplicitType,
-        enclosing_func: Option<&Symbol>,
     ) -> NodeType {
-        let resolver = TypeResolution::new(&self.context, &self.symbols, enclosing_func);
+        let resolver = TypeResolution::new(&self.context, &self.symbols);
         match resolver.resolve(explicit_type) {
             TypeResolutionResult::Found(resolved_type) => resolved_type,
             TypeResolutionResult::Error(diag) => {

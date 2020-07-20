@@ -4,13 +4,14 @@ mod ir;
 mod irgen;
 mod irwriter;
 mod memory;
+mod specialize;
 
 pub use ir::{
     IRBinaryOperator, IRExpr, IRExprKind, IRFunction, IRStatement, IRStructure, IRUnaryOperator,
 };
 pub use irgen::IRGen;
+pub use specialize::{SpecializationRecord, SpecializationPropagator};
 
-use crate::analysis::SpecializationPropagator;
 use crate::library::{Lib, Module};
 use std::fs::{self, File};
 use std::process::Command;

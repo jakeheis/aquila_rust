@@ -1,5 +1,5 @@
 use super::ir::*;
-use crate::analysis::FinalSpecializationMap;
+use super::specialize::FinalSpecializationMap;
 use crate::library::{GenericSpecialization, Module, NodeType};
 use std::cell::{Cell, RefCell};
 use std::fs::File;
