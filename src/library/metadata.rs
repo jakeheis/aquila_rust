@@ -39,7 +39,7 @@ impl TypeMetadata {
             fields: Vec::new(),
             methods: Vec::new(),
             meta_methods: Vec::new(),
-            trait_impls: RefCell::new(Vec::new()),
+            trait_impls: RefCell::new(vec![Symbol::any_object_symbol()]),
             is_public: is_public,
         }
     }

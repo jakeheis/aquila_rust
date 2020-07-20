@@ -152,7 +152,7 @@ pub type Vec[T] {
         return Vec[T](cast[ptr T](&0), 0, 0);
     }
 
-    pub def insert(object: T) {
+    pub def push(object: T) {
         if count == capacity {
             if capacity == 0 {
                 capacity = 10;
@@ -188,7 +188,7 @@ pub type Vec[T] {
             fatal_error_location("index out of bounds", caller);
         }
         if index == count {
-            insert(object);
+            push(object);
         } else {
             copy_in(index, &object);
         }
@@ -219,10 +219,12 @@ impl Vec: Iterable {}
 
 impl Vec: Freeable {
     def free() {
-        #if(T: Freeable) {
-            // for object in self {
-            //     object.deinit();
-            // }
+        #if(T: AnyObject) {
+            let range = Range.length(0, count);
+            for index in range {
+                let object = Memory.offset[T](storage, index);
+                (*object).deinit();
+            }
         }
         if capacity > 0 {
             Memory.drop[T](storage);
@@ -317,3 +319,7 @@ trait Iterable {}
 //     type T; 
 //     def at_index(): ptr T;
 // }
+
+trait AnyObject {
+    def deinit();
+}

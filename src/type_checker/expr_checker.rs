@@ -407,12 +407,14 @@ impl ExprVisitor for ExprChecker {
     fn visit_variable_expr(&mut self, expr: &Expr, name: &SpecializedToken) -> Self::ExprResult {
         if let TokenKind::SelfKeyword = name.token.kind {
             if let ScopeType::InsideFunction = self.context.current_scope().scope_type {
-                let parent_scope = &self.context.scopes[self.context.scopes.len() - 2];
-                if let ScopeType::InsideType = parent_scope.scope_type {
-                    let metadata = self.lib.type_metadata(&parent_scope.id).unwrap();
-                    name.set_symbol(Symbol::self_symbol(&parent_scope.id));
-                    return expr.set_type(metadata.unspecialized_type());
+                for parent_scope in self.context.scopes.iter().rev() {
+                    if let ScopeType::InsideType = parent_scope.scope_type {
+                        let metadata = self.lib.type_metadata(&parent_scope.id).unwrap();
+                        name.set_symbol(Symbol::self_symbol(&parent_scope.id));
+                        return expr.set_type(metadata.unspecialized_type());
+                    }
                 }
+                
             }
             return Err(Diagnostic::error(expr, "'self' illegal here"));
         }

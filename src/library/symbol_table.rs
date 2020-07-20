@@ -52,6 +52,10 @@ impl Symbol {
         Symbol::stdlib("Iterable")
     }
 
+    pub fn any_object_symbol() -> Self {
+        Symbol::stdlib("AnyObject")
+    }
+
     pub fn meta_symbol(&self) -> Self {
         self.child("Meta")
     }

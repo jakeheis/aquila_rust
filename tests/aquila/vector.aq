@@ -1,7 +1,7 @@
 let my_vec: Vec[int] = Vec[int].new();
-my_vec.insert(8);
-my_vec.insert(4);
-my_vec.insert(7);
+my_vec.push(8);
+my_vec.push(4);
+my_vec.push(7);
 
 /// -> 8
 print(*my_vec.get(1) * 2);
@@ -23,11 +23,11 @@ print(my_vec.pop());
 print(my_vec.pop());
 
 let vec_of_vecs: Vec[Vec[bool]] = Vec[Vec[bool]].new();
-vec_of_vecs.insert(Vec[bool].new());
-vec_of_vecs.insert(Vec[bool].new());
+vec_of_vecs.push(Vec[bool].new());
+vec_of_vecs.push(Vec[bool].new());
 
-(*vec_of_vecs.get(1)).insert(false);
-(*vec_of_vecs.get(1)).insert(true);
+(*vec_of_vecs.get(1)).push(false);
+(*vec_of_vecs.get(1)).push(true);
 
 /// -> 1
 print(*(*vec_of_vecs.get(1)).get(1));
