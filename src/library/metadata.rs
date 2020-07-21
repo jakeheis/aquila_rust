@@ -1,4 +1,4 @@
-use super::{FunctionType, Lib, NodeType, Symbol};
+use super::{FunctionType, NodeType, Symbol};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
@@ -244,32 +244,32 @@ impl GenericSpecialization {
         }
     }
 
-    pub fn infer(
-        lib: &Lib,
-        metadata: &FunctionMetadata,
-        arg_types: &[NodeType],
-    ) -> Result<Self, Symbol> {
-        let mut spec_map: HashMap<Symbol, NodeType> = HashMap::new();
-        for gen in &metadata.generics {
-            let sym = metadata.symbol.child(&gen);
-            spec_map.insert(sym, NodeType::Ambiguous);
-        }
+    // pub fn infer(
+    //     lib: &Lib,
+    //     metadata: &FunctionMetadata,
+    //     arg_types: &[NodeType],
+    // ) -> Result<Self, Symbol> {
+    //     let mut spec_map: HashMap<Symbol, NodeType> = HashMap::new();
+    //     for gen in &metadata.generics {
+    //         let sym = metadata.symbol.child(&gen);
+    //         spec_map.insert(sym, NodeType::Ambiguous);
+    //     }
 
-        for (param, arg_type) in metadata.parameters.iter().zip(arg_types).rev() {
-            if let Some((symbol, specialized_type)) =
-                NodeType::infer_generic_type(lib, &param.var_type, arg_type)
-            {
-                spec_map.insert(symbol, specialized_type);
-            }
-        }
-        for (symbol, spec) in spec_map.iter() {
-            if spec.contains_ambiguity() {
-                return Err(symbol.clone());
-            }
-        }
+    //     for (param, arg_type) in metadata.parameters.iter().zip(arg_types).rev() {
+    //         if let Some((symbol, specialized_type)) =
+    //             NodeType::infer_generic_type(lib, &param.var_type, arg_type)
+    //         {
+    //             spec_map.insert(symbol, specialized_type);
+    //         }
+    //     }
+    //     for (symbol, spec) in spec_map.iter() {
+    //         if spec.contains_ambiguity() {
+    //             return Err(symbol.clone());
+    //         }
+    //     }
 
-        Ok(GenericSpecialization { map: spec_map })
-    }
+    //     Ok(GenericSpecialization { map: spec_map })
+    // }
 
     pub fn resolve_generics_using(
         &self,

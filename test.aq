@@ -5,6 +5,12 @@
 
 let obj = String.literal("hello");
 
+let maybe_str = Optional[String].some(obj);
+print(maybe_str);
+
+let maybe_int = Optional[int].some(5);
+print(maybe_int);
+
 // let
 
 // print_object[String](obj);

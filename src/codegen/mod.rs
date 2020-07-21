@@ -12,18 +12,16 @@ pub use ir::{
 pub use irgen::IRGen;
 pub use specialize::{SpecializationRecord, SpecializationPropagator};
 
-use crate::library::{Lib, Module, Symbol};
+use crate::library::{Module, Symbol};
 use std::fs::{self, File};
 use std::process::Command;
 
-pub fn generate(lib: Lib) -> Result<(), &'static str> {
-    let (ir_libs, main_sym) = compile(lib);
-
-    let spec_map = SpecializationPropagator::propagate(&ir_libs, main_sym);
+pub fn generate(modules: Vec<Module>, main_sym: Symbol) -> Result<(), &'static str> {
+    let spec_map = SpecializationPropagator::propagate(&modules, main_sym);
 
     fs::create_dir_all("build").unwrap();
     let file = File::create("build/main.c").unwrap();
-    let code_writer = codewriter::CodeWriter::new(ir_libs, file, spec_map);
+    let code_writer = codewriter::CodeWriter::new(modules, file, spec_map);
     code_writer.write();
 
     let status = Command::new("/usr/local/opt/llvm/bin/clang")
@@ -45,8 +43,4 @@ pub fn generate(lib: Lib) -> Result<(), &'static str> {
     } else {
         Ok(())
     }
-}
-
-pub fn compile(lib: Lib) -> (Vec<Module>, Symbol) {
-    IRGen::new(lib).generate()
 }

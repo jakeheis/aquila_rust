@@ -68,11 +68,8 @@ impl TypeChecker {
     }
 
     fn check_expr(&mut self, expr: &Expr) -> Option<NodeType> {
-        let context =
-            std::mem::replace(&mut self.context, ContextTracker::new(Rc::clone(&self.lib)));
-        let mut expr_checker = ExprChecker::new(Rc::clone(&self.lib), context);
+        let mut expr_checker = ExprChecker::new(Rc::clone(&self.lib), &self.context);
         let result = expr.accept(&mut expr_checker);
-        std::mem::swap(&mut self.context, &mut expr_checker.context);
         match result {
             Ok(t) => Some(t),
             Err(diag) => {
@@ -127,60 +124,14 @@ impl TypeChecker {
     }
 
     fn check_function_decl(&mut self, decl: &FunctionDecl) {
+        if decl.is_builtin {
+            return;
+        }
+
         let func_symbol = self.context.current_symbol().child_token(&decl.name.token);
 
         self.context
             .push_scope(func_symbol.clone(), ScopeType::InsideFunction);
-
-        // for restrict in &decl.generic_restrctions {
-        //     let trait_metadata = self.lib.trait_metadata(restrict.trait_name.token.lexeme());
-        //     if trait_metadata.is_none() {
-        //         self.reporter.report(Diagnostic::error(
-        //             &restrict.trait_name,
-        //             "Unrecognized trait",
-        //         ));
-        //         continue;
-        //     }
-        //     let trait_metadata = trait_metadata.unwrap();
-
-        //     let mut found = false;
-
-        //     for parent in self.context.scopes.iter().rev() {
-        //         let generics = match parent.scope_type {
-        //             ScopeType::InsideFunction => {
-        //                 let function = self.lib.function_metadata(&parent.id).unwrap();
-        //                 &function.generics
-        //             }
-        //             ScopeType::InsideType => {
-        //                 let ty = self.lib.type_metadata(&parent.id).unwrap();
-        //                 &ty.generics
-        //             }
-        //             ScopeType::InsideTrait | ScopeType::TopLevel | ScopeType::InsideMetatype => continue,
-        //         };
-    
-        //         if generics.iter().any(|g| g == restrict.generic.token.lexeme()) {
-        //             let sym = parent.id.child_token(&restrict.generic.token);
-                    // restrictions.entry(sym)
-                    //     .or_insert(Vec::new())
-                    //     .push(trait_metadata.symbol.clone());   
-        //             found = true;
-        //         }
-        //     }
-
-        //     if !found {
-        //         self.reporter.report(Diagnostic::error(
-        //             &restrict.generic,
-        //             "Unrecognized generic parameter",
-        //         ));
-        //     }
-        // }
-
-        // self.context.current_scope().generic_restrictions = restrictions;
-
-        if decl.is_builtin {
-            self.context.pop_scope();
-            return;
-        }
 
         let metadata = self.lib.function_metadata(&func_symbol).unwrap();
 

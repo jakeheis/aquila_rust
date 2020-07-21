@@ -1,9 +1,7 @@
 use super::ir::*;
 use crate::library::*;
-use std::rc::Rc;
 
 pub struct FreeWriter<'a> {
-    tables: &'a [Rc<SymbolTable>],
     function_sym: &'a Symbol,
     lines: &'a mut Vec<IRStatement>,
     free_at_return: Vec<IRVariable>,
@@ -13,11 +11,9 @@ pub struct FreeWriter<'a> {
 
 impl<'a> FreeWriter<'a> {
     pub fn new(
-        tables: &'a [Rc<SymbolTable>],
         function: &'a mut IRFunction,
     ) -> Self {
         FreeWriter {
-            tables,
             function_sym: &function.name,
             lines: &mut function.statements,
             free_at_return: Vec::new(),
@@ -76,7 +72,6 @@ impl<'a> FreeWriter<'a> {
                     }
 
                     let mut if_writer = FreeWriter {
-                        tables: self.tables,
                         function_sym: self.function_sym,
                         lines: body,
                         free_at_return: free_at_return.clone(),
@@ -96,7 +91,6 @@ impl<'a> FreeWriter<'a> {
                     }
 
                     let mut if_writer = FreeWriter {
-                        tables: self.tables,
                         function_sym: self.function_sym,
                         lines: if_body,
                         free_at_return: free_at_return.clone(),
@@ -106,7 +100,6 @@ impl<'a> FreeWriter<'a> {
                     if_writer.write();
 
                     let mut else_writer = FreeWriter {
-                        tables: self.tables,
                         function_sym: self.function_sym,
                         lines: else_body,
                         free_at_return: free_at_return,
@@ -121,7 +114,6 @@ impl<'a> FreeWriter<'a> {
                     free_at_return.append(&mut locals.clone());
 
                     let mut loop_writer = FreeWriter {
-                        tables: self.tables,
                         function_sym: self.function_sym,
                         lines: body,
                         free_at_return: free_at_return,
@@ -168,13 +160,4 @@ impl<'a> FreeWriter<'a> {
             }
         }
     }
-
-    // fn get_type_metadata(&self, symbol: &Symbol) -> &TypeMetadata {
-    //     for table in self.tables {
-    //         if let Some(metadata) = table.get_type_metadata(symbol) {
-    //             return metadata;
-    //         }
-    //     }
-    //     panic!()
-    // }
 }

@@ -271,6 +271,11 @@ impl Optional: Writable {
     def write(builder: ptr StringBuilder) {
         if _is_some {
             (*builder).add_literal("Some");
+            #if(T: Writable) {
+                (*builder).add_literal("(");
+                (*object).write(builder);
+                (*builder).add_literal(")");
+            }
         } else {
             (*builder).add_literal("None");
         }

@@ -14,17 +14,17 @@ pub enum TypeResolutionResult {
 
 pub struct TypeResolution<'a> {
     context: &'a ContextTracker,
-    symbols: &'a SymbolTable,
+    current_lib_symbols: &'a SymbolTable,
 }
 
 impl<'a> TypeResolution<'a> {
     pub fn new(
         context: &'a ContextTracker,
-        symbols: &'a SymbolTable,
+        current_lib_symbols: &'a SymbolTable,
     ) -> Self {
         TypeResolution {
             context,
-            symbols,
+            current_lib_symbols,
         }
     }
 
@@ -75,13 +75,13 @@ impl<'a> TypeResolution<'a> {
     ) -> TypeResolutionResult {
         trace!(target: "symbol_table", "Trying to find symbol for {} -- ({})", token.lexeme(), token.span.entire_line().0);
 
-        if let Some(sym) = self.context.resolve_generic(token.lexeme(), self.symbols) {
+        if let Some(sym) = self.context.resolve_generic(token.lexeme(), self.current_lib_symbols) {
             trace!(target: "symbol_table", "Resolving {} as generic {}", token.lexeme(), sym);
             return self.create_gen_instance(token, &sym, specialization);
         }
 
         let top_level = self.context.scopes[0].id.child(token.lexeme());
-        if let Some(ty) = self.symbols.get_type_metadata(&top_level) {
+        if let Some(ty) = self.current_lib_symbols.get_type_metadata(&top_level) {
             trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), top_level);
             return self.create_instance(token, &ty, specialization);
         }
@@ -108,20 +108,7 @@ impl<'a> TypeResolution<'a> {
             return TypeResolutionResult::Error(Diagnostic::error(token, &message));
         }
 
-        let specialization = GenericSpecialization::empty();
-
-        // if let Some(enclosing_func) = self.enclosing_function {
-            // self.context
-            //     .lib
-            //     .specialization_tracker
-            //     .add_required_type_spec(
-            //         enclosing_func.clone(),
-            //         name.clone(),
-            //         specialization.clone(),
-            //     );
-        // }
-
-        let instance_type = NodeType::Instance(name.clone(), specialization);
+        let instance_type = NodeType::Instance(name.clone(), GenericSpecialization::empty());
 
         TypeResolutionResult::Found(instance_type)
     }
@@ -141,7 +128,7 @@ impl<'a> TypeResolution<'a> {
             return TypeResolutionResult::Error(Diagnostic::error(token, &message));
         }
 
-        if check::type_accessible(self.context.lib.as_ref(), type_metadata) == false {
+        if check::type_accessible(type_metadata, &self.current_lib_symbols.lib) == false {
             return TypeResolutionResult::Error(Diagnostic::error(token, "Type is private"));
         }
 

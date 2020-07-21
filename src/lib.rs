@@ -8,7 +8,7 @@ pub mod source;
 pub mod type_checker;
 
 use diagnostic::{DefaultReporter, Reporter};
-use library::Lib;
+use library::ModuleBuilder;
 pub use source::*;
 
 pub fn run(source: Source, link_stdlib: bool) -> Result<(), &'static str> {
@@ -20,7 +20,16 @@ pub fn run_with_reporter(
     reporter: std::rc::Rc<dyn Reporter>,
     link_stdlib: bool,
 ) -> Result<(), &'static str> {
-    let lib = Lib::from_source(source, std::rc::Rc::clone(&reporter), link_stdlib)?;
-    codegen::generate(lib)?;
+    let mut builder = ModuleBuilder::new(reporter);
+
+    if link_stdlib {
+        builder.build_stdlib();
+    }
+    let sym = builder.build_src(source)?;
+
+    let modules = builder.take_modules();
+
+    codegen::generate(modules, sym.child("main"))?;
+
     Ok(())
 }

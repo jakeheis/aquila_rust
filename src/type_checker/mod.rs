@@ -42,11 +42,11 @@ mod check {
         }
     }
 
-    pub fn type_accessible(lib: &Lib, metadata: &TypeMetadata) -> bool {
+    pub fn type_accessible(metadata: &TypeMetadata, from_lib: &Symbol) -> bool {
         if metadata.is_public {
             true
         } else {
-            symbol_accessible(lib, &metadata.symbol)
+            metadata.symbol.lib() == from_lib.lib()
         }
     }
 

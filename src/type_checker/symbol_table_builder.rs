@@ -7,8 +7,8 @@ use log::trace;
 use std::rc::Rc;
 
 pub struct SymbolTableBuilder {
-    lib: Rc<Lib>,
     symbols: SymbolTable,
+    dependencies: SymbolStore,
     context: ContextTracker,
     reporter: Rc<dyn Reporter>,
 }
@@ -18,8 +18,8 @@ impl SymbolTableBuilder {
         let lib = Rc::new(lib);
 
         let mut builder = SymbolTableBuilder {
-            lib: Rc::clone(&lib),
-            symbols: SymbolTable::new(),
+            symbols: SymbolTable::new(&lib.name),
+            dependencies: lib.dependencies.clone(),
             context: ContextTracker::new(Rc::clone(&lib)),
             reporter,
         };
@@ -41,7 +41,7 @@ impl SymbolTableBuilder {
             builder.build_conformance(decl);
         }
 
-        let symbols = std::mem::replace(&mut builder.symbols, SymbolTable::new());
+        let symbols = std::mem::replace(&mut builder.symbols, SymbolTable::new(&lib.name));
         std::mem::drop(builder);
 
         let mut lib = Rc::try_unwrap(lib).ok().unwrap();
@@ -201,7 +201,7 @@ impl SymbolTableBuilder {
 
             let generic_symbol = if function_metadata.generics.iter().any(|g| g == generic_name) {
                 function_metadata.symbol.child(generic_name)
-            } else if let Some(g) = self.context.resolve_generic(generic_name, &self.lib.symbols) {
+            } else if let Some(g) = self.context.resolve_generic(generic_name, &self.symbols) {
                 g
             } else {
                 self.reporter.report(Diagnostic::error(
@@ -211,10 +211,10 @@ impl SymbolTableBuilder {
                 continue
             };
 
-            let this_lib_sym = Symbol::lib_root(&self.lib.name).child(trait_name);
+            let this_lib_sym = self.symbols.lib.child(trait_name);
             let trait_metadata = if let Some(t) = self.symbols.get_trait_metadata(&this_lib_sym) {
                 t
-            } else if let Some(t) = self.lib.trait_metadata(trait_name) {
+            } else if let Some(t) = self.dependencies.trait_metadata(trait_name) {
                 t
             } else {
                 self.reporter.report(Diagnostic::error(

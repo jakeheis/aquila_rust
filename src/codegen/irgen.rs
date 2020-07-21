@@ -26,7 +26,7 @@ impl IRGen {
         }
     }
 
-    pub fn generate(mut self) -> (Vec<Module>, Symbol) {
+    pub fn generate(mut self) -> Module {
         let lib = Rc::clone(&self.lib);
 
         for t in &lib.type_decls {
@@ -58,13 +58,10 @@ impl IRGen {
 
         let lib = Rc::try_unwrap(self.lib).ok().unwrap();
 
-        let (name, symbols, mut modules) = (
+        let (name, symbols) = (
             lib.name,
             lib.symbols,
-            lib.dependencies,
         );
-
-        let main_symbol = Symbol::main_symbol(&name);
 
         let mut new = Module {
             name,
@@ -74,16 +71,14 @@ impl IRGen {
             specialization_record: SpecializationRecord::new(),
         };
 
-        let tables: Vec<_> = modules.iter().map(|m| Rc::clone(&m.symbols)).collect();
         for func in &mut new.functions {
-            let mut writer = memory::FreeWriter::new(&tables, func);
+            let mut writer = memory::FreeWriter::new(func);
             writer.write();
         }
 
         SpecializationRecorder::record(&mut new);
 
-        modules.push(new);
-        (modules, main_symbol)
+        new
     }
 
     fn gen_stmts(&mut self, stmts: &[Stmt]) {
@@ -248,7 +243,7 @@ impl StmtVisitor for IRGen {
                 let start = IRExpr {
                     kind: IRExprKind::FieldAccess(
                         Box::new(iterator.clone()),
-                        "stdlib__Range__start".to_owned(),
+                        symbol.child("start").mangled(),
                     ),
                     expr_type: NodeType::Int,
                 };
@@ -256,7 +251,7 @@ impl StmtVisitor for IRGen {
                 IRExpr {
                     kind: IRExprKind::FieldAccess(
                         Box::new(iterator.clone()),
-                        "stdlib__Range__end".to_owned(),
+                        symbol.child("end").mangled(),
                     ),
                     expr_type: NodeType::Int,
                 }
@@ -267,7 +262,7 @@ impl StmtVisitor for IRGen {
                 IRExpr {
                     kind: IRExprKind::FieldAccess(
                         Box::new(iterator.clone()),
-                        "stdlib__Vec__count".to_owned(),
+                        symbol.child("count").mangled(),
                     ),
                     expr_type: NodeType::Int,
                 }
@@ -313,7 +308,7 @@ impl StmtVisitor for IRGen {
                 let storage = IRExpr {
                     kind: IRExprKind::FieldAccess(
                         Box::new(iterator.clone()),
-                        "stdlib__Vec__storage".to_owned(),
+                        symbol.child("storage").mangled(),
                     ),
                     expr_type: element_ty.clone(),
                 };

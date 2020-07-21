@@ -7,13 +7,13 @@ use crate::parsing::*;
 use log::trace;
 use std::rc::Rc;
 
-pub struct ExprChecker {
+pub struct ExprChecker<'a> {
     pub lib: Rc<Lib>,
-    pub context: ContextTracker,
+    pub context: &'a ContextTracker,
 }
 
-impl ExprChecker {
-    pub fn new(lib: Rc<Lib>, context: ContextTracker) -> Self {
+impl<'a> ExprChecker<'a> {
+    pub fn new(lib: Rc<Lib>, context: &'a ContextTracker) -> Self {
         ExprChecker { lib, context }
     }
 
@@ -183,7 +183,7 @@ impl ExprChecker {
     }
 }
 
-impl ExprVisitor for ExprChecker {
+impl<'a> ExprVisitor for ExprChecker<'a> {
     type ExprResult = DiagnosticResult<NodeType>;
 
     fn visit_binary_expr(
@@ -406,7 +406,7 @@ impl ExprVisitor for ExprChecker {
 
     fn visit_variable_expr(&mut self, expr: &Expr, name: &SpecializedToken) -> Self::ExprResult {
         if let TokenKind::SelfKeyword = name.token.kind {
-            if let ScopeType::InsideFunction = self.context.current_scope().scope_type {
+            if let ScopeType::InsideFunction = self.context.current_scope_immut().scope_type {
                 for parent_scope in self.context.scopes.iter().rev() {
                     if let ScopeType::InsideType = parent_scope.scope_type {
                         let metadata = self.lib.type_metadata(&parent_scope.id).unwrap();

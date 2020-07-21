@@ -1,6 +1,5 @@
 use super::metadata::GenericSpecialization;
 use super::symbol_table::Symbol;
-use super::Lib;
 
 #[derive(Clone, Debug)]
 pub enum NodeType {
@@ -174,25 +173,25 @@ impl NodeType {
         }
     }
 
-    pub fn infer_generic_type(
-        lib: &Lib,
-        param: &NodeType,
-        arg: &NodeType,
-    ) -> Option<(Symbol, NodeType)> {
-        match (param, arg) {
-            (NodeType::Instance(symbol, _), arg) => {
-                if let Some(generic_def) = lib.type_metadata(symbol) {
-                    Some((generic_def.symbol.clone(), arg.clone()))
-                } else {
-                    None
-                }
-            }
-            (NodeType::Pointer(param_to), NodeType::Pointer(arg_to)) => {
-                NodeType::infer_generic_type(lib, param_to, arg_to)
-            }
-            _ => None,
-        }
-    }
+    // pub fn infer_generic_type(
+    //     lib: &Lib,
+    //     param: &NodeType,
+    //     arg: &NodeType,
+    // ) -> Option<(Symbol, NodeType)> {
+    //     match (param, arg) {
+    //         (NodeType::Instance(symbol, _), arg) => {
+    //             if let Some(generic_def) = lib.type_metadata(symbol) {
+    //                 Some((generic_def.symbol.clone(), arg.clone()))
+    //             } else {
+    //                 None
+    //             }
+    //         }
+    //         (NodeType::Pointer(param_to), NodeType::Pointer(arg_to)) => {
+    //             NodeType::infer_generic_type(lib, param_to, arg_to)
+    //         }
+    //         _ => None,
+    //     }
+    // }
 }
 
 impl std::fmt::Display for NodeType {
