@@ -113,7 +113,9 @@ pub type String {
 
 impl String: Writable {
     def write(builder: ptr StringBuilder) {
+        (*builder).add_literal("'");
         (*builder).add_literal(storage);
+        (*builder).add_literal("'");
     }
 }
 
@@ -175,11 +177,11 @@ pub type Vec[T] {
         return Memory.offset[T](storage, index);
     }
 
-    pub def first(): Optional[T] {
+    pub def first(): Optional[ptr T] {
         if count > 0 {
-            return Optional[T].some_unowned(storage);
+            return Optional[ptr T].some(storage);
         } else {
-            return Optional[T].none();
+            return Optional[ptr T].none();
         }
     }
 
@@ -212,6 +214,18 @@ pub type Vec[T] {
 impl Vec: Writable {
     def write(builder: ptr StringBuilder) {
         (*builder).add_literal("Vec");
+        #if(T: Writable) {
+            (*builder).add_literal("(");
+            let first = true;
+            for obj in *self {
+                if first == false {
+                    (*builder).add_literal(", ");
+                }
+                first = false;
+                (*obj).write(builder);
+            }
+            (*builder).add_literal(")");
+        }
     }
 }
 
@@ -233,20 +247,14 @@ impl Vec: Freeable {
 pub type Optional[T] {
 
     let _is_some: bool;
-    let object: ptr T;
+    let object: T;
 
     pub meta def some(object: T): Optional[T] {
-        let location = Memory.allocate[T]();
-        Memory.copy[T](&object, location);
-        return Optional[T](true, location);
-    }
-
-    pub meta def some_unowned(object: ptr T): Optional[T] {
         return Optional[T](true, object);
     }
 
     pub meta def none(): Optional[T] {
-        return Optional[T](false, cast[ptr T](&0));
+        return Optional[T](false, cast[T](&0));
     }
 
     pub def is_some(): bool {
@@ -261,7 +269,7 @@ pub type Optional[T] {
         if _is_some == false {
             fatal_error_location("unwrapped a nil value", caller);
         }
-        return object;
+        return &object;
     }
 }
 
@@ -271,7 +279,7 @@ impl Optional: Writable {
             (*builder).add_literal("Some");
             #if(T: Writable) {
                 (*builder).add_literal("(");
-                (*object).write(builder);
+                object.write(builder);
                 (*builder).add_literal(")");
             }
         } else {

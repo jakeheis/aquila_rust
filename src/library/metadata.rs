@@ -1,5 +1,4 @@
 use super::{FunctionType, NodeType, Symbol};
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -27,7 +26,7 @@ pub struct TypeMetadata {
     pub fields: Vec<VarMetadata>,
     pub methods: Vec<String>,
     pub meta_methods: Vec<String>,
-    pub trait_impls: RefCell<Vec<Symbol>>,
+    pub trait_impls: Vec<Symbol>,
     pub is_public: bool,
 }
 
@@ -39,7 +38,7 @@ impl TypeMetadata {
             fields: Vec::new(),
             methods: Vec::new(),
             meta_methods: Vec::new(),
-            trait_impls: RefCell::new(vec![Symbol::any_object_symbol()]),
+            trait_impls: vec![Symbol::any_object_symbol()],
             is_public: is_public,
         }
     }
@@ -74,12 +73,8 @@ impl TypeMetadata {
         self.symbol.child(&var.name)
     }
 
-    pub fn add_trait_impl(&self, trait_symbol: Symbol) {
-        self.trait_impls.borrow_mut().push(trait_symbol);
-    }
-
     pub fn conforms_to(&self, trait_symbol: &Symbol) -> bool {
-        self.trait_impls.borrow().contains(trait_symbol)
+        self.trait_impls.contains(trait_symbol)
     }
 
     pub fn dummy_specialization(&self) -> GenericSpecialization {
@@ -128,7 +123,6 @@ impl std::fmt::Display for TypeMetadata {
         writeln!(f, "  meta methods: {}", meta_methods)?;
         let trait_impls = self
             .trait_impls
-            .borrow()
             .iter()
             .map(|t| t.mangled())
             .collect::<Vec<_>>()

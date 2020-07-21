@@ -11,6 +11,13 @@ print(maybe_str);
 let maybe_int = Optional[int].some(5);
 print(maybe_int);
 
+let vec = Vec[String].new();
+vec.push(String.literal("first"));
+vec.push(String.literal("second"));
+vec.push(String.literal("third"));
+
+print(vec);
+
 // let
 
 // print_object[String](obj);

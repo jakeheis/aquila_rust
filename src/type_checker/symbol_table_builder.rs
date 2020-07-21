@@ -284,6 +284,18 @@ impl<'a> SymbolTableBuilder<'a> {
 
         type_metadata.methods.extend(impls);
 
+        let lib_sym = self.symbols.lib.child(decl.trait_name.lexeme());
+        let trait_metadata = if let Some(t) = self.symbols.get_trait_metadata(&lib_sym) {
+            t
+        } else if let Some(t) = self.dependencies.trait_metadata(decl.trait_name.lexeme()) {
+            t
+        } else {
+            self.reporter.report(Diagnostic::error(&decl.trait_name, "Trait not found"));
+            return;
+        };
+
+        type_metadata.trait_impls.push(trait_metadata.symbol.clone());
+
         self.symbols
             .insert_type_metadata(type_symbol, type_metadata);
     }

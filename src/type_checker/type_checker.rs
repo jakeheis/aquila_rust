@@ -200,15 +200,7 @@ impl TypeChecker {
         }
         decl.target.set_symbol(type_symbol.clone());
 
-        let trait_metadata = self.all_symbols.trait_metadata(decl.trait_name.lexeme());
-        if trait_metadata.is_none() {
-            self.report_error(Diagnostic::error(&decl.trait_name, "Trait not found"));
-            return;
-        }
-        let trait_metadata = trait_metadata.unwrap().clone();
-
         let type_metadata = self.all_symbols.type_metadata(&type_symbol).unwrap();
-        type_metadata.add_trait_impl(trait_metadata.symbol.clone());
         let type_metadata = type_metadata.clone();
 
         self.context

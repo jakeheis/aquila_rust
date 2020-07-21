@@ -6,19 +6,19 @@ type Box<T> {
     let value: T
 }
 
-fun square(i: ref Int) {
+def square(i: ref int) {
 
 }
 
-fun double(i: copy Int) {
+def double(i: cpy int) {
 
 }
 
-fun addOne(i: Int) {
+def add_one(i: cpy int) {
 
 }
 
-def main(): Int {
+def main(): int {
     let i = 0
     square(i.ref)
     double(i)

@@ -197,6 +197,12 @@ pub fn write_type_deinit(
         if let NodeType::Instance(type_sym, spec) = &field.var_type {
             let field_symbol = type_metadata.symbol_for_field(field);
 
+            let is_generic = writer.all_symbols.type_metadata(type_sym).is_none();
+
+            if is_generic {
+                writer.start_block();
+            }
+
             let field_expr =
                 IRExpr::field_deref(&self_var, &field_symbol.mangled(), field.var_type.clone());
             let field_expr = IRExpr {
@@ -212,6 +218,10 @@ pub fn write_type_deinit(
                 NodeType::Void,
             );
             writer.expr(deinit);
+
+            if is_generic {
+                writer.end_conformance_check(type_sym.clone(), Symbol::any_object_symbol());
+            }
         }
     }
 
