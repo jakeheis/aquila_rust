@@ -1,6 +1,6 @@
 use super::check;
 use super::expr_checker::*;
-use super::scope::{ContextTracker, ScopeDefinition, ScopeType};
+use super::scope::{ContextTracker, ScopeDefinition, ScopeType, SymbolResolution};
 use crate::diagnostic::*;
 use crate::library::*;
 use crate::parsing::*;
@@ -9,7 +9,6 @@ use std::collections::HashMap;
 
 pub struct TypeChecker {
     reporter: Rc<dyn Reporter>,
-    lib: Rc<Lib>,
     all_symbols: SymbolStore,
     lib_symbols: Rc<SymbolTable>,
     context: ContextTracker,
@@ -20,15 +19,12 @@ pub struct Analysis {
 }
 
 impl TypeChecker {
-    pub fn check(lib: Lib, all_symbols: SymbolStore, lib_symbols: Rc<SymbolTable>, reporter: Rc<dyn Reporter>) -> Lib {
-        let lib = Rc::new(lib);
-
+    pub fn check(lib: &Lib, all_symbols: SymbolStore, lib_symbols: Rc<SymbolTable>, reporter: Rc<dyn Reporter>) {
         let mut checker = TypeChecker {
             reporter,
-            lib: Rc::clone(&lib),
             all_symbols,
             lib_symbols,
-            context: ContextTracker::new(Rc::clone(&lib)),
+            context: ContextTracker::new(lib.root_sym()),
         };
 
         for decl in &lib.type_decls {
@@ -46,12 +42,6 @@ impl TypeChecker {
             .push_scope(Symbol::main_symbol(&lib.name), ScopeType::InsideFunction);
         checker.check_list(&lib.main);
         checker.context.pop_scope();
-
-        std::mem::drop(checker);
-
-        let lib = Rc::try_unwrap(lib).ok().unwrap();
-
-        lib
     }
 
     fn check_list(&mut self, stmt_list: &[Stmt]) -> Analysis {
@@ -72,7 +62,7 @@ impl TypeChecker {
     }
 
     fn check_expr(&mut self, expr: &Expr) -> Option<NodeType> {
-        let mut expr_checker = ExprChecker::new(Rc::clone(&self.lib), &self.context, &self.all_symbols, &self.lib_symbols);
+        let mut expr_checker = ExprChecker::new(self.lib_symbols.lib.clone(), self.symbol_resolver(), &self.all_symbols);
         let result = expr.accept(&mut expr_checker);
         match result {
             Ok(t) => Some(t),
@@ -200,7 +190,7 @@ impl TypeChecker {
     }
 
     fn check_conformance_decl(&mut self, decl: &ConformanceDecl) {
-        let type_symbol = Symbol::lib_root(&self.lib.name).child_token(&decl.target.token);
+        let type_symbol = self.lib_symbols.lib.child_token(&decl.target.token);
 
         let target_metadata = self.all_symbols.type_metadata(&type_symbol);
         if target_metadata.is_none() {
@@ -259,6 +249,10 @@ impl TypeChecker {
             }
         }
     }
+
+    fn symbol_resolver(&self) -> SymbolResolution {
+        self.context.symbol_resolver(&self.lib_symbols, &self.all_symbols)
+    }
 }
 
 impl StmtVisitor for TypeChecker {
@@ -283,7 +277,7 @@ impl StmtVisitor for TypeChecker {
         let explicit_type =
             decl.explicit_type
                 .as_ref()
-                .and_then(|k| match self.context.resolve_explicit_type_or_err(k, &self.lib_symbols) {
+                .and_then(|k| match self.symbol_resolver().resolve_explicit_type_or_err(k) {
                     Ok(explicit_type) => Some(explicit_type),
                     Err(diagnostic) => {
                         self.report_error(diagnostic);
@@ -346,7 +340,7 @@ impl StmtVisitor for TypeChecker {
         trait_name: &SymbolicToken,
         body: &[Stmt],
     ) -> Analysis {
-        let gen = self.context.resolve_generic(type_name.token.lexeme(), &self.lib_symbols);
+        let gen = self.symbol_resolver().resolve_generic(type_name.token.lexeme());
         if gen.is_none() {
             self.report_error(Diagnostic::error(type_name, "Unrecognized generic parameter"));
             return Analysis {

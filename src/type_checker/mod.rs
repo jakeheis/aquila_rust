@@ -41,23 +41,23 @@ mod check {
         }
     }
 
-    pub fn type_accessible(metadata: &TypeMetadata, from_lib: &str) -> bool {
+    pub fn type_accessible(metadata: &TypeMetadata, from_lib: &Symbol) -> bool {
         if metadata.is_public {
             true
         } else {
-            metadata.symbol.lib() == from_lib
+            symbol_accessible(&metadata.symbol, from_lib)
         }
     }
 
-    pub fn func_accessible(lib: &Lib, metadata: &FunctionMetadata) -> bool {
+    pub fn func_accessible(metadata: &FunctionMetadata, from_lib: &Symbol) -> bool {
         if metadata.is_public {
             true
         } else {
-            symbol_accessible(lib, &metadata.symbol)
+            symbol_accessible(&metadata.symbol, from_lib)
         }
     }
 
-    pub fn symbol_accessible(lib: &Lib, symbol: &Symbol) -> bool {
-        symbol.lib() == lib.name
+    pub fn symbol_accessible(symbol: &Symbol, from_lib: &Symbol) -> bool {
+        symbol.lib() == from_lib.lib()
     }
 }

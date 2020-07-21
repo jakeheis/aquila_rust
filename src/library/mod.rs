@@ -19,7 +19,6 @@ pub struct Lib {
     pub trait_decls: Vec<TraitDecl>,
     pub conformance_decls: Vec<ConformanceDecl>,
     pub main: Vec<Stmt>,
-    pub dependencies: SymbolStore,
 }
 
 impl Lib {
@@ -31,7 +30,6 @@ impl Lib {
             trait_decls: Vec::new(),
             conformance_decls: Vec::new(),
             main: Vec::new(),
-            dependencies: SymbolStore::new(),
         }
     }
 

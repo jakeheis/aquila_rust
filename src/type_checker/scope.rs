@@ -4,7 +4,6 @@ use crate::parsing::*;
 use crate::source::ContainsSpan;
 use log::trace;
 use std::collections::HashMap;
-use std::rc::Rc;
 use super::check;
 use crate::lexing::Token;
 
@@ -54,16 +53,13 @@ impl Scope {
 }
 
 pub struct ContextTracker {
-    lib: Rc<Lib>,
-    pub scopes: Vec<Scope>,
+    scopes: Vec<Scope>,
 }
 
 impl ContextTracker {
-    pub fn new(lib: Rc<Lib>) -> Self {
-        let root_symbol = lib.root_sym();
+    pub fn new(lib: Symbol) -> Self {
         ContextTracker {
-            lib,
-            scopes: vec![Scope::new(root_symbol, ScopeType::TopLevel)],
+            scopes: vec![Scope::new(lib, ScopeType::TopLevel)],
         }
     }
 
@@ -121,7 +117,23 @@ impl ContextTracker {
         name.set_symbol(new_symbol);
     }
 
-    pub fn resolve_token(&self, token: &SpecializedToken, lib_syms: &SymbolTable) -> Option<ScopeDefinition> {
+    pub fn symbol_resolver<'a>(&'a self, lib_syms: &'a SymbolTable, dep_syms: &'a SymbolStore) -> SymbolResolution<'a> {
+        SymbolResolution {
+            scopes: &self.scopes,
+            lib_syms,
+            dependencies: dep_syms,
+        }
+    }
+}
+
+pub struct SymbolResolution<'a> {
+    pub scopes: &'a [Scope],
+    lib_syms: &'a SymbolTable,
+    dependencies: &'a SymbolStore,
+}
+
+impl<'a> SymbolResolution<'a> {
+    pub fn resolve_token(&self, token: &SpecializedToken) -> Option<ScopeDefinition> {
         // Check for local variable
         for scope in self.scopes.iter().rev() {
             if let Some(definition) = scope.definitions.get(token.token.lexeme()) {
@@ -130,15 +142,15 @@ impl ContextTracker {
         }
 
         // Check for top level function
-        let this_lib = self.lib.root_sym().child(token.token.lexeme());
-        if lib_syms.get_func_metadata(&this_lib).is_some() {
+        let this_lib = self.lib_syms.lib.child(token.token.lexeme());
+        if self.lib_syms.get_func_metadata(&this_lib).is_some() {
             return Some(ScopeDefinition::Function(this_lib));
-        } else if let Some(metadata) = self.lib.dependencies.top_level_function_named(token.token.lexeme()) {
+        } else if let Some(metadata) = self.dependencies.top_level_function_named(token.token.lexeme()) {
             return Some(ScopeDefinition::Function(metadata.symbol.clone()));
         }
 
         // Check for explicit type
-        match self.resolve_specialized_token(token, lib_syms) {
+        match self.resolve_specialized_token(token) {
             TypeResolutionResult::Found(resolved_type) => {
                 Some(ScopeDefinition::ExplicitType(Ok(resolved_type)))
             }
@@ -147,15 +159,15 @@ impl ContextTracker {
         }
     }
 
-    pub fn resolve_generic(&self, name: &str, lib_syms: &SymbolTable) -> Option<Symbol> {
+    pub fn resolve_generic(&self, name: &str) -> Option<Symbol> {
         for scope in self.scopes.iter().rev() {
             let generics = match scope.scope_type {
                 ScopeType::InsideFunction => {
-                    let function = lib_syms.get_func_metadata(&scope.id);
+                    let function = self.lib_syms.get_func_metadata(&scope.id);
                     function.map(|f| f.generics.as_slice()).unwrap_or(&[])
                 }
                 ScopeType::InsideType => {
-                    let ty = lib_syms.get_type_metadata(&scope.id).unwrap();
+                    let ty = self.lib_syms.get_type_metadata(&scope.id).unwrap();
                     &ty.generics
                 }
                 ScopeType::InsideTrait | ScopeType::TopLevel | ScopeType::InsideMetatype => continue,
@@ -168,8 +180,8 @@ impl ContextTracker {
         None
     }
     
-    pub fn resolve_explicit_type_or_err(&self, explicit_type: &ExplicitType, lib_syms: &SymbolTable) -> DiagnosticResult<NodeType> {
-        match self.resolve_explicit_type(explicit_type, lib_syms) {
+    pub fn resolve_explicit_type_or_err(&self, explicit_type: &ExplicitType) -> DiagnosticResult<NodeType> {
+        match self.resolve_explicit_type(explicit_type) {
             TypeResolutionResult::Found(resolved_type) => Ok(resolved_type),
             TypeResolutionResult::NotFound => {
                 Err(Diagnostic::error(explicit_type, "Type not found"))
@@ -178,14 +190,14 @@ impl ContextTracker {
         }
     }
 
-    pub fn resolve_explicit_type(&self, explicit_type: &ExplicitType, lib_syms: &SymbolTable) -> TypeResolutionResult {
+    pub fn resolve_explicit_type(&self, explicit_type: &ExplicitType) -> TypeResolutionResult {
         let node_type = match &explicit_type.kind {
-            ExplicitTypeKind::Simple(token) => return self.resolve_specialized_token(token, lib_syms),
-            ExplicitTypeKind::Pointer(to) => match self.resolve_explicit_type(to.as_ref(), lib_syms) {
+            ExplicitTypeKind::Simple(token) => return self.resolve_specialized_token(token),
+            ExplicitTypeKind::Pointer(to) => match self.resolve_explicit_type(to.as_ref()) {
                 TypeResolutionResult::Found(t) => NodeType::Pointer(Box::new(t)),
                 other => return other,
             },
-            ExplicitTypeKind::Array(of, count_token) => match self.resolve_explicit_type(of.as_ref(), lib_syms) {
+            ExplicitTypeKind::Array(of, count_token) => match self.resolve_explicit_type(of.as_ref()) {
                 TypeResolutionResult::Found(t) => {
                     let count = count_token.lexeme().parse::<usize>().ok().unwrap();
                     NodeType::Array(Box::new(t), count)
@@ -197,10 +209,10 @@ impl ContextTracker {
         TypeResolutionResult::Found(node_type)
     }
 
-    pub fn resolve_specialized_token(&self, token: &SpecializedToken, lib_syms: &SymbolTable) -> TypeResolutionResult {
+    pub fn resolve_specialized_token(&self, token: &SpecializedToken) -> TypeResolutionResult {
         let mut resolved_spec = Vec::new();
         for explicit_spec in &token.specialization {
-            match self.resolve_explicit_type(explicit_spec, lib_syms) {
+            match self.resolve_explicit_type(explicit_spec) {
                 TypeResolutionResult::Found(t) => resolved_spec.push(t),
                 other => return other,
             }
@@ -214,7 +226,7 @@ impl ContextTracker {
                 TypeResolutionResult::Error(diagnostic)
             }
         } else {
-            self.search_for_type_token(&token.token, resolved_spec, lib_syms)
+            self.search_for_type_token(&token.token, resolved_spec)
         }
     }
 
@@ -222,22 +234,21 @@ impl ContextTracker {
         &self,
         token: &Token,
         specialization: Vec<NodeType>,
-        lib_syms: &SymbolTable,
     ) -> TypeResolutionResult {
         trace!(target: "symbol_table", "Trying to find symbol for {} -- ({})", token.lexeme(), token.span.entire_line().0);
 
-        if let Some(sym) = self.resolve_generic(token.lexeme(), lib_syms) {
+        if let Some(sym) = self.resolve_generic(token.lexeme()) {
             trace!(target: "symbol_table", "Resolving {} as generic {}", token.lexeme(), sym);
             return self.create_gen_instance(token, &sym, specialization);
         }
 
         let top_level = self.scopes[0].id.child(token.lexeme());
-        if let Some(ty) = lib_syms.get_type_metadata(&top_level) {
+        if let Some(ty) = self.lib_syms.get_type_metadata(&top_level) {
             trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), top_level);
             return self.create_instance(token, &ty, specialization);
         }
 
-        let dep_type = self.lib.dependencies.type_metadata_named(token.lexeme());
+        let dep_type = self.dependencies.type_metadata_named(token.lexeme());
         if let Some(dep_type) = dep_type {
             trace!(target: "symbol_table", "Resolving {} as other lib {}", token.lexeme(), dep_type.symbol);
             return self.create_instance(token, &dep_type, specialization);
@@ -279,7 +290,7 @@ impl ContextTracker {
             return TypeResolutionResult::Error(Diagnostic::error(token, &message));
         }
 
-        if check::type_accessible(type_metadata, &self.lib.name) == false {
+        if check::type_accessible(type_metadata, &self.lib_syms.lib) == false {
             return TypeResolutionResult::Error(Diagnostic::error(token, "Type is private"));
         }
 

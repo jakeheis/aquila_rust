@@ -1,16 +1,16 @@
-use crate::diagnostic::*;
-use crate::library::*;
-// use log::trace;
-use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+// use crate::diagnostic::*;
+// use crate::library::*;
+// // use log::trace;
+// use std::collections::{HashMap, HashSet};
+// use std::rc::Rc;
 
-pub struct CycleChecker {
-    field_map: HashMap<Symbol, HashSet<Symbol>>,
-    reporter: Rc<dyn Reporter>,
-}
+// pub struct CycleChecker {
+//     field_map: HashMap<Symbol, HashSet<Symbol>>,
+//     reporter: Rc<dyn Reporter>,
+// }
 
-impl CycleChecker {
-    pub fn check(lib: &mut Lib, reporter: Rc<dyn Reporter>) {
+// impl CycleChecker {
+//     pub fn check(lib: &mut Lib, reporter: Rc<dyn Reporter>) {
         // let mut field_map: HashMap<Symbol, HashSet<Symbol>> = HashMap::new();
 
         // for (type_symbol, type_info) in &lib.symbols.borrow().type_metadata {
@@ -31,7 +31,7 @@ impl CycleChecker {
         // };
 
         // checker.run(lib);
-    }
+    // }
 /*
     fn run(&mut self, lib: &mut Lib) {
         let mut visited = HashSet::new();
@@ -112,4 +112,4 @@ impl CycleChecker {
 
         list.push(cur_symbol);
     }*/
-}
+// }

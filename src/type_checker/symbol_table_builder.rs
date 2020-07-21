@@ -1,25 +1,23 @@
-use super::scope::{ContextTracker, ScopeType};
+use super::scope::{ContextTracker, ScopeType, SymbolResolution};
 use crate::diagnostic::*;
 use crate::library::*;
 use crate::parsing::*;
 use log::trace;
 use std::rc::Rc;
 
-pub struct SymbolTableBuilder {
-    lib: Rc<Lib>,
+pub struct SymbolTableBuilder<'a> {
     context: ContextTracker,
     symbols: SymbolTable,
+    dependencies: &'a SymbolStore,
     reporter: Rc<dyn Reporter>,
 }
 
-impl SymbolTableBuilder {
-    pub fn build_symbols(lib: Lib, reporter: Rc<dyn Reporter>) -> (Lib, SymbolTable) {
-        let lib = Rc::new(lib);
-
+impl<'a> SymbolTableBuilder<'a> {
+    pub fn build_symbols(lib: &Lib, dependencies: &'a SymbolStore, reporter: Rc<dyn Reporter>) -> SymbolTable {
         let mut builder = SymbolTableBuilder {
-            lib: Rc::clone(&lib),
-            context: ContextTracker::new(Rc::clone(&lib)),
+            context: ContextTracker::new(lib.root_sym()),
             symbols: SymbolTable::new(&lib.name),
+            dependencies,
             reporter,
         };
 
@@ -40,12 +38,7 @@ impl SymbolTableBuilder {
             builder.build_conformance(decl);
         }
 
-        let symbols = std::mem::replace(&mut builder.symbols, SymbolTable::new(&lib.name));
-        std::mem::drop(builder);
-
-        let lib = Rc::try_unwrap(lib).ok().unwrap();
-
-        (lib, symbols)
+        builder.symbols
     }
 
     fn build_type_headers(&mut self, type_decls: &[TypeDecl]) {
@@ -199,7 +192,7 @@ impl SymbolTableBuilder {
 
             let generic_symbol = if function_metadata.generics.iter().any(|g| g == generic_name) {
                 function_metadata.symbol.child(generic_name)
-            } else if let Some(g) = self.context.resolve_generic(generic_name, &self.symbols) {
+            } else if let Some(g) = self.symbol_resolver().resolve_generic(generic_name) {
                 g
             } else {
                 self.reporter.report(Diagnostic::error(
@@ -209,10 +202,10 @@ impl SymbolTableBuilder {
                 continue
             };
 
-            let this_lib_sym = self.lib.root_sym().child(trait_name);
+            let this_lib_sym = self.symbols.lib.child(trait_name);
             let trait_metadata = if let Some(t) = self.symbols.get_trait_metadata(&this_lib_sym) {
                 t
-            } else if let Some(t) = self.lib.dependencies.trait_metadata(trait_name) {
+            } else if let Some(t) = self.dependencies.trait_metadata(trait_name) {
                 t
             } else {
                 self.reporter.report(Diagnostic::error(
@@ -303,12 +296,16 @@ impl SymbolTableBuilder {
         &self,
         explicit_type: &ExplicitType,
     ) -> NodeType {
-        match self.context.resolve_explicit_type_or_err(explicit_type, &self.symbols) {
+        match self.symbol_resolver().resolve_explicit_type_or_err(explicit_type) {
             Ok(resolved_type) => resolved_type,
             Err(diag) => {
                 self.reporter.report(diag);
                 NodeType::Ambiguous
             }
         }
+    }
+
+    fn symbol_resolver(&self) -> SymbolResolution {
+        self.context.symbol_resolver(&self.symbols, &self.dependencies)
     }
 }

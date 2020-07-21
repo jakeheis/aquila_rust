@@ -61,15 +61,13 @@ impl ModuleBuilder {
         let tokens = lexer.lex();
 
         let parser = Parser::new(tokens, Rc::clone(&self.reporter));
-        let mut lib = parser.parse(&module_name);
+        let lib = parser.parse(&module_name);
 
         if self.reporter.has_errored() {
             return Err("Parsing failed");
         }
 
-        lib.dependencies = self.symbol_store.clone();
-
-        let (lib, symbols) = SymbolTableBuilder::build_symbols(lib, Rc::clone(&self.reporter));
+        let symbols = SymbolTableBuilder::build_symbols(&lib, &self.symbol_store, Rc::clone(&self.reporter));
         let symbols = Rc::new(symbols);
         self.symbol_store.add_source(Rc::clone(&symbols));
 
@@ -79,7 +77,7 @@ impl ModuleBuilder {
             return Err("Symbol table builder failed");
         }
 
-        let lib = TypeChecker::check(lib, self.symbol_store.clone(), Rc::clone(&symbols), Rc::clone(&self.reporter));
+        TypeChecker::check(&lib, self.symbol_store.clone(), Rc::clone(&symbols), Rc::clone(&self.reporter));
 
         if self.reporter.has_errored() {
             return Err("Type checker failed");

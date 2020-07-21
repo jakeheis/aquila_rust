@@ -1,22 +1,20 @@
 use super::check;
-use super::scope::{ContextTracker, ScopeDefinition, ScopeType};
+use super::scope::{ScopeDefinition, ScopeType, SymbolResolution};
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::library::*;
 use crate::parsing::*;
 use log::trace;
-use std::rc::Rc;
 
 pub struct ExprChecker<'a> {
-    lib: Rc<Lib>,
-    context: &'a ContextTracker,
+    lib: Symbol,
+    resolver: SymbolResolution<'a>,
     all_symbols: &'a SymbolStore,
-    lib_symbols: &'a SymbolTable,
 }
 
 impl<'a> ExprChecker<'a> {
-    pub fn new(lib: Rc<Lib>, context: &'a ContextTracker, all_symbols: &'a SymbolStore, lib_symbols: &'a SymbolTable) -> Self {
-        ExprChecker { lib, context, all_symbols, lib_symbols }
+    pub fn new(lib: Symbol, resolver: SymbolResolution<'a>, all_symbols: &'a SymbolStore) -> Self {
+        ExprChecker { lib, resolver, all_symbols }
     }
 
     fn retrieve_method<S: ContainsSpan>(
@@ -53,7 +51,7 @@ impl<'a> ExprChecker<'a> {
                 }
             }
         } else {
-            for scope in self.context.scopes.iter().rev() {
+            for scope in self.resolver.scopes.iter().rev() {
                 if let Some(restrict) = scope.generic_restrictions.get(target_symbol) {
                     for trait_name in restrict {
                         let trait_metadata = self.all_symbols.trait_metadata_symbol(trait_name).unwrap();
@@ -76,7 +74,7 @@ impl<'a> ExprChecker<'a> {
         span: &S,
         function: &SpecializedToken,
     ) -> DiagnosticResult<(&FunctionMetadata, GenericSpecialization, bool)> {
-        match self.context.resolve_token(function, &self.lib_symbols) {
+        match self.resolver.resolve_token(function) {
             Some(ScopeDefinition::Function(sym)) => {
                 let metadata = self.all_symbols.function_metadata(&sym).unwrap();
                 match &metadata.kind {
@@ -158,7 +156,7 @@ impl<'a> ExprChecker<'a> {
                     }
                 } else {
                     let mut implements = false;
-                    for scope in self.context.scopes.iter().rev() {
+                    for scope in self.resolver.scopes.iter().rev() {
                         let generic_restrictions = &scope.generic_restrictions;
                         let known_conformances = generic_restrictions.get(type_sym).map(|g| g.as_slice()).unwrap_or(&[]);
                         if known_conformances.contains(trait_symbol) {
@@ -276,7 +274,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
             self.resolve_function(expr, &call.name)?
         };
 
-        if check::func_accessible(self.lib.as_ref(), &metadata) == false {
+        if check::func_accessible(&metadata, &self.lib) == false {
             if is_init {
                 return Err(Diagnostic::error(expr, "Init is private"));
             } else {
@@ -324,7 +322,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
                 .name
                 .specialization
                 .iter()
-                .map(|s| self.context.resolve_explicit_type_or_err(s, &self.lib_symbols))
+                .map(|s| self.resolver.resolve_explicit_type_or_err(s))
                 .collect();
             GenericSpecialization::new(&metadata.symbol, &metadata.generics, specialization?)
         };
@@ -371,7 +369,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
             NodeType::Instance(type_symbol, specialization) => {
                 let type_metadata = self.all_symbols.type_metadata(&type_symbol).unwrap();
                 if let Some(field) = type_metadata.field_named(field_name) {
-                    if field.public || check::symbol_accessible(self.lib.as_ref(), &type_symbol) {
+                    if field.public || check::symbol_accessible(&type_symbol, &self.lib) {
                         field_token.set_symbol(type_symbol.child(&field.name));
                         expr.set_type(field.var_type.specialize(&specialization))
                     } else {
@@ -408,8 +406,8 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
 
     fn visit_variable_expr(&mut self, expr: &Expr, name: &SpecializedToken) -> Self::ExprResult {
         if let TokenKind::SelfKeyword = name.token.kind {
-            if let ScopeType::InsideFunction = self.context.current_scope_immut().scope_type {
-                for parent_scope in self.context.scopes.iter().rev() {
+            if let ScopeType::InsideFunction = self.resolver.scopes.last().unwrap().scope_type {
+                for parent_scope in self.resolver.scopes.iter().rev() {
                     if let ScopeType::InsideType = parent_scope.scope_type {
                         let metadata = self.all_symbols.type_metadata(&parent_scope.id).unwrap();
                         name.set_symbol(Symbol::self_symbol(&parent_scope.id));
@@ -421,7 +419,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
             return Err(Diagnostic::error(expr, "'self' illegal here"));
         }
 
-        match self.context.resolve_token(name, &self.lib_symbols) {
+        match self.resolver.resolve_token(name) {
             Some(ScopeDefinition::Variable(sym, var_type))
             | Some(ScopeDefinition::SelfVar(sym, var_type)) => {
                 if !name.specialization.is_empty() {
@@ -496,7 +494,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
         value: &Expr,
     ) -> Self::ExprResult {
         value.accept(self)?;
-        expr.set_type(self.context.resolve_explicit_type_or_err(explicit_type, &self.lib_symbols)?)
+        expr.set_type(self.resolver.resolve_explicit_type_or_err(explicit_type)?)
     }
 }
 
