@@ -170,11 +170,11 @@ impl CodeWriter {
         match &expr.kind {
             IRExprKind::FieldAccess(target, field) => {
                 let target = self.form_expression(target, enclosing_spec);
-                format!("{}.{}", target, field)
+                format!("({}).{}", target, field)
             }
             IRExprKind::DerefFieldAccess(target, field) => {
                 let target = self.form_expression(target, enclosing_spec);
-                format!("{}->{}", target, field)
+                format!("({})->{}", target, field)
             }
             IRExprKind::Call(function, spec, args) => {
                 let spec = spec.resolve_generics_using(enclosing_spec);

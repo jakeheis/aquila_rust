@@ -180,8 +180,9 @@ pub fn write_type_deinit(
 
     writer.start_block();
 
-    if type_metadata.conforms_to(&Symbol::stdlib("Freeable")) {
-        let self_var = IRVariable::new("self", type_metadata.unspecialized_type());
+    let self_var = IRVariable::self_var(type_metadata);
+
+    if type_metadata.conforms_to(&Symbol::stdlib("Freeable")) { 
         let free_sym = type_metadata.symbol.child("free");
         let free = IRExpr::call(
             free_sym.clone(),
@@ -192,7 +193,6 @@ pub fn write_type_deinit(
         writer.expr(free);
     }
 
-    let self_var = IRVariable::new("self", type_metadata.unspecialized_type());
     for field in &type_metadata.fields {
         if let NodeType::Instance(type_sym, spec) = &field.var_type {
             let field_symbol = type_metadata.symbol_for_field(field);

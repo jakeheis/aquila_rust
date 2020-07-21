@@ -90,15 +90,6 @@ impl IRGen {
         }
     }
 
-    fn self_type(&self) -> Option<NodeType> {
-        let ct = self.current_type.as_ref();
-        if let Some(current_type) = ct {
-            Some(current_type.unspecialized_type())
-        } else {
-            None
-        }
-    }
-
     fn array_count(&self, expr: &Expr) -> usize {
         if let NodeType::Array(_, count) = expr.get_type().unwrap() {
             count
@@ -458,19 +449,13 @@ impl ExprVisitor for IRGen {
                     }
                 }
 
-                let target_expr = match &target_expr.kind {
-                    IRExprKind::Variable(v) if v == "self" => target_expr,
-                    _ => self.writer.addres_of_expr(target_expr),
-                };
-
+                let target_expr = self.writer.addres_of_expr(target_expr);
                 arg_exprs.insert(0, target_expr);
             } else {
+                let current_type = self.current_type.as_ref().unwrap();
                 arg_exprs.insert(
                     0,
-                    IRExpr {
-                        kind: IRExprKind::Variable(String::from("self")),
-                        expr_type: self.self_type().unwrap(),
-                    },
+                    IRExpr::variable(&IRVariable::self_var(current_type)),
                 );
             }
         }
@@ -509,15 +494,8 @@ impl ExprVisitor for IRGen {
         let target_expr = target.accept(self);
         let field_symbol = field.get_symbol().unwrap();
 
-        let kind = match &target.kind {
-            ExprKind::Variable(t) if t.get_symbol().unwrap().is_self() => {
-                IRExprKind::DerefFieldAccess(Box::new(target_expr), field_symbol.mangled())
-            }
-            _ => IRExprKind::FieldAccess(Box::new(target_expr), field_symbol.mangled()),
-        };
-
         IRExpr {
-            kind,
+            kind: IRExprKind::FieldAccess(Box::new(target_expr), field_symbol.mangled()),
             expr_type: self.get_expr_type(expr),
         }
     }
@@ -543,18 +521,12 @@ impl ExprVisitor for IRGen {
         let symbol = name.get_symbol().unwrap();
 
         if let Some(current_type) = self.current_type.as_ref() {
-            let self_expr = IRExpr {
-                kind: IRExprKind::Variable(String::from("self")),
-                expr_type: current_type.unspecialized_type(),
-            };
-            if symbol.is_self() {
+            let self_expr = IRExpr::variable(&IRVariable::self_var(current_type));
+            if current_type.symbol.self_symbol() == symbol {
                 return self_expr;
             } else if current_type.symbol.directly_owns(&symbol) {
                 let kind = IRExprKind::DerefFieldAccess(
-                    Box::new(IRExpr {
-                        kind: self_expr.kind,
-                        expr_type: NodeType::pointer_to(self_expr.expr_type),
-                    }),
+                    Box::new(self_expr),
                     symbol.mangled(),
                 );
                 return IRExpr {

@@ -64,13 +64,9 @@ impl IRWriter {
 
         if let FunctionKind::Method(owner) = &function.kind {
             let owner_metadata = self.all_symbols.type_metadata(owner).unwrap();
-            let self_type = NodeType::pointer_to(owner_metadata.unspecialized_type());
             parameters.insert(
                 0,
-                IRVariable {
-                    name: String::from("self"),
-                    var_type: self_type,
-                },
+                IRVariable::self_var(owner_metadata),
             );
         }
 

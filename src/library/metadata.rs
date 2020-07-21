@@ -97,6 +97,10 @@ impl TypeMetadata {
     pub fn unspecialized_type(&self) -> NodeType {
         NodeType::Instance(self.symbol.clone(), self.dummy_specialization())
     }
+
+    pub fn ptr_to_unspecialized_type(&self) -> NodeType {
+        NodeType::pointer_to(self.unspecialized_type())
+    }
 }
 
 impl std::fmt::Display for TypeMetadata {

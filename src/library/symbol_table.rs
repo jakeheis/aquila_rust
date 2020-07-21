@@ -88,10 +88,6 @@ impl Symbol {
     pub fn mangled(&self) -> String {
         self.id.replace("$", "__")
     }
-
-    pub fn is_self(&self) -> bool {
-        self.name() == "self"
-    }
     
     pub fn is_root(&self) -> bool {
         self.id.contains("$")

@@ -29,7 +29,6 @@ pub enum ScopeType {
 pub enum ScopeDefinition {
     Variable(Symbol, NodeType),
     Function(Symbol),
-    SelfVar(Symbol, NodeType),
     ExplicitType(DiagnosticResult<NodeType>),
     // GenericType(GenericParameterMetadata)
 }

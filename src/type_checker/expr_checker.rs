@@ -1,5 +1,5 @@
 use super::check;
-use super::scope::{ScopeDefinition, ScopeType, SymbolResolution};
+use super::scope::{ScopeDefinition, SymbolResolution};
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::library::*;
@@ -91,9 +91,6 @@ impl<'a> ExprChecker<'a> {
                     span,
                     &format!("Cannot call object of type {}", node_type),
                 ))
-            }
-            Some(ScopeDefinition::SelfVar(..)) => {
-                return Err(Diagnostic::error(span, "Cannot call self"))
             }
             Some(ScopeDefinition::ExplicitType(result)) => match result {
                 Ok(NodeType::Instance(type_symbol, specs)) => {
@@ -405,23 +402,8 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
     }
 
     fn visit_variable_expr(&mut self, expr: &Expr, name: &SpecializedToken) -> Self::ExprResult {
-        if let TokenKind::SelfKeyword = name.token.kind {
-            if let ScopeType::InsideFunction = self.resolver.scopes.last().unwrap().scope_type {
-                for parent_scope in self.resolver.scopes.iter().rev() {
-                    if let ScopeType::InsideType = parent_scope.scope_type {
-                        let metadata = self.all_symbols.type_metadata(&parent_scope.id).unwrap();
-                        name.set_symbol(Symbol::self_symbol(&parent_scope.id));
-                        return expr.set_type(metadata.unspecialized_type());
-                    }
-                }
-                
-            }
-            return Err(Diagnostic::error(expr, "'self' illegal here"));
-        }
-
         match self.resolver.resolve_token(name) {
-            Some(ScopeDefinition::Variable(sym, var_type))
-            | Some(ScopeDefinition::SelfVar(sym, var_type)) => {
+            Some(ScopeDefinition::Variable(sym, var_type)) => {
                 if !name.specialization.is_empty() {
                     return Err(Diagnostic::error(expr, "Cannot specialize variable"));
                 }

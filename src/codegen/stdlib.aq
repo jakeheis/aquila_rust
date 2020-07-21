@@ -220,10 +220,8 @@ impl Vec: Iterable {}
 impl Vec: Freeable {
     def free() {
         #if(T: AnyObject) {
-            let range = Range.length(0, count);
-            for index in range {
-                let object = Memory.offset[T](storage, index);
-                (*object).deinit();
+            for obj in *self {
+                (*obj).deinit();
             }
         }
         if capacity > 0 {

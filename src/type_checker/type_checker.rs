@@ -100,11 +100,12 @@ impl TypeChecker {
             self.context.put_in_scope(field.name.clone(), definition);
         }
 
-        let def = ScopeDefinition::SelfVar(
-            Symbol::self_symbol(&type_symbol),
-            metadata.unspecialized_type(),
+        let self_symbol = type_symbol.self_symbol();
+        let def = ScopeDefinition::Variable(
+            self_symbol.clone(),
+            NodeType::pointer_to(metadata.unspecialized_type()),
         );
-        self.context.put_in_scope("self".to_owned(), def);
+        self.context.put_in_scope(self_symbol.name().to_owned(), def);
 
         for method in metadata.method_symbols() {
             self.context
@@ -218,6 +219,13 @@ impl TypeChecker {
                 ScopeDefinition::Variable(type_symbol.child(&field.name), field.var_type.clone());
             self.context.put_in_scope(field.name.clone(), definition);
         }
+
+        let self_symbol = type_symbol.self_symbol();
+        let def = ScopeDefinition::Variable(
+            self_symbol.clone(),
+            NodeType::pointer_to(type_metadata.unspecialized_type()),
+        );
+        self.context.put_in_scope(self_symbol.name().to_owned(), def);
 
         for function in &decl.implementations {
             self.check_function_decl(function);

@@ -1,4 +1,4 @@
-use crate::library::{GenericSpecialization, NodeType, Symbol, VarMetadata};
+use crate::library::{GenericSpecialization, NodeType, Symbol, VarMetadata, TypeMetadata};
 
 #[derive(Debug)]
 pub struct IRStructure {
@@ -38,6 +38,13 @@ impl IRVariable {
     pub fn new_meta(metadata: &VarMetadata, parent: &Symbol) -> Self {
         let symbol = parent.child(&metadata.name);
         IRVariable::new_sym(&symbol, metadata.var_type.clone())
+    }
+
+    pub fn self_var(owner: &TypeMetadata) -> Self {
+        IRVariable {
+            name: "self".to_owned(),
+            var_type: owner.ptr_to_unspecialized_type()
+        }
     }
 }
 
