@@ -1,6 +1,6 @@
 use crate::diagnostic::*;
 use crate::library::*;
-use log::trace;
+// use log::trace;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
@@ -11,28 +11,28 @@ pub struct CycleChecker {
 
 impl CycleChecker {
     pub fn check(lib: &mut Lib, reporter: Rc<dyn Reporter>) {
-        let mut field_map: HashMap<Symbol, HashSet<Symbol>> = HashMap::new();
+        // let mut field_map: HashMap<Symbol, HashSet<Symbol>> = HashMap::new();
 
-        for (type_symbol, type_info) in &lib.symbols.type_metadata {
-            let mut field_set: HashSet<Symbol> = HashSet::new();
-            for field in &type_info.fields {
-                if let NodeType::Instance(field_type, _) = &field.var_type {
-                    field_set.insert(field_type.clone());
-                }
-            }
-            field_map.insert(type_symbol.clone(), field_set);
-        }
+        // for (type_symbol, type_info) in &lib.symbols.borrow().type_metadata {
+        //     let mut field_set: HashSet<Symbol> = HashSet::new();
+        //     for field in &type_info.fields {
+        //         if let NodeType::Instance(field_type, _) = &field.var_type {
+        //             field_set.insert(field_type.clone());
+        //         }
+        //     }
+        //     field_map.insert(type_symbol.clone(), field_set);
+        // }
 
-        trace!(target: "cycle_checker", "Field map: {:#?}", field_map);
+        // trace!(target: "cycle_checker", "Field map: {:#?}", field_map);
 
-        let mut checker = CycleChecker {
-            field_map,
-            reporter,
-        };
+        // let mut checker = CycleChecker {
+        //     field_map,
+        //     reporter,
+        // };
 
-        checker.run(lib);
+        // checker.run(lib);
     }
-
+/*
     fn run(&mut self, lib: &mut Lib) {
         let mut visited = HashSet::new();
         for type_symbol in self.field_map.keys() {
@@ -111,5 +111,5 @@ impl CycleChecker {
         }
 
         list.push(cur_symbol);
-    }
+    }*/
 }

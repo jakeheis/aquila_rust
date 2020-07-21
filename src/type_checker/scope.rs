@@ -1,4 +1,3 @@
-use super::type_resolver::{TypeResolution, TypeResolutionResult};
 use crate::diagnostic::*;
 use crate::library::*;
 use crate::parsing::*;
@@ -6,6 +5,8 @@ use crate::source::ContainsSpan;
 use log::trace;
 use std::collections::HashMap;
 use std::rc::Rc;
+use super::check;
+use crate::lexing::Token;
 
 #[derive(Clone, Debug)]
 pub enum ScopeType {
@@ -53,13 +54,13 @@ impl Scope {
 }
 
 pub struct ContextTracker {
-    pub lib: Rc<Lib>,
+    lib: Rc<Lib>,
     pub scopes: Vec<Scope>,
 }
 
 impl ContextTracker {
     pub fn new(lib: Rc<Lib>) -> Self {
-        let root_symbol = Symbol::lib_root(&lib.name);
+        let root_symbol = lib.root_sym();
         ContextTracker {
             lib,
             scopes: vec![Scope::new(root_symbol, ScopeType::TopLevel)],
@@ -120,47 +121,41 @@ impl ContextTracker {
         name.set_symbol(new_symbol);
     }
 
-    pub fn resolve_token(&self, token: &SpecializedToken) -> Option<ScopeDefinition> {
+    pub fn resolve_token(&self, token: &SpecializedToken, lib_syms: &SymbolTable) -> Option<ScopeDefinition> {
+        // Check for local variable
         for scope in self.scopes.iter().rev() {
             if let Some(definition) = scope.definitions.get(token.token.lexeme()) {
                 return Some(definition.clone());
             }
         }
 
-        if let Some(metadata) = self.lib.top_level_function_named(token.token.lexeme()) {
+        // Check for top level function
+        let this_lib = self.lib.root_sym().child(token.token.lexeme());
+        if lib_syms.get_func_metadata(&this_lib).is_some() {
+            return Some(ScopeDefinition::Function(this_lib));
+        } else if let Some(metadata) = self.lib.dependencies.top_level_function_named(token.token.lexeme()) {
             return Some(ScopeDefinition::Function(metadata.symbol.clone()));
         }
 
-        let resolver = TypeResolution::new(self, &self.lib.symbols);
-        match resolver.resolve_simple(token) {
+        // Check for explicit type
+        match self.resolve_specialized_token(token, lib_syms) {
             TypeResolutionResult::Found(resolved_type) => {
                 Some(ScopeDefinition::ExplicitType(Ok(resolved_type)))
             }
-            TypeResolutionResult::NotFound => None,
             TypeResolutionResult::Error(diag) => Some(ScopeDefinition::ExplicitType(Err(diag))),
+            TypeResolutionResult::NotFound => None,
         }
     }
 
-    pub fn resolve_type(&self, explicit_type: &ExplicitType) -> DiagnosticResult<NodeType> {
-        let resolver = TypeResolution::new(self, &self.lib.symbols);
-        match resolver.resolve(explicit_type) {
-            TypeResolutionResult::Found(resolved_type) => Ok(resolved_type),
-            TypeResolutionResult::NotFound => {
-                Err(Diagnostic::error(explicit_type, "Type not found"))
-            }
-            TypeResolutionResult::Error(diag) => Err(diag),
-        }
-    }
-
-    pub fn resolve_generic(&self, name: &str, symbols: &SymbolTable) -> Option<Symbol> {
+    pub fn resolve_generic(&self, name: &str, lib_syms: &SymbolTable) -> Option<Symbol> {
         for scope in self.scopes.iter().rev() {
             let generics = match scope.scope_type {
                 ScopeType::InsideFunction => {
-                    let function = symbols.get_func_metadata(&scope.id);
+                    let function = lib_syms.get_func_metadata(&scope.id);
                     function.map(|f| f.generics.as_slice()).unwrap_or(&[])
                 }
                 ScopeType::InsideType => {
-                    let ty = symbols.get_type_metadata(&scope.id).unwrap();
+                    let ty = lib_syms.get_type_metadata(&scope.id).unwrap();
                     &ty.generics
                 }
                 ScopeType::InsideTrait | ScopeType::TopLevel | ScopeType::InsideMetatype => continue,
@@ -172,4 +167,136 @@ impl ContextTracker {
         }
         None
     }
+    
+    pub fn resolve_explicit_type_or_err(&self, explicit_type: &ExplicitType, lib_syms: &SymbolTable) -> DiagnosticResult<NodeType> {
+        match self.resolve_explicit_type(explicit_type, lib_syms) {
+            TypeResolutionResult::Found(resolved_type) => Ok(resolved_type),
+            TypeResolutionResult::NotFound => {
+                Err(Diagnostic::error(explicit_type, "Type not found"))
+            }
+            TypeResolutionResult::Error(diag) => Err(diag),
+        }
+    }
+
+    pub fn resolve_explicit_type(&self, explicit_type: &ExplicitType, lib_syms: &SymbolTable) -> TypeResolutionResult {
+        let node_type = match &explicit_type.kind {
+            ExplicitTypeKind::Simple(token) => return self.resolve_specialized_token(token, lib_syms),
+            ExplicitTypeKind::Pointer(to) => match self.resolve_explicit_type(to.as_ref(), lib_syms) {
+                TypeResolutionResult::Found(t) => NodeType::Pointer(Box::new(t)),
+                other => return other,
+            },
+            ExplicitTypeKind::Array(of, count_token) => match self.resolve_explicit_type(of.as_ref(), lib_syms) {
+                TypeResolutionResult::Found(t) => {
+                    let count = count_token.lexeme().parse::<usize>().ok().unwrap();
+                    NodeType::Array(Box::new(t), count)
+                }
+                other => return other,
+            },
+        };
+
+        TypeResolutionResult::Found(node_type)
+    }
+
+    pub fn resolve_specialized_token(&self, token: &SpecializedToken, lib_syms: &SymbolTable) -> TypeResolutionResult {
+        let mut resolved_spec = Vec::new();
+        for explicit_spec in &token.specialization {
+            match self.resolve_explicit_type(explicit_spec, lib_syms) {
+                TypeResolutionResult::Found(t) => resolved_spec.push(t),
+                other => return other,
+            }
+        }
+
+        if let Some(primitive) = NodeType::primitive(token.token.lexeme()) {
+            if resolved_spec.is_empty() {
+                TypeResolutionResult::Found(primitive)
+            } else {
+                let diagnostic = Diagnostic::error(token, "Cannot specialize a primitive");
+                TypeResolutionResult::Error(diagnostic)
+            }
+        } else {
+            self.search_for_type_token(&token.token, resolved_spec, lib_syms)
+        }
+    }
+
+    fn search_for_type_token(
+        &self,
+        token: &Token,
+        specialization: Vec<NodeType>,
+        lib_syms: &SymbolTable,
+    ) -> TypeResolutionResult {
+        trace!(target: "symbol_table", "Trying to find symbol for {} -- ({})", token.lexeme(), token.span.entire_line().0);
+
+        if let Some(sym) = self.resolve_generic(token.lexeme(), lib_syms) {
+            trace!(target: "symbol_table", "Resolving {} as generic {}", token.lexeme(), sym);
+            return self.create_gen_instance(token, &sym, specialization);
+        }
+
+        let top_level = self.scopes[0].id.child(token.lexeme());
+        if let Some(ty) = lib_syms.get_type_metadata(&top_level) {
+            trace!(target: "symbol_table", "Resolving {} as {}", token.lexeme(), top_level);
+            return self.create_instance(token, &ty, specialization);
+        }
+
+        let dep_type = self.lib.dependencies.type_metadata_named(token.lexeme());
+        if let Some(dep_type) = dep_type {
+            trace!(target: "symbol_table", "Resolving {} as other lib {}", token.lexeme(), dep_type.symbol);
+            return self.create_instance(token, &dep_type, specialization);
+        } else {
+            TypeResolutionResult::NotFound
+        }
+    }
+
+    fn create_gen_instance(&self,
+        token: &Token,
+        name: &Symbol,
+        specialization: Vec<NodeType>,
+    ) -> TypeResolutionResult {
+        if specialization.len() != 0 {
+            let message = format!(
+                "Expected 0 specializations, got {}",
+                specialization.len()
+            );
+            return TypeResolutionResult::Error(Diagnostic::error(token, &message));
+        }
+
+        let instance_type = NodeType::Instance(name.clone(), GenericSpecialization::empty());
+
+        TypeResolutionResult::Found(instance_type)
+    }
+
+    fn create_instance(
+        &self,
+        token: &Token,
+        type_metadata: &TypeMetadata,
+        specialization: Vec<NodeType>,
+    ) -> TypeResolutionResult {
+        if specialization.len() != type_metadata.generics.len() {
+            let message = format!(
+                "Expected {} specializations, got {}",
+                type_metadata.generics.len(),
+                specialization.len()
+            );
+            return TypeResolutionResult::Error(Diagnostic::error(token, &message));
+        }
+
+        if check::type_accessible(type_metadata, &self.lib.name) == false {
+            return TypeResolutionResult::Error(Diagnostic::error(token, "Type is private"));
+        }
+
+        let specialization = GenericSpecialization::new(
+            &type_metadata.symbol,
+            &type_metadata.generics,
+            specialization,
+        );
+
+        let instance_type = NodeType::Instance(type_metadata.symbol.clone(), specialization);
+
+        TypeResolutionResult::Found(instance_type)
+    }
+}
+
+pub enum TypeResolutionResult {
+    Found(NodeType),
+    Error(Diagnostic),
+    NotFound,
 }

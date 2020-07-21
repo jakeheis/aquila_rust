@@ -69,15 +69,17 @@ impl ModuleBuilder {
 
         lib.dependencies = self.symbol_store.clone();
 
-        lib = SymbolTableBuilder::build_symbols(lib, Rc::clone(&self.reporter));
+        let (lib, symbols) = SymbolTableBuilder::build_symbols(lib, Rc::clone(&self.reporter));
+        let symbols = Rc::new(symbols);
+        self.symbol_store.add_source(Rc::clone(&symbols));
 
-        trace!(target: "symbol_table", "{}", lib.symbols);
+        trace!(target: "symbol_table", "{}", symbols);
 
         if self.reporter.has_errored() {
             return Err("Symbol table builder failed");
         }
 
-        let lib = TypeChecker::check(lib, Rc::clone(&self.reporter));
+        let lib = TypeChecker::check(lib, self.symbol_store.clone(), Rc::clone(&symbols), Rc::clone(&self.reporter));
 
         if self.reporter.has_errored() {
             return Err("Type checker failed");
@@ -88,9 +90,8 @@ impl ModuleBuilder {
         //     return Err("Cycle checker failed");
         // }
 
-        let module = IRGen::new(lib).generate();
+        let module = IRGen::new(lib, self.symbol_store.clone()).generate(symbols);
         
-        self.symbol_store.add_source(Rc::clone(&module.symbols));
         self.modules.push(module);
         
         Ok(Symbol::lib_root(&module_name))

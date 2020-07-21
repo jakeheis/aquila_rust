@@ -1,5 +1,4 @@
 use super::scope::{ContextTracker, ScopeType};
-use super::type_resolver::{TypeResolution, TypeResolutionResult};
 use crate::diagnostic::*;
 use crate::library::*;
 use crate::parsing::*;
@@ -7,20 +6,20 @@ use log::trace;
 use std::rc::Rc;
 
 pub struct SymbolTableBuilder {
-    symbols: SymbolTable,
-    dependencies: SymbolStore,
+    lib: Rc<Lib>,
     context: ContextTracker,
+    symbols: SymbolTable,
     reporter: Rc<dyn Reporter>,
 }
 
 impl SymbolTableBuilder {
-    pub fn build_symbols(lib: Lib, reporter: Rc<dyn Reporter>) -> Lib {
+    pub fn build_symbols(lib: Lib, reporter: Rc<dyn Reporter>) -> (Lib, SymbolTable) {
         let lib = Rc::new(lib);
 
         let mut builder = SymbolTableBuilder {
-            symbols: SymbolTable::new(&lib.name),
-            dependencies: lib.dependencies.clone(),
+            lib: Rc::clone(&lib),
             context: ContextTracker::new(Rc::clone(&lib)),
+            symbols: SymbolTable::new(&lib.name),
             reporter,
         };
 
@@ -44,10 +43,9 @@ impl SymbolTableBuilder {
         let symbols = std::mem::replace(&mut builder.symbols, SymbolTable::new(&lib.name));
         std::mem::drop(builder);
 
-        let mut lib = Rc::try_unwrap(lib).ok().unwrap();
-        lib.symbols = symbols;
+        let lib = Rc::try_unwrap(lib).ok().unwrap();
 
-        lib
+        (lib, symbols)
     }
 
     fn build_type_headers(&mut self, type_decls: &[TypeDecl]) {
@@ -211,10 +209,10 @@ impl SymbolTableBuilder {
                 continue
             };
 
-            let this_lib_sym = self.symbols.lib.child(trait_name);
+            let this_lib_sym = self.lib.root_sym().child(trait_name);
             let trait_metadata = if let Some(t) = self.symbols.get_trait_metadata(&this_lib_sym) {
                 t
-            } else if let Some(t) = self.dependencies.trait_metadata(trait_name) {
+            } else if let Some(t) = self.lib.dependencies.trait_metadata(trait_name) {
                 t
             } else {
                 self.reporter.report(Diagnostic::error(
@@ -305,16 +303,10 @@ impl SymbolTableBuilder {
         &self,
         explicit_type: &ExplicitType,
     ) -> NodeType {
-        let resolver = TypeResolution::new(&self.context, &self.symbols);
-        match resolver.resolve(explicit_type) {
-            TypeResolutionResult::Found(resolved_type) => resolved_type,
-            TypeResolutionResult::Error(diag) => {
+        match self.context.resolve_explicit_type_or_err(explicit_type, &self.symbols) {
+            Ok(resolved_type) => resolved_type,
+            Err(diag) => {
                 self.reporter.report(diag);
-                NodeType::Ambiguous
-            }
-            TypeResolutionResult::NotFound => {
-                self.reporter
-                    .report(Diagnostic::error(explicit_type, "Type not found"));
                 NodeType::Ambiguous
             }
         }

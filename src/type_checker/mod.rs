@@ -2,7 +2,6 @@ mod expr_checker;
 mod scope;
 mod symbol_table_builder;
 mod type_checker;
-mod type_resolver;
 
 pub use symbol_table_builder::SymbolTableBuilder;
 pub use type_checker::TypeChecker;
@@ -42,11 +41,11 @@ mod check {
         }
     }
 
-    pub fn type_accessible(metadata: &TypeMetadata, from_lib: &Symbol) -> bool {
+    pub fn type_accessible(metadata: &TypeMetadata, from_lib: &str) -> bool {
         if metadata.is_public {
             true
         } else {
-            metadata.symbol.lib() == from_lib.lib()
+            metadata.symbol.lib() == from_lib
         }
     }
 

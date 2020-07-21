@@ -113,10 +113,6 @@ impl Symbol {
         self.id.rsplit("$").next().unwrap()
     }
 
-    // pub fn is_in_lib(&self, lib: &str) -> bool {
-
-    // }
-
     pub fn add_spec_suffix(&self, spec: &GenericSpecialization) -> String {
         let spec = spec.symbolic_list();
         if spec.len() > 0 {
@@ -184,7 +180,7 @@ impl SymbolTable {
 
 impl std::fmt::Display for SymbolTable {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        writeln!(f, "SymbolTable:")?;
+        writeln!(f, "SymbolTable({}):", self.lib.unique_id())?;
         writeln!(f, "Type metadata:")?;
         for (_, metadata) in self.type_metadata.iter() {
             writeln!(f, "{}", metadata)?;
@@ -216,12 +212,10 @@ impl SymbolStore {
     pub fn add_source(&mut self, source: Rc<SymbolTable>) {
         self.sources.push(source);
     }
-}
 
-impl SymbolProvider for SymbolStore {
-    fn search<'a, F, U>(&'a self, block: &F) -> Option<&U>
+    fn search<F, U>(&self, block: &F) -> Option<&U>
     where
-        F: Fn(&'a SymbolTable) -> Option<&'a U>,
+        F: Fn(&SymbolTable) -> Option<&U>,
     {
         for src in &self.sources {
             if let Some(found) = block(src.as_ref()) {
@@ -230,47 +224,41 @@ impl SymbolProvider for SymbolStore {
         }
         None
     }
-}
 
-pub trait SymbolProvider {
-    fn search<'a, F, U>(&'a self, block: &F) -> Option<&U>
-    where
-        F: Fn(&'a SymbolTable) -> Option<&'a U>;
-
-    fn type_metadata(&self, symbol: &Symbol) -> Option<&TypeMetadata> {
+    pub fn type_metadata(&self, symbol: &Symbol) -> Option<&TypeMetadata> {
         self.search(&|sym| sym.get_type_metadata(symbol))
     }
 
-    fn type_metadata_named(&self, name: &str) -> Option<&TypeMetadata> {
+    pub fn type_metadata_named(&self, name: &str) -> Option<&TypeMetadata> {
         self.search(&|symbols| {
             let type_symbol = symbols.lib.child(name);
             symbols.get_type_metadata(&type_symbol)
         })
     }
 
-    fn top_level_function_named(&self, name: &str) -> Option<&FunctionMetadata> {
+    pub fn top_level_function_named(&self, name: &str) -> Option<&FunctionMetadata> {
         self.search(&|symbols| {
             let func_symbol = symbols.lib.child(name);
             symbols.get_func_metadata(&func_symbol)
         })
     }
 
-    fn function_metadata(&self, symbol: &Symbol) -> Option<&FunctionMetadata> {
+    pub fn function_metadata(&self, symbol: &Symbol) -> Option<&FunctionMetadata> {
         self.search(&|symbols| symbols.get_func_metadata(symbol))
     }
 
-    fn trait_metadata(&self, name: &str) -> Option<&TraitMetadata> {
+    pub fn trait_metadata(&self, name: &str) -> Option<&TraitMetadata> {
         self.search(&|symbols| {
             let trait_symbol = symbols.lib.child(name);
             symbols.get_trait_metadata(&trait_symbol)
         })
     }
 
-    fn trait_metadata_symbol(&self, name: &Symbol) -> Option<&TraitMetadata> {
+    pub fn trait_metadata_symbol(&self, name: &Symbol) -> Option<&TraitMetadata> {
         self.search(&|symbols| symbols.get_trait_metadata(name))
     }
 
-    fn symbol_span(&self, symbol: &Symbol) -> Option<&Span> {
-        self.search(&|symbols| symbols.get_span(symbol))
-    }
+    // pub fn symbol_span(&self, symbol: &Symbol) -> Option<&Span> {
+    //     self.search(&|symbols| symbols.get_span(symbol))
+    // }
 }

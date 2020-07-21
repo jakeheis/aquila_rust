@@ -10,6 +10,8 @@ use std::collections::HashMap;
 pub struct TypeChecker {
     reporter: Rc<dyn Reporter>,
     lib: Rc<Lib>,
+    all_symbols: SymbolStore,
+    lib_symbols: Rc<SymbolTable>,
     context: ContextTracker,
 }
 
@@ -18,12 +20,14 @@ pub struct Analysis {
 }
 
 impl TypeChecker {
-    pub fn check(lib: Lib, reporter: Rc<dyn Reporter>) -> Lib {
+    pub fn check(lib: Lib, all_symbols: SymbolStore, lib_symbols: Rc<SymbolTable>, reporter: Rc<dyn Reporter>) -> Lib {
         let lib = Rc::new(lib);
 
         let mut checker = TypeChecker {
             reporter,
             lib: Rc::clone(&lib),
+            all_symbols,
+            lib_symbols,
             context: ContextTracker::new(Rc::clone(&lib)),
         };
 
@@ -68,7 +72,7 @@ impl TypeChecker {
     }
 
     fn check_expr(&mut self, expr: &Expr) -> Option<NodeType> {
-        let mut expr_checker = ExprChecker::new(Rc::clone(&self.lib), &self.context);
+        let mut expr_checker = ExprChecker::new(Rc::clone(&self.lib), &self.context, &self.all_symbols, &self.lib_symbols);
         let result = expr.accept(&mut expr_checker);
         match result {
             Ok(t) => Some(t),
@@ -89,7 +93,7 @@ impl TypeChecker {
             .push_scope(type_symbol.clone(), ScopeType::InsideType);
 
         self.context.push_meta_scope();
-        let metadata = self.lib.type_metadata(&type_symbol).unwrap();
+        let metadata = self.all_symbols.type_metadata(&type_symbol).unwrap();
         for method in metadata.meta_method_symbols() {
             self.context
                 .put_in_scope(method.name().to_owned(), ScopeDefinition::Function(method));
@@ -99,7 +103,7 @@ impl TypeChecker {
         }
         self.context.pop_scope();
 
-        let metadata = self.lib.type_metadata(&type_symbol).unwrap();
+        let metadata = self.all_symbols.type_metadata(&type_symbol).unwrap();
         for field in &metadata.fields {
             let definition =
                 ScopeDefinition::Variable(type_symbol.child(&field.name), field.var_type.clone());
@@ -133,7 +137,7 @@ impl TypeChecker {
         self.context
             .push_scope(func_symbol.clone(), ScopeType::InsideFunction);
 
-        let metadata = self.lib.function_metadata(&func_symbol).unwrap();
+        let metadata = self.all_symbols.function_metadata(&func_symbol).unwrap();
 
         let mut restrictions: HashMap<Symbol, Vec<Symbol>> = HashMap::new();
         for (gen, trait_name) in &metadata.generic_restrictions {
@@ -198,21 +202,21 @@ impl TypeChecker {
     fn check_conformance_decl(&mut self, decl: &ConformanceDecl) {
         let type_symbol = Symbol::lib_root(&self.lib.name).child_token(&decl.target.token);
 
-        let target_metadata = self.lib.type_metadata(&type_symbol);
+        let target_metadata = self.all_symbols.type_metadata(&type_symbol);
         if target_metadata.is_none() {
             self.report_error(Diagnostic::error(&decl.target, "Type not found"));
             return;
         }
         decl.target.set_symbol(type_symbol.clone());
 
-        let trait_metadata = self.lib.trait_metadata(decl.trait_name.lexeme());
+        let trait_metadata = self.all_symbols.trait_metadata(decl.trait_name.lexeme());
         if trait_metadata.is_none() {
             self.report_error(Diagnostic::error(&decl.trait_name, "Trait not found"));
             return;
         }
         let trait_metadata = trait_metadata.unwrap().clone();
 
-        let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
+        let type_metadata = self.all_symbols.type_metadata(&type_symbol).unwrap();
         type_metadata.add_trait_impl(trait_metadata.symbol.clone());
         let type_metadata = type_metadata.clone();
 
@@ -231,12 +235,12 @@ impl TypeChecker {
 
         self.context.pop_scope();
 
-        let trait_metadata = self.lib.trait_metadata(decl.trait_name.lexeme()).unwrap();
+        let trait_metadata = self.all_symbols.trait_metadata(decl.trait_name.lexeme()).unwrap();
         for requirement in &trait_metadata.function_requirements {
             let trait_symbol = trait_metadata.symbol.child(&requirement);
-            let requirement_metadata = self.lib.function_metadata(&trait_symbol).unwrap();
+            let requirement_metadata = self.all_symbols.function_metadata(&trait_symbol).unwrap();
             let impl_symbol = type_metadata.symbol.child(&requirement);
-            let impl_metadata = self.lib.function_metadata(&impl_symbol);
+            let impl_metadata = self.all_symbols.function_metadata(&impl_symbol);
 
             if let Some(impl_metadata) = impl_metadata {
                 if !impl_metadata
@@ -279,7 +283,7 @@ impl StmtVisitor for TypeChecker {
         let explicit_type =
             decl.explicit_type
                 .as_ref()
-                .and_then(|k| match self.context.resolve_type(k) {
+                .and_then(|k| match self.context.resolve_explicit_type_or_err(k, &self.lib_symbols) {
                     Ok(explicit_type) => Some(explicit_type),
                     Err(diagnostic) => {
                         self.report_error(diagnostic);
@@ -342,7 +346,7 @@ impl StmtVisitor for TypeChecker {
         trait_name: &SymbolicToken,
         body: &[Stmt],
     ) -> Analysis {
-        let gen = self.context.resolve_generic(type_name.token.lexeme(), &self.lib.symbols);
+        let gen = self.context.resolve_generic(type_name.token.lexeme(), &self.lib_symbols);
         if gen.is_none() {
             self.report_error(Diagnostic::error(type_name, "Unrecognized generic parameter"));
             return Analysis {
@@ -352,7 +356,7 @@ impl StmtVisitor for TypeChecker {
 
         type_name.set_symbol(gen.as_ref().unwrap().clone());
 
-        let trait_metadata = self.lib.trait_metadata(trait_name.token.lexeme());
+        let trait_metadata = self.all_symbols.trait_metadata(trait_name.token.lexeme());
         if trait_metadata.is_none() {
             self.report_error(Diagnostic::error(trait_name, "Unrecognized trait"));
             return Analysis {
@@ -402,7 +406,7 @@ impl StmtVisitor for TypeChecker {
         let array_element_type = match self.check_expr(array) {
             Some(NodeType::Array(of, _)) => NodeType::Pointer(of),
             Some(NodeType::Instance(instance_symbol, spec)) => {
-                let metadata = self.lib.type_metadata(&instance_symbol).unwrap();
+                let metadata = self.all_symbols.type_metadata(&instance_symbol).unwrap();
                 if metadata.conforms_to(&Symbol::iterable_symbol()) {
                     if instance_symbol == Symbol::stdlib("Vec") {
                         let object_type = spec
@@ -456,7 +460,7 @@ impl StmtVisitor for TypeChecker {
         let current_scope = &self.context.current_scope_immut().scope_type;
         let expected_return = if let ScopeType::InsideFunction = current_scope {
             self
-                .lib
+                .all_symbols
                 .function_metadata(&self.context.current_symbol())
                 .unwrap()
                 .return_type

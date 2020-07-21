@@ -11,22 +11,24 @@ use std::rc::Rc;
 
 pub struct IRGen {
     lib: Rc<Lib>,
+    all_symbols: SymbolStore,
     writer: IRWriter,
     current_type: Option<TypeMetadata>,
 }
 
 impl IRGen {
-    pub fn new(lib: Lib) -> Self {
+    pub fn new(lib: Lib, all_symbols: SymbolStore) -> Self {
         let lib = Rc::new(lib);
-        let lib_copy = Rc::clone(&lib);
+        let writer = IRWriter::new(Rc::clone(&lib), all_symbols.clone());
         IRGen {
             lib,
-            writer: IRWriter::new(lib_copy),
+            all_symbols,
+            writer,
             current_type: None,
         }
     }
 
-    pub fn generate(mut self) -> Module {
+    pub fn generate(mut self, lib_symbols: Rc<SymbolTable>) -> Module {
         let lib = Rc::clone(&self.lib);
 
         for t in &lib.type_decls {
@@ -58,16 +60,11 @@ impl IRGen {
 
         let lib = Rc::try_unwrap(self.lib).ok().unwrap();
 
-        let (name, symbols) = (
-            lib.name,
-            lib.symbols,
-        );
-
         let mut new = Module {
-            name,
+            name: lib.name,
             structures,
             functions,
-            symbols: Rc::new(symbols),
+            symbols: lib_symbols,
             specialization_record: SpecializationRecord::new(),
         };
 
@@ -117,7 +114,7 @@ impl IRGen {
     fn visit_type_decl(&mut self, decl: &TypeDecl) {
         let type_symbol = decl.name.get_symbol().unwrap();
 
-        let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
+        let type_metadata = self.all_symbols.type_metadata(&type_symbol).unwrap();
 
         self.writer.declare_struct(&type_metadata);
 
@@ -140,7 +137,7 @@ impl IRGen {
     fn gen_function_decl(&mut self, decl: &FunctionDecl) {
         let func_symbol = decl.name.get_symbol().unwrap();
 
-        let mut func_metadata = self.lib.function_metadata(&func_symbol).unwrap().clone();
+        let mut func_metadata = self.all_symbols.function_metadata(&func_symbol).unwrap().clone();
 
         if decl.include_caller {
             func_metadata.parameters.push(VarMetadata {
@@ -161,7 +158,7 @@ impl IRGen {
 
     fn conformance_decl(&mut self, decl: &ConformanceDecl) {
         let type_symbol = decl.target.get_symbol().unwrap();
-        let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
+        let type_metadata = self.all_symbols.type_metadata(&type_symbol).unwrap();
 
         self.current_type = Some(type_metadata.clone());
         self.gen_function_decls(&decl.implementations);
@@ -446,7 +443,7 @@ impl ExprVisitor for IRGen {
 
         trace!("Writing call {}", function_symbol);
 
-        let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
+        let function_metadata = self.all_symbols.function_metadata(&function_symbol).unwrap();
 
         let specialization = call.get_specialization().unwrap();
 
@@ -454,7 +451,7 @@ impl ExprVisitor for IRGen {
             if let Some(target) = &call.target {
                 let target_expr = target.accept(self);
 
-                let possible_trait = function_symbol.owner_symbol().and_then(|o| self.lib.trait_metadata_symbol(&o));
+                let possible_trait = function_symbol.owner_symbol().and_then(|o| self.all_symbols.trait_metadata_symbol(&o));
                 if possible_trait.is_some() {
                     if let NodeType::Instance(sym, _) = &target_expr.expr_type {
                         ir_symbol = sym.child(function_symbol.name());
@@ -478,7 +475,7 @@ impl ExprVisitor for IRGen {
             }
         }
 
-        let function_metadata = self.lib.function_metadata(&function_symbol).unwrap();
+        let function_metadata = self.all_symbols.function_metadata(&function_symbol).unwrap();
         if function_metadata.include_caller {
             let location = expr.span.location();
             arg_exprs.push(IRExpr::string_literal(&location));

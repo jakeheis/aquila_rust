@@ -5,6 +5,7 @@ use std::rc::Rc;
 
 pub struct IRWriter {
     pub lib: Rc<Lib>,
+    pub all_symbols: SymbolStore,
     pub structures: Vec<IRStructure>,
     pub functions: Vec<IRFunction>,
     pub blocks: Vec<Vec<IRStatement>>,
@@ -12,9 +13,10 @@ pub struct IRWriter {
 }
 
 impl IRWriter {
-    pub fn new(lib: Rc<Lib>) -> Self {
+    pub fn new(lib: Rc<Lib>, all_symbols: SymbolStore) -> Self {
         IRWriter {
             lib,
+            all_symbols,
             structures: Vec::new(),
             functions: Vec::new(),
             blocks: Vec::new(),
@@ -61,7 +63,7 @@ impl IRWriter {
             .collect();
 
         if let FunctionKind::Method(owner) = &function.kind {
-            let owner_metadata = self.lib.type_metadata(owner).unwrap();
+            let owner_metadata = self.all_symbols.type_metadata(owner).unwrap();
             let self_type = NodeType::pointer_to(owner_metadata.unspecialized_type());
             parameters.insert(
                 0,

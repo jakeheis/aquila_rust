@@ -8,13 +8,15 @@ use log::trace;
 use std::rc::Rc;
 
 pub struct ExprChecker<'a> {
-    pub lib: Rc<Lib>,
-    pub context: &'a ContextTracker,
+    lib: Rc<Lib>,
+    context: &'a ContextTracker,
+    all_symbols: &'a SymbolStore,
+    lib_symbols: &'a SymbolTable,
 }
 
 impl<'a> ExprChecker<'a> {
-    pub fn new(lib: Rc<Lib>, context: &'a ContextTracker) -> Self {
-        ExprChecker { lib, context }
+    pub fn new(lib: Rc<Lib>, context: &'a ContextTracker, all_symbols: &'a SymbolStore, lib_symbols: &'a SymbolTable) -> Self {
+        ExprChecker { lib, context, all_symbols, lib_symbols }
     }
 
     fn retrieve_method<S: ContainsSpan>(
@@ -34,7 +36,7 @@ impl<'a> ExprChecker<'a> {
             }
         };
 
-        if let Some(target_metadata) = self.lib.type_metadata(target_symbol) {
+        if let Some(target_metadata) = self.all_symbols.type_metadata(target_symbol) {
             let method_metadata = if is_meta {
                 let name = target_metadata.meta_method_named(method);
                 name.map(|n| target_symbol.meta_symbol().child(&n))
@@ -54,7 +56,7 @@ impl<'a> ExprChecker<'a> {
             for scope in self.context.scopes.iter().rev() {
                 if let Some(restrict) = scope.generic_restrictions.get(target_symbol) {
                     for trait_name in restrict {
-                        let trait_metadata = self.lib.trait_metadata_symbol(trait_name).unwrap();
+                        let trait_metadata = self.all_symbols.trait_metadata_symbol(trait_name).unwrap();
                         if trait_metadata.function_requirements.iter().any(|m| m == method) {
                             let sym = trait_metadata.symbol.child(method);
                             return Ok((sym, specialization.clone()));
@@ -74,12 +76,12 @@ impl<'a> ExprChecker<'a> {
         span: &S,
         function: &SpecializedToken,
     ) -> DiagnosticResult<(&FunctionMetadata, GenericSpecialization, bool)> {
-        match self.context.resolve_token(function) {
+        match self.context.resolve_token(function, &self.lib_symbols) {
             Some(ScopeDefinition::Function(sym)) => {
-                let metadata = self.lib.function_metadata(&sym).unwrap();
+                let metadata = self.all_symbols.function_metadata(&sym).unwrap();
                 match &metadata.kind {
                     FunctionKind::Method(owner) | FunctionKind::MetaMethod(owner) => {
-                        let implicit_self = self.lib.type_metadata(owner).unwrap();
+                        let implicit_self = self.all_symbols.type_metadata(owner).unwrap();
                         let implicit_spec = implicit_self.dummy_specialization();
                         return Ok((metadata, implicit_spec, false));
                     }
@@ -98,7 +100,7 @@ impl<'a> ExprChecker<'a> {
             Some(ScopeDefinition::ExplicitType(result)) => match result {
                 Ok(NodeType::Instance(type_symbol, specs)) => {
                     let init_metadata = self
-                        .lib
+                        .all_symbols
                         .function_metadata(&type_symbol.meta_symbol().init_symbol());
                     Ok((init_metadata.unwrap(), specs.clone(), true))
                 }
@@ -121,7 +123,7 @@ impl<'a> ExprChecker<'a> {
             NodeType::Int | NodeType::Double | NodeType::Bool => (),
             arg_type if arg_type.is_pointer_to(NodeType::Byte) => (),
             NodeType::Instance(sym, ..) => {
-                let metadata = self.lib.type_metadata(&sym).unwrap();
+                let metadata = self.all_symbols.type_metadata(&sym).unwrap();
                 if !metadata.conforms_to(&Symbol::writable_symbol()) {
                     let message = format!("Can't print object of type {}", sym.mangled());
                     return Err(Diagnostic::error(arg, &message));
@@ -145,7 +147,7 @@ impl<'a> ExprChecker<'a> {
         for (generic_symbol, trait_symbol) in restrictions {
             let specialized_type = specialization.type_for(&generic_symbol).unwrap();
             if let NodeType::Instance(type_sym, ..) = specialized_type {                
-                if let Some(metadata) = self.lib.type_metadata(&type_sym) {
+                if let Some(metadata) = self.all_symbols.type_metadata(&type_sym) {
                     if !metadata.conforms_to(trait_symbol) {
                         let message = format!(
                             "Type '{}' does not implement '{}'",
@@ -268,7 +270,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
             let (method, target_specialization) =
                 self.retrieve_method(expr, &target_type, function_name)?;
 
-            let method_metadata = self.lib.function_metadata(&method).unwrap();
+            let method_metadata = self.all_symbols.function_metadata(&method).unwrap();
             (method_metadata, target_specialization, false)
         } else {
             self.resolve_function(expr, &call.name)?
@@ -322,7 +324,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
                 .name
                 .specialization
                 .iter()
-                .map(|s| self.context.resolve_type(s))
+                .map(|s| self.context.resolve_explicit_type_or_err(s, &self.lib_symbols))
                 .collect();
             GenericSpecialization::new(&metadata.symbol, &metadata.generics, specialization?)
         };
@@ -367,7 +369,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
 
         match target_type {
             NodeType::Instance(type_symbol, specialization) => {
-                let type_metadata = self.lib.type_metadata(&type_symbol).unwrap();
+                let type_metadata = self.all_symbols.type_metadata(&type_symbol).unwrap();
                 if let Some(field) = type_metadata.field_named(field_name) {
                     if field.public || check::symbol_accessible(self.lib.as_ref(), &type_symbol) {
                         field_token.set_symbol(type_symbol.child(&field.name));
@@ -409,7 +411,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
             if let ScopeType::InsideFunction = self.context.current_scope_immut().scope_type {
                 for parent_scope in self.context.scopes.iter().rev() {
                     if let ScopeType::InsideType = parent_scope.scope_type {
-                        let metadata = self.lib.type_metadata(&parent_scope.id).unwrap();
+                        let metadata = self.all_symbols.type_metadata(&parent_scope.id).unwrap();
                         name.set_symbol(Symbol::self_symbol(&parent_scope.id));
                         return expr.set_type(metadata.unspecialized_type());
                     }
@@ -419,7 +421,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
             return Err(Diagnostic::error(expr, "'self' illegal here"));
         }
 
-        match self.context.resolve_token(name) {
+        match self.context.resolve_token(name, &self.lib_symbols) {
             Some(ScopeDefinition::Variable(sym, var_type))
             | Some(ScopeDefinition::SelfVar(sym, var_type)) => {
                 if !name.specialization.is_empty() {
@@ -494,7 +496,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
         value: &Expr,
     ) -> Self::ExprResult {
         value.accept(self)?;
-        expr.set_type(self.context.resolve_type(explicit_type)?)
+        expr.set_type(self.context.resolve_explicit_type_or_err(explicit_type, &self.lib_symbols)?)
     }
 }
 
