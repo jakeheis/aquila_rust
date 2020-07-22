@@ -1,15 +1,15 @@
 
-def take_ref(obj: ref String) {
-    print(obj);
+def take_ref(obj: ref Vec[int]) {
+  print(obj.count);
 }
 
 // print_object[Vec[int]](vector);
 
-let obj = String.literal("hello");
+let obj = Vec[int].new();
 take_ref(@obj);
 
-let maybe_str = Optional[String].some(obj);
-print(maybe_str);
+// let maybe_str = Optional[String].some(obj);
+// print(maybe_str);
 
 let maybe_int = Optional[int].some(5);
 print(maybe_int);

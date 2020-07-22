@@ -409,7 +409,7 @@ impl ExprVisitor for IRGen {
         let op_type = match &op.kind {
             TokenKind::Minus => IRUnaryOperator::Negate,
             TokenKind::Bang => IRUnaryOperator::Invert,
-            TokenKind::Ampersand => {
+            TokenKind::Ampersand | TokenKind::At => {
                 return self.writer.addres_of_expr(operand);
             }
             TokenKind::Star => {
@@ -449,7 +449,11 @@ impl ExprVisitor for IRGen {
                     }
                 }
 
-                let target_expr = self.writer.addres_of_expr(target_expr);
+                let target_expr = if let NodeType::Reference(..) = target_expr.expr_type {
+                    target_expr
+                } else {
+                    self.writer.addres_of_expr(target_expr)
+                };
                 arg_exprs.insert(0, target_expr);
             } else {
                 let current_type = self.current_type.as_ref().unwrap();
@@ -494,8 +498,13 @@ impl ExprVisitor for IRGen {
         let target_expr = target.accept(self);
         let field_symbol = field.get_symbol().unwrap();
 
+        let kind = if let NodeType::Reference(..) = &target_expr.expr_type {
+            IRExprKind::DerefFieldAccess(Box::new(target_expr), field_symbol.mangled())
+        } else {
+            IRExprKind::FieldAccess(Box::new(target_expr), field_symbol.mangled())
+        };
         IRExpr {
-            kind: IRExprKind::FieldAccess(Box::new(target_expr), field_symbol.mangled()),
+            kind,
             expr_type: self.get_expr_type(expr),
         }
     }

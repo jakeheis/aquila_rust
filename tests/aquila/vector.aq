@@ -35,6 +35,13 @@ print(*(*vec_of_vecs.get(1)).get(1));
 /// -> 2
 print(vec_of_vecs.count);
 
+def get_count(vec: ref Vec[Vec[bool]]) {
+    print(vec.count);
+}
+
+/// -> 2
+get_count(@vec_of_vecs);
+
 /// error
 print(my_vec.element_size);
 /// end

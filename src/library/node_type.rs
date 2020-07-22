@@ -35,6 +35,10 @@ impl NodeType {
         NodeType::Pointer(Box::new(pointee))
     }
 
+    pub fn reference_to(pointee: NodeType) -> Self {
+        NodeType::Reference(Box::new(pointee))
+    }
+
     pub fn function(parameters: Vec<NodeType>, return_type: NodeType) -> Self {
         let function = FunctionType {
             parameters,
@@ -46,8 +50,7 @@ impl NodeType {
     pub fn contains_ambiguity(&self) -> bool {
         match self {
             NodeType::Ambiguous => true,
-            NodeType::Pointer(ptr) => ptr.contains_ambiguity(),
-            NodeType::Array(of, _) => of.contains_ambiguity(),
+            NodeType::Pointer(obj) | NodeType::Reference(obj) | NodeType::Array(obj, _) => obj.contains_ambiguity(),
             NodeType::Function(func_type) => {
                 for param in &func_type.parameters {
                     if param.contains_ambiguity() {
@@ -73,7 +76,8 @@ impl NodeType {
             {
                 true
             }
-            (NodeType::Pointer(lhs), NodeType::Pointer(rhs)) => lhs.matches(&rhs),
+            (NodeType::Pointer(lhs), NodeType::Pointer(rhs)) 
+            | (NodeType::Reference(lhs), NodeType::Reference(rhs)) => lhs.matches(&rhs),
             (NodeType::Function(lhs), NodeType::Function(rhs))
                 if lhs.parameters.len() == rhs.parameters.len() =>
             {
@@ -102,13 +106,6 @@ impl NodeType {
         }
     }
 
-    pub fn specialize_opt(&self, specialization: Option<&GenericSpecialization>) -> NodeType {
-        match specialization {
-            Some(spec) => self.specialize(spec),
-            None => self.clone(),
-        }
-    }
-
     pub fn specialize(&self, specialization: &GenericSpecialization) -> NodeType {
         match self {
             NodeType::Instance(symbol, spec) => {
@@ -130,6 +127,7 @@ impl NodeType {
                 }
             }
             NodeType::Pointer(to) => NodeType::pointer_to(to.specialize(specialization)),
+            NodeType::Reference(to) => NodeType::reference_to(to.specialize(specialization)),
             NodeType::Array(of, size) => {
                 let specialized = of.specialize(specialization);
                 NodeType::Array(Box::new(specialized), *size)

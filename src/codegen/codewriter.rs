@@ -301,7 +301,7 @@ impl CodeWriter {
                     (node_type.symbolic_form(), name)
                 }
             }
-            NodeType::Pointer(ty) => {
+            NodeType::Pointer(ty) | NodeType::Reference(ty) => {
                 let ty: &NodeType = &ty.coerce_array_to_ptr();
                 if let NodeType::Any = ty {
                     (String::from("void*"), name)

@@ -23,15 +23,22 @@ impl<'a> ExprChecker<'a> {
         target: &NodeType,
         method: &str,
     ) -> DiagnosticResult<(Symbol, GenericSpecialization)> {
+        let err = Err(Diagnostic::error(
+            span,
+            &format!("Cannot call method on a {}", target),
+        ));
+
         let (target_symbol, specialization, is_meta) = match target {
             NodeType::Instance(t, s) => (t, s, false),
             NodeType::Metatype(t, s) => (t, s, true),
-            _ => {
-                return Err(Diagnostic::error(
-                    span,
-                    &format!("Cannot call method on a {}", target),
-                ))
+            NodeType::Reference(inside) => {
+                if let NodeType::Instance(t, s) = inside.as_ref() {
+                    (t, s, false)
+                } else {
+                    return err;
+                }
             }
+            _ => return err
         };
 
         if let Some(target_metadata) = self.all_symbols.type_metadata(target_symbol) {
@@ -229,6 +236,11 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
             return expr.set_type(NodeType::Pointer(boxed_type));
         }
 
+        if let TokenKind::At = op.kind {
+            let boxed_type = Box::new(operand_type.clone());
+            return expr.set_type(NodeType::Reference(boxed_type));
+        }
+
         if let TokenKind::Star = op.kind {
             return match operand_type {
                 NodeType::Pointer(inner) => expr.set_type((*inner).clone()),
@@ -362,31 +374,42 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
         let target_type = target.accept(self)?;
         let field_name = field_token.token.lexeme();
 
-        match target_type {
-            NodeType::Instance(type_symbol, specialization) => {
-                let type_metadata = self.all_symbols.type_metadata(&type_symbol).unwrap();
-                if let Some(field) = type_metadata.field_named(field_name) {
-                    if field.public || check::symbol_accessible(&type_symbol, &self.lib) {
-                        field_token.set_symbol(type_symbol.child(&field.name));
-                        expr.set_type(field.var_type.specialize(&specialization))
-                    } else {
-                        Err(Diagnostic::error(field_token, "Field is private"))
-                    }
+        let result = match &target_type {
+            NodeType::Instance(type_symbol, specialization) => Some((type_symbol, specialization)),
+            NodeType::Reference(to) => {
+                if let NodeType::Instance(type_symbol, specialization) = to.as_ref() {
+                    Some((type_symbol, specialization))   
                 } else {
-                    Err(Diagnostic::error(
-                        &Span::join(target, field_token.span()),
-                        &format!(
-                            "Type '{}' does not has field '{}'",
-                            type_symbol.name(),
-                            field_token.span().lexeme()
-                        ),
-                    ))
+                    None
                 }
             }
-            _ => Err(Diagnostic::error(
+            _ => None,
+        };
+
+        if let Some((type_symbol, specialization)) = result {
+            let type_metadata = self.all_symbols.type_metadata(&type_symbol).unwrap();
+            if let Some(field) = type_metadata.field_named(field_name) {
+                if field.public || check::symbol_accessible(&type_symbol, &self.lib) {
+                    field_token.set_symbol(type_symbol.child(&field.name));
+                    expr.set_type(field.var_type.specialize(&specialization))
+                } else {
+                    Err(Diagnostic::error(field_token, "Field is private"))
+                }
+            } else {
+                Err(Diagnostic::error(
+                    &Span::join(target, field_token.span()),
+                    &format!(
+                        "Type '{}' does not has field '{}'",
+                        type_symbol.name(),
+                        field_token.span().lexeme()
+                    ),
+                ))
+            }
+        } else {
+            Err(Diagnostic::error(
                 target,
                 &format!("Cannot access property of '{}'", target_type),
-            )),
+            ))
         }
     }
 

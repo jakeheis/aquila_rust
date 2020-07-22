@@ -51,7 +51,7 @@ pub builtin def print(obj: any);
 
 pub def print_object[T](obj: T) where T: Writable {
     let builder = StringBuilder.new();
-    obj.write(&builder);
+    obj.write(@builder);
     print(builder.content.storage);
 }
 
@@ -105,17 +105,17 @@ pub type String {
         return String(new_storage, new_size, true);
     }
 
-    pub def append(string: String): String {
+    pub def append(string: ref String): String {
         return append_literal(string.storage);
     }
 
 }
 
 impl String: Writable {
-    def write(builder: ptr StringBuilder) {
-        (*builder).add_literal("'");
-        (*builder).add_literal(storage);
-        (*builder).add_literal("'");
+    def write(builder: ref StringBuilder) {
+        builder.add_literal("'");
+        builder.add_literal(storage);
+        builder.add_literal("'");
     }
 }
 
@@ -212,19 +212,19 @@ pub type Vec[T] {
 }
 
 impl Vec: Writable {
-    def write(builder: ptr StringBuilder) {
-        (*builder).add_literal("Vec");
+    def write(builder: ref StringBuilder) {
+        builder.add_literal("Vec");
         #if(T: Writable) {
-            (*builder).add_literal("(");
+            builder.add_literal("(");
             let first = true;
             for obj in *self {
                 if first == false {
-                    (*builder).add_literal(", ");
+                    builder.add_literal(", ");
                 }
                 first = false;
                 (*obj).write(builder);
             }
-            (*builder).add_literal(")");
+            builder.add_literal(")");
         }
     }
 }
@@ -274,24 +274,6 @@ pub type Optional[T] {
 }
 
 impl Optional: Writable {
-    def write(builder: ptr StringBuilder) {
-        if _is_some {
-            (*builder).add_literal("Some");
-            #if(T: Writable) {
-                (*builder).add_literal("(");
-                object.write(builder);
-                (*builder).add_literal(")");
-            }
-        } else {
-            (*builder).add_literal("None");
-        }
-    }
-}
-
-/*
-
-impl Optional: Writable {
-    // ref cannot be stored
     def write(builder: ref StringBuilder) {
         if _is_some {
             builder.add_literal("Some");
@@ -306,10 +288,10 @@ impl Optional: Writable {
     }
 }
 
+
+// ref cannot be stored
 // box StringBuilder is ref counted Box
 // can be demoted to ref StringBuilder
-
-*/
 
 pub type StringBuilder {
     
@@ -319,11 +301,11 @@ pub type StringBuilder {
         return StringBuilder(String.empty());
     }
 
-    def add(str: String) {
+    def add(str: ref String) {
         content = content.append(str);
     }
 
-    def addln(line: String) {
+    def addln(line: ref String) {
         add(line);
         add_literal("\n");
     }
@@ -335,7 +317,7 @@ pub type StringBuilder {
 }
 
 trait Writable {
-    def write(builder: ptr StringBuilder);
+    def write(builder: ref StringBuilder);
 }
 
 trait Freeable {
