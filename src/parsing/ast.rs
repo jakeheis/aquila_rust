@@ -423,6 +423,7 @@ pub enum ExplicitTypeKind {
     Simple(SpecializedToken),
     Array(Box<ExplicitType>, Token),
     Pointer(Box<ExplicitType>),
+    Reference(Box<ExplicitType>),
 }
 
 #[derive(Debug)]

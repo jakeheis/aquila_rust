@@ -288,6 +288,29 @@ impl Optional: Writable {
     }
 }
 
+/*
+
+impl Optional: Writable {
+    // ref cannot be stored
+    def write(builder: ref StringBuilder) {
+        if _is_some {
+            builder.add_literal("Some");
+            #if(T: Writable) {
+                builder.add_literal("(");
+                object.write(builder);
+                builder.add_literal(")");
+            }
+        } else {
+            builder.add_literal("None");
+        }
+    }
+}
+
+// box StringBuilder is ref counted Box
+// can be demoted to ref StringBuilder
+
+*/
+
 pub type StringBuilder {
     
     let content: String;

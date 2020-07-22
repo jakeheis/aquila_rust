@@ -777,6 +777,9 @@ impl Parser {
         let category = if self.matches(TokenKind::Ptr) {
             let inside = self.parse_explicit_type()?;
             ExplicitTypeKind::Pointer(Box::new(inside))
+        } else if self.matches(TokenKind::Ref) {
+            let inside = self.parse_explicit_type()?;
+            ExplicitTypeKind::Reference(Box::new(inside))
         } else if self.matches(TokenKind::LeftBracket) {
             let inside = self.parse_explicit_type()?;
             self.consume(
@@ -878,7 +881,7 @@ type InfixFn = fn(&mut Parser, lhs: Expr, can_assign: bool) -> DiagnosticResult<
 impl TokenKind {
     fn prefix(&self) -> Option<PrefixFn> {
         match self {
-            TokenKind::Minus | TokenKind::Bang | TokenKind::Ampersand | TokenKind::Star => {
+            TokenKind::Minus | TokenKind::Bang | TokenKind::Ampersand | TokenKind::Star | TokenKind::At => {
                 Some(Parser::unary)
             }
             TokenKind::True

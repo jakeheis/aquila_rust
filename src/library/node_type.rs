@@ -11,6 +11,7 @@ pub enum NodeType {
     Instance(Symbol, GenericSpecialization),
     Metatype(Symbol, GenericSpecialization),
     Pointer(Box<NodeType>),
+    Reference(Box<NodeType>),
     Array(Box<NodeType>, usize),
     Function(Box<FunctionType>),
     Ambiguous,
@@ -205,6 +206,7 @@ impl std::fmt::Display for NodeType {
             NodeType::Any => String::from("any"),
             NodeType::Function(func_type) => func_type.to_string(),
             NodeType::Pointer(ty) => format!("ptr {}", ty),
+            NodeType::Reference(ty) => format!("ref {}", ty),
             NodeType::Array(ty, size) => format!("Array[{}, count={}]", ty, size),
             NodeType::Instance(ty, specialization) => {
                 let mut string = ty.name().to_owned();

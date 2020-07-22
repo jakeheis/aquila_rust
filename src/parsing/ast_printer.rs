@@ -107,6 +107,13 @@ impl ASTPrinter {
                     visitor.write_explicit_type(to);
                 })
             }
+            ExplicitTypeKind::Reference(to) => {
+                self.write_ln("ExplicitType(ref)");
+                self.indent(|visitor| {
+                    let to: &ExplicitType = &to;
+                    visitor.write_explicit_type(to);
+                })
+            }
             ExplicitTypeKind::Array(of, count) => {
                 self.write_ln(&format!("ExplicitType(array<count={}>)", count));
                 self.indent(|visitor| {

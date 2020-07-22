@@ -25,6 +25,7 @@ pub enum TokenKind {
     LessEqual,
     Bang,
     BangEqual,
+    At,
 
     // Groupings
     LeftBrace,
@@ -50,6 +51,7 @@ pub enum TokenKind {
     Return,
     Break,
     Ptr,
+    Ref,
     Builtin,
     Meta,
     While,

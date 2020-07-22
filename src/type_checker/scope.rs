@@ -196,6 +196,10 @@ impl<'a> SymbolResolution<'a> {
                 TypeResolutionResult::Found(t) => NodeType::Pointer(Box::new(t)),
                 other => return other,
             },
+            ExplicitTypeKind::Reference(to) => match self.resolve_explicit_type(to.as_ref()) {
+                TypeResolutionResult::Found(t) => NodeType::Reference(Box::new(t)),
+                other => return other,
+            },
             ExplicitTypeKind::Array(of, count_token) => match self.resolve_explicit_type(of.as_ref()) {
                 TypeResolutionResult::Found(t) => {
                     let count = count_token.lexeme().parse::<usize>().ok().unwrap();

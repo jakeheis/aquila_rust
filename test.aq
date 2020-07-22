@@ -1,9 +1,12 @@
 
-
+def take_ref(obj: ref String) {
+    print(obj);
+}
 
 // print_object[Vec[int]](vector);
 
 let obj = String.literal("hello");
+take_ref(@obj);
 
 let maybe_str = Optional[String].some(obj);
 print(maybe_str);
