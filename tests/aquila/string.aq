@@ -35,3 +35,8 @@ print(buffer.content);
 buffer.push_bool(true);
 /// -> 'first second 34.5true'
 print(buffer.content);
+
+let stdout = Stream.stdout();
+
+/// -> hello
+stdout.write(@String.literal("hello\n"));

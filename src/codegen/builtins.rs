@@ -50,7 +50,7 @@ impl Builtin {
 
 pub fn is_direct_c_binding(symbol: &Symbol) -> bool {
     let bindings = [
-        "strlen", "memcpy", "malloc", "sizeof", "realloc", "exit", "free", "asprintf",
+        "strlen", "memcpy", "malloc", "sizeof", "realloc", "exit", "free", "asprintf", "dprintf"
     ];
     for binding in &bindings {
         if symbol == &Symbol::stdlib(binding) {
@@ -277,7 +277,8 @@ fn print_call(
         };
 
         let format_line = format!("{}\\n", format_specificer);
+        let stdout = IRExpr::int_literal("1");
         let format_expr = IRExpr::string_literal(&format_line);
-        IRExpr::call_extern("printf", vec![format_expr, arg], NodeType::Void)
+        IRExpr::call_extern("dprintf", vec![stdout, format_expr, arg], NodeType::Void)
     }
 }

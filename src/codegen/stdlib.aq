@@ -6,6 +6,7 @@ builtin def memcpy(to: ptr any, from: ptr any, length: int): int;
 builtin def sizeof(object: any): int;
 builtin def exit(code: int);
 builtin def asprintf(result: ptr ptr byte, format: ptr byte, arg: any);
+builtin def dprintf(fd: int, format: ptr byte, arg: any);
 
 builtin def ptr_offset(pointer: ptr any, distance: int): ptr any;
 builtin def _read_line(): ptr byte;
@@ -51,9 +52,9 @@ pub type Memory {
 pub builtin def print(obj: any);
 
 pub def print_object[T](obj: T) where T: Writable {
-    let builder = StringBuffer.new();
-    obj.write(@builder);
-    print(builder.content.storage);
+    let buffer = StringBuffer.new();
+    obj.write(@buffer);
+    Stream.stdout().writeln(@buffer.content);
 }
 
 pub def read_line(): String {
@@ -287,6 +288,28 @@ impl Optional: Writable {
             buffer.push("None");
         }
     }
+}
+
+pub type Stream {
+
+    let fd: int;
+
+    pub meta def stdout(): Stream {
+        return Stream(1);
+    }
+
+    pub meta def stderr(): Stream {
+        return Stream(2);
+    }
+
+    pub def write(str: ref String) {
+        dprintf(fd, "%s", str.storage);
+    }
+
+    pub def writeln(str: ref String) {
+        dprintf(fd, "%s\n", str.storage);
+    }
+
 }
 
 // ref cannot be stored
