@@ -50,7 +50,7 @@ impl Builtin {
 
 pub fn is_direct_c_binding(symbol: &Symbol) -> bool {
     let bindings = [
-        "strlen", "memcpy", "malloc", "sizeof", "realloc", "exit", "free",
+        "strlen", "memcpy", "malloc", "sizeof", "realloc", "exit", "free", "asprintf",
     ];
     for binding in &bindings {
         if symbol == &Symbol::stdlib(binding) {

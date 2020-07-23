@@ -5,6 +5,7 @@ builtin def strlen(location: ptr byte): int;
 builtin def memcpy(to: ptr any, from: ptr any, length: int): int;
 builtin def sizeof(object: any): int;
 builtin def exit(code: int);
+builtin def asprintf(result: ptr ptr byte, format: ptr byte, arg: any);
 
 builtin def ptr_offset(pointer: ptr any, distance: int): ptr any;
 builtin def _read_line(): ptr byte;
@@ -50,7 +51,7 @@ pub type Memory {
 pub builtin def print(obj: any);
 
 pub def print_object[T](obj: T) where T: Writable {
-    let builder = StringBuilder.new();
+    let builder = StringBuffer.new();
     obj.write(@builder);
     print(builder.content.storage);
 }
@@ -112,10 +113,10 @@ pub type String {
 }
 
 impl String: Writable {
-    def write(builder: ref StringBuilder) {
-        builder.add_literal("'");
-        builder.add_literal(storage);
-        builder.add_literal("'");
+    def write(buffer: ref StringBuffer) {
+        buffer.push("'");
+        buffer.push(storage);
+        buffer.push("'");
     }
 }
 
@@ -212,19 +213,19 @@ pub type Vec[T] {
 }
 
 impl Vec: Writable {
-    def write(builder: ref StringBuilder) {
-        builder.add_literal("Vec");
+    def write(buffer: ref StringBuffer) {
+        buffer.push("Vec");
         #if(T: Writable) {
-            builder.add_literal("(");
+            buffer.push("(");
             let first = true;
             for obj in self {
                 if first == false {
-                    builder.add_literal(", ");
+                    buffer.push(", ");
                 }
                 first = false;
-                obj.write(builder);
+                obj.write(buffer);
             }
-            builder.add_literal(")");
+            buffer.push(")");
         }
     }
 }
@@ -274,50 +275,63 @@ pub type Optional[T] {
 }
 
 impl Optional: Writable {
-    def write(builder: ref StringBuilder) {
+    def write(buffer: ref StringBuffer) {
         if _is_some {
-            builder.add_literal("Some");
+            buffer.push("Some");
             #if(T: Writable) {
-                builder.add_literal("(");
-                object.write(builder);
-                builder.add_literal(")");
+                buffer.push("(");
+                object.write(buffer);
+                buffer.push(")");
             }
         } else {
-            builder.add_literal("None");
+            buffer.push("None");
         }
     }
 }
-
 
 // ref cannot be stored
 // box StringBuilder is ref counted Box
 // can be demoted to ref StringBuilder
 
-pub type StringBuilder {
-    
-    let content: String;
+pub type StringBuffer {
 
-    meta def new(): StringBuilder {
-        return StringBuilder(String.empty());
+    pub let content: String;
+
+    pub meta def new(): StringBuffer {
+        return StringBuffer(String.empty());
     }
 
-    def add(str: ref String) {
-        content = content.append(str);
-    }
-
-    def addln(line: ref String) {
-        add(line);
-        add_literal("\n");
-    }
-
-    def add_literal(str: ptr byte) {
+    pub def push(str: ptr byte) {
         content = content.append_literal(str);
+    }
+
+    pub def push_int(value: int) {
+        push_primitive[int]("%i", value);
+    }
+
+    pub def push_double(value: double) {
+        push_primitive[double]("%g", value);
+    }
+
+    pub def push_bool(value: bool) {
+        if value {
+            push("true");
+        } else {
+            push("false");
+        }
+    }
+
+    def push_primitive[T](format: ptr byte, value: T) {
+        let bytes: ptr byte;
+        asprintf(&bytes, format, value);
+        content = content.append_literal(bytes);
+        Memory.drop[byte](bytes);
     }
 
 }
 
 trait Writable {
-    def write(builder: ref StringBuilder);
+    def write(builder: ref StringBuffer);
 }
 
 trait Freeable {

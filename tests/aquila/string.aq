@@ -12,3 +12,26 @@ print(combo2);
 
 /// -> 'hello world again'
 print(dyn.append_literal(" world").append_literal(" again"));
+
+
+let buffer = StringBuffer.new();
+
+buffer.push("first");
+/// -> 'first'
+print(buffer.content);
+
+buffer.push(" second ");
+/// -> 'first second '
+print(buffer.content);
+
+buffer.push_int(3);
+/// -> 'first second 3'
+print(buffer.content);
+
+buffer.push_double(4.5);
+/// -> 'first second 34.5'
+print(buffer.content);
+
+buffer.push_bool(true);
+/// -> 'first second 34.5true'
+print(buffer.content);
