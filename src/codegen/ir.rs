@@ -43,7 +43,7 @@ impl IRVariable {
     pub fn self_var(owner: &TypeMetadata) -> Self {
         IRVariable {
             name: "self".to_owned(),
-            var_type: owner.ptr_to_unspecialized_type()
+            var_type: owner.ref_to_unspecialized_type()
         }
     }
 }

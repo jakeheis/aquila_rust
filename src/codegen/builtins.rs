@@ -251,12 +251,23 @@ fn print_call(
     _spec: &GenericSpecialization,
     mut args: Vec<IRExpr>,
 ) -> IRExpr {
-    let node_type = args[0].expr_type.clone();
+    let mut arg = args.remove(0);
+
+    if let NodeType::Reference(to) = &arg.expr_type {
+        let to = *to.clone();
+        arg = IRExpr {
+            kind: IRExprKind::Unary(IRUnaryOperator::Dereference, Box::new(arg)),
+            expr_type: to,
+        };
+    }
+
+    let node_type = arg.expr_type.clone();
+    
     if let NodeType::Instance(..) = &node_type {
         let print_object = Symbol::stdlib("print_object");
         let spec =
             GenericSpecialization::new(&print_object, &["T".to_owned()], vec![node_type.clone()]);
-        IRExpr::call(print_object, spec.clone(), args, NodeType::Void)
+        IRExpr::call(print_object, spec.clone(), vec![arg], NodeType::Void)
     } else {
         let format_specificer = match node_type {
             NodeType::Int | NodeType::Bool => "%i",
@@ -267,6 +278,6 @@ fn print_call(
 
         let format_line = format!("{}\\n", format_specificer);
         let format_expr = IRExpr::string_literal(&format_line);
-        IRExpr::call_extern("printf", vec![format_expr, args.remove(0)], NodeType::Void)
+        IRExpr::call_extern("printf", vec![format_expr, arg], NodeType::Void)
     }
 }

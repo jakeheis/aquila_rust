@@ -13,8 +13,8 @@ print(*my_vec.get(0));
 /// -> 5
 /// -> 4
 /// -> 7
-for num in my_vec {
-    print(*num);
+for num in @my_vec {
+    print(num);
 }
 
 /// -> 7
@@ -25,6 +25,9 @@ print(my_vec.pop());
 let vec_of_vecs: Vec[Vec[bool]] = Vec[Vec[bool]].new();
 vec_of_vecs.push(Vec[bool].new());
 vec_of_vecs.push(Vec[bool].new());
+
+/// -> Vec(Vec, Vec)
+print(vec_of_vecs);
 
 (*vec_of_vecs.get(1)).push(false);
 (*vec_of_vecs.get(1)).push(true);

@@ -122,22 +122,23 @@ impl<'a> ExprChecker<'a> {
         arg_type: &NodeType,
     ) -> DiagnosticResult<()> {
         match arg_type {
-            NodeType::Int | NodeType::Double | NodeType::Bool => (),
-            arg_type if arg_type.is_pointer_to(NodeType::Byte) => (),
+            NodeType::Int | NodeType::Double | NodeType::Bool => Ok(()),
+            arg_type if arg_type.is_pointer_to(NodeType::Byte) => Ok(()),
             NodeType::Instance(sym, ..) => {
                 let metadata = self.all_symbols.type_metadata(&sym).unwrap();
                 if !metadata.conforms_to(&Symbol::writable_symbol()) {
                     let message = format!("Can't print object of type {}", sym.mangled());
-                    return Err(Diagnostic::error(arg, &message));
+                    Err(Diagnostic::error(arg, &message))
+                } else {
+                    Ok(())
                 }
             }
+            NodeType::Reference(to) => self.visit_print(arg, to.as_ref()),
             _ => {
                 let message = format!("Can't print object of type {}", arg_type);
-                return Err(Diagnostic::error(arg, &message));
+                Err(Diagnostic::error(arg, &message))
             }
         }
-
-        Ok(())
     }
 
     fn check_specialization_restrictions(

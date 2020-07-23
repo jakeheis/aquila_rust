@@ -217,12 +217,12 @@ impl Vec: Writable {
         #if(T: Writable) {
             builder.add_literal("(");
             let first = true;
-            for obj in *self {
+            for obj in self {
                 if first == false {
                     builder.add_literal(", ");
                 }
                 first = false;
-                (*obj).write(builder);
+                obj.write(builder);
             }
             builder.add_literal(")");
         }
@@ -234,8 +234,8 @@ impl Vec: Iterable {}
 impl Vec: Freeable {
     def free() {
         #if(T: AnyObject) {
-            for obj in *self {
-                (*obj).deinit();
+            for obj in self {
+                obj.deinit();
             }
         }
         if capacity > 0 {
@@ -254,7 +254,7 @@ pub type Optional[T] {
     }
 
     pub meta def none(): Optional[T] {
-        return Optional[T](false, cast[T](&0));
+        return Optional[T](false, cast[T](0));
     }
 
     pub def is_some(): bool {

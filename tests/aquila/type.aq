@@ -12,7 +12,7 @@ type TestType {
     }
 
     def add(): int {
-        return (*self).subtract();
+        return self.subtract();
     }
 
     def subtract(): int {
@@ -20,7 +20,7 @@ type TestType {
     }
 
     def multiply(): int {
-        return (*self).first * (*self).second;
+        return self.first * second;
     }
 
 }

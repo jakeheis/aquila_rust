@@ -227,32 +227,37 @@ impl StmtVisitor for IRGen {
         let iterator_type = iter_expr.get_type().unwrap();
 
         let limit = match &iterator_type {
-            NodeType::Instance(symbol, _) if symbol == &Symbol::stdlib("Range") => {
-                let start = IRExpr {
-                    kind: IRExprKind::FieldAccess(
-                        Box::new(iterator.clone()),
-                        symbol.child("start").mangled(),
-                    ),
-                    expr_type: NodeType::Int,
-                };
-                self.writer.assign(IRExpr::variable(&counter), start);
-                IRExpr {
-                    kind: IRExprKind::FieldAccess(
-                        Box::new(iterator.clone()),
-                        symbol.child("end").mangled(),
-                    ),
-                    expr_type: NodeType::Int,
-                }
-            }
-            NodeType::Instance(symbol, _) if symbol == &Symbol::stdlib("Vec") => {
-                self.writer
-                    .assign(IRExpr::variable(&counter), IRExpr::int_literal("0"));
-                IRExpr {
-                    kind: IRExprKind::FieldAccess(
-                        Box::new(iterator.clone()),
-                        symbol.child("count").mangled(),
-                    ),
-                    expr_type: NodeType::Int,
+            NodeType::Reference(to) => {
+                match to.as_ref() {
+                    NodeType::Instance(symbol, _) if symbol == &Symbol::stdlib("Range") => {
+                        let start = IRExpr {
+                            kind: IRExprKind::DerefFieldAccess(
+                                Box::new(iterator.clone()),
+                                symbol.child("start").mangled(),
+                            ),
+                            expr_type: NodeType::Int,
+                        };
+                        self.writer.assign(IRExpr::variable(&counter), start);
+                        IRExpr {
+                            kind: IRExprKind::DerefFieldAccess(
+                                Box::new(iterator.clone()),
+                                symbol.child("end").mangled(),
+                            ),
+                            expr_type: NodeType::Int,
+                        }
+                    }
+                    NodeType::Instance(symbol, _) if symbol == &Symbol::stdlib("Vec") => {
+                        self.writer
+                            .assign(IRExpr::variable(&counter), IRExpr::int_literal("0"));
+                        IRExpr {
+                            kind: IRExprKind::DerefFieldAccess(
+                                Box::new(iterator.clone()),
+                                symbol.child("count").mangled(),
+                            ),
+                            expr_type: NodeType::Int,
+                        }
+                    },
+                    _ => unimplemented!()
                 }
             }
             NodeType::Array(_, count) => {
@@ -277,42 +282,47 @@ impl StmtVisitor for IRGen {
         });
 
         match iterator_type {
-            NodeType::Instance(symbol, _) if symbol == Symbol::stdlib("Range") => {
-                let local = self
-                    .writer
-                    .declare_local(variable.get_symbol().unwrap(), NodeType::Int);
+            NodeType::Reference(to) => {
+                match to.as_ref() {
+                    NodeType::Instance(symbol, _) if symbol == &Symbol::stdlib("Range") => {
+                        let local = self
+                            .writer
+                            .declare_local(variable.get_symbol().unwrap(), NodeType::Int);
 
-                self.writer
-                    .assign(IRExpr::variable(&local), IRExpr::variable(&counter));
-            }
-            NodeType::Instance(symbol, spec) if symbol == Symbol::stdlib("Vec") => {
-                let element_ty = spec.type_for(&symbol.child("T")).unwrap().clone();
-                let element_ty = NodeType::pointer_to(element_ty);
+                        self.writer
+                            .assign(IRExpr::variable(&local), IRExpr::variable(&counter));
+                    }
+                    NodeType::Instance(symbol, spec) if symbol == &Symbol::stdlib("Vec") => {
+                        let element_ty = spec.type_for(&symbol.child("T")).unwrap().clone();
+                        let element_ty = NodeType::pointer_to(element_ty);
 
-                let local = self
-                    .writer
-                    .declare_local(variable.get_symbol().unwrap(), element_ty.clone());
+                        let local = self
+                            .writer
+                            .declare_local(variable.get_symbol().unwrap(), element_ty.clone());
 
-                let storage = IRExpr {
-                    kind: IRExprKind::FieldAccess(
-                        Box::new(iterator.clone()),
-                        symbol.child("storage").mangled(),
-                    ),
-                    expr_type: element_ty.clone(),
-                };
+                        let storage = IRExpr {
+                            kind: IRExprKind::DerefFieldAccess(
+                                Box::new(iterator.clone()),
+                                symbol.child("storage").mangled(),
+                            ),
+                            expr_type: element_ty.clone(),
+                        };
 
-                self.writer.assign(
-                    IRExpr::variable(&local),
-                    IRExpr {
-                        kind: IRExprKind::Binary(
-                            Box::new(storage),
-                            IRBinaryOperator::Plus,
-                            Box::new(IRExpr::variable(&counter)),
-                        ),
-                        expr_type: element_ty,
+                        self.writer.assign(
+                            IRExpr::variable(&local),
+                            IRExpr {
+                                kind: IRExprKind::Binary(
+                                    Box::new(storage),
+                                    IRBinaryOperator::Plus,
+                                    Box::new(IRExpr::variable(&counter)),
+                                ),
+                                expr_type: element_ty,
+                            },
+                        );
                     },
-                );
-            }
+                    _ => unimplemented!()
+                }
+            },
             NodeType::Array(element_ty, _) => {
                 let element_ty = NodeType::pointer_to(*element_ty);
 
@@ -446,6 +456,14 @@ impl ExprVisitor for IRGen {
                 if possible_trait.is_some() {
                     if let NodeType::Instance(sym, _) = &target_expr.expr_type {
                         ir_symbol = sym.child(function_symbol.name());
+                    } else if let NodeType::Reference(to) = &target_expr.expr_type {
+                        if let NodeType::Instance(sym, _) = to.as_ref() {
+                            ir_symbol = sym.child(function_symbol.name());
+                        } else {
+                            panic!()
+                        }
+                    } else {
+                        panic!()
                     }
                 }
 

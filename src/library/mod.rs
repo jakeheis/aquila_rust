@@ -6,7 +6,7 @@ mod node_type;
 mod symbol_table;
 
 pub use metadata::{
-    FunctionKind, FunctionMetadata, GenericSpecialization, TraitMetadata, TypeMetadata, VarMetadata,
+    FunctionKind, FunctionMetadata, GenericSpecialization, TraitMetadata, TypeMetadata, VarMetadata
 };
 pub use module::{Module, ModuleBuilder};
 pub use node_type::{FunctionType, NodeType};

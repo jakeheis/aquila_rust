@@ -93,8 +93,8 @@ impl TypeMetadata {
         NodeType::Instance(self.symbol.clone(), self.dummy_specialization())
     }
 
-    pub fn ptr_to_unspecialized_type(&self) -> NodeType {
-        NodeType::pointer_to(self.unspecialized_type())
+    pub fn ref_to_unspecialized_type(&self) -> NodeType {
+        NodeType::reference_to(self.unspecialized_type())
     }
 }
 

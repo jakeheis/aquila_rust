@@ -94,23 +94,8 @@ impl TypeChecker {
         self.context.pop_scope();
 
         let metadata = self.all_symbols.type_metadata(&type_symbol).unwrap();
-        for field in &metadata.fields {
-            let definition =
-                ScopeDefinition::Variable(type_symbol.child(&field.name), field.var_type.clone());
-            self.context.put_in_scope(field.name.clone(), definition);
-        }
-
-        let self_symbol = type_symbol.self_symbol();
-        let def = ScopeDefinition::Variable(
-            self_symbol.clone(),
-            NodeType::pointer_to(metadata.unspecialized_type()),
-        );
-        self.context.put_in_scope(self_symbol.name().to_owned(), def);
-
-        for method in metadata.method_symbols() {
-            self.context
-                .put_in_scope(method.name().to_owned(), ScopeDefinition::Function(method));
-        }
+        TypeChecker::put_type_in_scope(&mut self.context, &metadata);
+      
         for method in &decl.methods {
             self.check_function_decl(method);
         }
@@ -201,23 +186,11 @@ impl TypeChecker {
         decl.target.set_symbol(type_symbol.clone());
 
         let type_metadata = self.all_symbols.type_metadata(&type_symbol).unwrap();
-        let type_metadata = type_metadata.clone();
 
         self.context
             .push_scope(type_metadata.symbol.clone(), ScopeType::InsideType);
 
-        for field in &type_metadata.fields {
-            let definition =
-                ScopeDefinition::Variable(type_symbol.child(&field.name), field.var_type.clone());
-            self.context.put_in_scope(field.name.clone(), definition);
-        }
-
-        let self_symbol = type_symbol.self_symbol();
-        let def = ScopeDefinition::Variable(
-            self_symbol.clone(),
-            NodeType::pointer_to(type_metadata.unspecialized_type()),
-        );
-        self.context.put_in_scope(self_symbol.name().to_owned(), def);
+        TypeChecker::put_type_in_scope(&mut self.context, &type_metadata);
 
         for function in &decl.implementations {
             self.check_function_decl(function);
@@ -225,6 +198,7 @@ impl TypeChecker {
 
         self.context.pop_scope();
 
+        let type_metadata = self.all_symbols.type_metadata(&type_symbol).unwrap();
         let trait_metadata = self.all_symbols.trait_metadata(decl.trait_name.lexeme()).unwrap();
         for requirement in &trait_metadata.function_requirements {
             let trait_symbol = trait_metadata.symbol.child(&requirement);
@@ -249,6 +223,27 @@ impl TypeChecker {
             }
         }
     }
+
+    fn put_type_in_scope(context: &mut ContextTracker, metadata: &TypeMetadata) {
+        for field in &metadata.fields {
+            let definition =
+                ScopeDefinition::Variable(metadata.symbol.child(&field.name), field.var_type.clone());
+            context.put_in_scope(field.name.clone(), definition);
+        }
+
+        let self_symbol = metadata.symbol.self_symbol();
+        let def = ScopeDefinition::Variable(
+            self_symbol.clone(),
+            metadata.ref_to_unspecialized_type(),
+        );
+        context.put_in_scope(self_symbol.name().to_owned(), def);
+
+        for method in metadata.method_symbols() {
+            context
+                .put_in_scope(method.name().to_owned(), ScopeDefinition::Function(method));
+        }
+    }
+
 
     fn symbol_resolver(&self) -> SymbolResolution {
         self.context.symbol_resolver(&self.lib_symbols, &self.all_symbols)
@@ -397,52 +392,61 @@ impl StmtVisitor for TypeChecker {
         array: &Expr,
         body: &[Stmt],
     ) -> Analysis {
-        let array_element_type = match self.check_expr(array) {
-            Some(NodeType::Array(of, _)) => NodeType::Pointer(of),
-            Some(NodeType::Instance(instance_symbol, spec)) => {
-                let metadata = self.all_symbols.type_metadata(&instance_symbol).unwrap();
-                if metadata.conforms_to(&Symbol::iterable_symbol()) {
-                    if instance_symbol == Symbol::stdlib("Vec") {
-                        let object_type = spec
-                            .type_for(&instance_symbol.child("T"))
-                            .unwrap()
-                            .specialize(&spec);
-                        NodeType::pointer_to(object_type)
-                    } else if instance_symbol == Symbol::stdlib("Range") {
-                        NodeType::Int
-                    } else {
-                        unimplemented!()
-                    }
-                } else {
-                    let message = format!(
-                        "Type '{}' does not implement Iterable",
-                        instance_symbol.mangled()
-                    );
-                    self.report_error(Diagnostic::error(array, &message));
-                    return Analysis {
-                        guarantees_return: false,
-                    };
-                }
-            }
-            None => {
-                return Analysis {
-                    guarantees_return: false,
-                }
-            }
-            _ => {
-                self.report_error(Diagnostic::error(array, "Cannot iterate"));
-                return Analysis {
-                    guarantees_return: false,
-                };
-            }
+        let iterable_type = if let Some(t) = self.check_expr(array) {
+            t
+        } else {
+            return Analysis {
+                guarantees_return: false,
+            };
         };
 
-        self.context.push_subscope();
-        self.context.define_variable(variable, &array_element_type);
-        let body_analysis = self.check_list(body);
-        self.context.pop_scope();
+        let array_element_type = match iterable_type {
+            NodeType::Array(of, _) => Some(NodeType::Pointer(of)),
+            NodeType::Reference(to) => {
+                if let NodeType::Instance(instance_symbol, spec) = to.as_ref() {
+                    let metadata = self.all_symbols.type_metadata(&instance_symbol).unwrap();
+                    if metadata.conforms_to(&Symbol::iterable_symbol()) {
+                        if instance_symbol == &Symbol::stdlib("Vec") {
+                            let object_type = spec
+                                .type_for(&instance_symbol.child("T"))
+                                .unwrap()
+                                .specialize(&spec);
+                            Some(NodeType::reference_to(object_type))
+                        } else if instance_symbol == &Symbol::stdlib("Range") {
+                            Some(NodeType::Int)
+                        } else {
+                            unimplemented!()
+                        }
+                    } else {
+                        let message = format!(
+                            "Type '{}' does not implement Iterable",
+                            instance_symbol.mangled()
+                        );
+                        self.report_error(Diagnostic::error(array, &message));
+                        return Analysis {
+                            guarantees_return: false,
+                        };
+                    }
+                } else {
+                    None
+                }
+            }
+            _ => None
+        };
 
-        body_analysis
+        if let Some(array_element_type) = array_element_type {
+            self.context.push_subscope();
+            self.context.define_variable(variable, &array_element_type);
+            let body_analysis = self.check_list(body);
+            self.context.pop_scope();
+
+            body_analysis
+        } else {
+            self.report_error(Diagnostic::error(array, "Cannot iterate"));
+            Analysis {
+                guarantees_return: false,
+            }
+        }
     }
 
     fn visit_return_stmt(&mut self, stmt: &Stmt, expr: &Option<Expr>) -> Analysis {
