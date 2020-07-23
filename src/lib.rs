@@ -27,7 +27,7 @@ pub fn run_with_reporter(
     }
     let sym = builder.build_src(source)?;
 
-    let modules = builder.take_modules();
+    let modules = builder.take_program();
 
     codegen::generate(modules, sym.child("main"))?;
 

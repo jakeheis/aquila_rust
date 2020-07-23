@@ -1,6 +1,6 @@
 use super::check;
 use super::expr_checker::*;
-use super::scope::{ContextTracker, ScopeDefinition, ScopeType, SymbolResolution};
+use super::scope::{ContextTracker, ScopeDefinition, ScopeType, SymbolResolution, GenericInfo};
 use crate::diagnostic::*;
 use crate::library::*;
 use crate::parsing::*;
@@ -115,11 +115,11 @@ impl TypeChecker {
 
         let metadata = self.all_symbols.function_metadata(&func_symbol).unwrap();
 
-        let mut restrictions: HashMap<Symbol, Vec<Symbol>> = HashMap::new();
+        let mut restrictions: HashMap<Symbol, Vec<GenericInfo>> = HashMap::new();
         for (gen, trait_name) in &metadata.generic_restrictions {
             restrictions.entry(gen.clone())
                .or_insert(Vec::new())
-               .push(trait_name.clone());   
+               .push(GenericInfo::Conforms(trait_name.clone()));
         }
 
         self.context.current_scope().generic_restrictions = restrictions;
@@ -329,39 +329,72 @@ impl StmtVisitor for TypeChecker {
         Analysis { guarantees_return }
     }
 
-    fn visit_conformance_condition_stmt(
+    fn visit_conditional_compilation_stmt(
         &mut self,
-        type_name: &SymbolicToken,
-        trait_name: &SymbolicToken,
+        condition: &CompilerCondition,
         body: &[Stmt],
     ) -> Analysis {
-        let gen = self.symbol_resolver().resolve_generic(type_name.token.lexeme());
-        if gen.is_none() {
-            self.report_error(Diagnostic::error(type_name, "Unrecognized generic parameter"));
-            return Analysis {
-                guarantees_return: false,
-            };
-        }
-
-        type_name.set_symbol(gen.as_ref().unwrap().clone());
-
-        let trait_metadata = self.all_symbols.trait_metadata(trait_name.token.lexeme());
-        if trait_metadata.is_none() {
-            self.report_error(Diagnostic::error(trait_name, "Unrecognized trait"));
-            return Analysis {
-                guarantees_return: false,
-            };
-        }
-
-        trait_name.set_symbol(trait_metadata.unwrap().symbol.clone());
-
         self.context.push_subscope();
 
-        self
-            .context
-            .current_scope()
-            .generic_restrictions
-            .insert(gen.unwrap(), vec![trait_metadata.unwrap().symbol.clone()]);
+        match condition {
+            CompilerCondition::Conformance(gen_name, trait_name) => {
+                let gen = self.symbol_resolver().resolve_generic(gen_name.token.lexeme());
+                if gen.is_none() {
+                    self.report_error(Diagnostic::error(gen_name, "Unrecognized generic parameter"));
+                    return Analysis {
+                        guarantees_return: false,
+                    };
+                }
+        
+                gen_name.set_symbol(gen.as_ref().unwrap().clone());
+        
+                let trait_metadata = self.all_symbols.trait_metadata(trait_name.token.lexeme());
+                if trait_metadata.is_none() {
+                    self.report_error(Diagnostic::error(trait_name, "Unrecognized trait"));
+                    return Analysis {
+                        guarantees_return: false,
+                    };
+                }
+        
+                trait_name.set_symbol(trait_metadata.unwrap().symbol.clone());
+
+                let info = GenericInfo::Conforms(trait_metadata.unwrap().symbol.clone());
+                self
+                    .context
+                    .current_scope()
+                    .generic_restrictions
+                    .insert(gen.unwrap(), vec![info]);
+            }
+            CompilerCondition::Equality(gen_name, type_name, node_type) => {
+                let gen = self.symbol_resolver().resolve_generic(gen_name.token.lexeme());
+                if gen.is_none() {
+                    self.report_error(Diagnostic::error(gen_name, "Unrecognized generic parameter"));
+                    return Analysis {
+                        guarantees_return: false,
+                    };
+                }
+        
+                gen_name.set_symbol(gen.as_ref().unwrap().clone());
+
+                match self.symbol_resolver().resolve_explicit_type_or_err(type_name) {
+                    Ok(ty) => {
+                        node_type.replace(Some(ty.clone()));
+                        let info = GenericInfo::Is(ty);
+                        self
+                            .context
+                            .current_scope()
+                            .generic_restrictions
+                            .insert(gen.unwrap(), vec![info]);
+                    },
+                    Err(diag) => {
+                        self.report_error(diag);
+                        return Analysis {
+                            guarantees_return: false,
+                        };
+                    },
+                }
+            }
+        };
 
         self.check_list(body);
         self.context.pop_scope();

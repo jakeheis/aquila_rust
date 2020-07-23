@@ -49,11 +49,23 @@ pub type Memory {
 
 }
 
-pub builtin def print(obj: any);
-
-pub def print_object[T](obj: T) where T: Writable {
+pub def print[T](obj: T) {
     let buffer = StringBuffer.new();
-    obj.write(@buffer);
+    #if T: Writable  {
+        obj.write(@buffer);
+    }
+    #if T == int {
+        buffer.push_int(obj);
+    }
+    #if T == double {
+        buffer.push_double(obj);
+    }
+    #if T == bool {
+        buffer.push_bool(obj);
+    }
+    #if T == ptr byte {
+        buffer.push(obj);
+    }
     Stream.stdout().writeln(@buffer.content);
 }
 
@@ -66,9 +78,9 @@ pub def fatal_error(message: ptr byte, #caller) {
 }
 
 pub def fatal_error_location(message: ptr byte, location: ptr byte) {
-    print(String.literal("Fatal error: ").append_literal(message).storage);
-    print("");
-    print(location);
+    print[ptr byte](String.literal("Fatal error: ").append_literal(message).storage);
+    print[ptr byte]("");
+    print[ptr byte](location);
     exit(1);
 }
 
@@ -216,7 +228,7 @@ pub type Vec[T] {
 impl Vec: Writable {
     def write(buffer: ref StringBuffer) {
         buffer.push("Vec");
-        #if(T: Writable) {
+        #if T: Writable {
             buffer.push("(");
             let first = true;
             for obj in self {
@@ -235,7 +247,7 @@ impl Vec: Iterable {}
 
 impl Vec: Freeable {
     def free() {
-        #if(T: AnyObject) {
+        #if T: AnyObject {
             for obj in self {
                 obj.deinit();
             }
@@ -279,7 +291,7 @@ impl Optional: Writable {
     def write(buffer: ref StringBuffer) {
         if _is_some {
             buffer.push("Some");
-            #if(T: Writable) {
+            #if T: Writable {
                 buffer.push("(");
                 object.write(buffer);
                 buffer.push(")");

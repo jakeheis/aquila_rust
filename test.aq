@@ -1,6 +1,6 @@
 
 def take_ref(obj: ref Vec[int]) {
-  print(obj.count);
+  print[int](obj.count);
 }
 
 // print_object[Vec[int]](vector);
@@ -12,14 +12,16 @@ take_ref(@obj);
 // print(maybe_str);
 
 let maybe_int = Optional[int].some(5);
-print(maybe_int);
+print[Optional[int]](maybe_int);
 
 let vec = Vec[String].new();
 vec.push(String.literal("first"));
 vec.push(String.literal("second"));
 vec.push(String.literal("third"));
 
-print(vec);
+print[Vec[String]](vec);
+
+print[int](4);
 
 // let
 

@@ -1,21 +1,21 @@
 use super::ir::*;
 use super::specialize::FinalSpecializationMap;
-use crate::library::{GenericSpecialization, Module, NodeType};
+use crate::library::{GenericSpecialization, NodeType, Program};
 use std::cell::{Cell, RefCell};
 use std::fs::File;
 use std::io::Write;
 
 pub struct CodeWriter {
-    programs: Vec<Module>,
+    program: Program,
     file: RefCell<File>,
     indent: Cell<u32>,
     spec_map: FinalSpecializationMap,
 }
 
 impl CodeWriter {
-    pub fn new(programs: Vec<Module>, file: File, spec_map: FinalSpecializationMap) -> Self {
+    pub fn new(program: Program, file: File, spec_map: FinalSpecializationMap) -> Self {
         CodeWriter {
-            programs,
+            program,
             file: RefCell::new(file),
             indent: Cell::new(0),
             spec_map,
@@ -40,7 +40,7 @@ impl CodeWriter {
     }
 
     fn write_structs(&self, prototype: bool) {
-        let structures = self.programs.iter().flat_map(|p| &p.structures);
+        let structures = self.program.modules.iter().flat_map(|p| &p.structures);
         for struct_def in structures {
             if let Some(specs) = self.spec_map.specs_for(&struct_def.name) {
                 for spec in specs {
@@ -69,7 +69,7 @@ impl CodeWriter {
     }
 
     fn write_functions(&self, prototype: bool) {
-        let functions = self.programs.iter().flat_map(|p| &p.functions);
+        let functions = self.program.modules.iter().flat_map(|p| &p.functions);
         for func in functions {
             if let Some(specs) = self.spec_map.specs_for(&func.name) {
                 for spec in specs {
@@ -132,14 +132,9 @@ impl CodeWriter {
 
                 self.writeln("}");
             }
-            IRStatement::ConformanceCheck(gen_sym, trait_sym, block) => {
-                let resolved_type = spec.type_for(gen_sym).unwrap();
-                if let NodeType::Instance(type_sym, _) = resolved_type {
-                    let module = self.programs.iter().find(|m| &m.name == type_sym.lib()).unwrap();
-                    let metadata = module.symbols.get_type_metadata(type_sym).unwrap();
-                    if metadata.conforms_to(trait_sym) {
-                        self.write_block(block, spec);
-                    }
+            IRStatement::CompilationCondition(condition, block) => {
+                if condition.satisfied_by(spec, &self.program.symbols) {
+                    self.write_block(block, spec);
                 }
             }
             IRStatement::Execute(expr) => {

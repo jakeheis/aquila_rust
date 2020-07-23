@@ -96,10 +96,16 @@ impl IRWriter {
         self.add_stmt(loop_stmt);
     }
 
-    pub fn end_conformance_check(&mut self, type_name: Symbol, trait_name: Symbol) {
+    pub fn end_conformance_check(&mut self, gen_name: Symbol, trait_name: Symbol) {
         let block = self.blocks.pop().unwrap();
-        let check = IRStatement::ConformanceCheck(type_name, trait_name, block);
-        self.add_stmt(check);
+        let check = IRCompilationCondition::ConformanceCheck(gen_name, trait_name);
+        self.add_stmt(IRStatement::CompilationCondition(check, block));
+    }
+
+    pub fn end_type_equality_check(&mut self, gen_name: Symbol, equal_type: NodeType) {
+        let block = self.blocks.pop().unwrap();
+        let check = IRCompilationCondition::TypeEqualityCheck(gen_name, equal_type);
+        self.add_stmt(IRStatement::CompilationCondition(check, block));
     }
 
     pub fn declare_local(&mut self, symbol: Symbol, var_type: NodeType) -> IRVariable {

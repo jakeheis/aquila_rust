@@ -61,7 +61,7 @@ impl<'a> FreeWriter<'a> {
                     hit_break = true;
                     done = true;
                 }
-                IRStatement::ConformanceCheck(_, _, body) => {
+                IRStatement::CompilationCondition(_, body) => {
                     let mut free_at_return = self.free_at_return.clone();
                     let mut free_at_break = self.free_at_break.clone();
 

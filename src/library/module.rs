@@ -100,7 +100,16 @@ impl ModuleBuilder {
         self.build_src(src).expect("Standard library build should succeed");
     }
 
-    pub fn take_modules(self) -> Vec<Module> {
-        self.modules
+    pub fn take_program(self) -> Program {
+        let ModuleBuilder { modules,  symbol_store, .. } = self;
+        Program {
+            modules,
+            symbols: symbol_store
+        }
     }
+}
+
+pub struct Program {
+    pub modules: Vec<Module>,
+    pub symbols: SymbolStore
 }

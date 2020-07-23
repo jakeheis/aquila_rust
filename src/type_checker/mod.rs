@@ -10,16 +10,6 @@ mod check {
     use crate::diagnostic::*;
     use crate::library::*;
     use crate::parsing::*;
-    use crate::source::ContainsSpan;
-
-    pub fn type_mismatch<T: ContainsSpan>(
-        span: &T,
-        given: &NodeType,
-        expected: &NodeType,
-    ) -> Diagnostic {
-        let message = format!("Expected {}, got {}", expected, given);
-        Diagnostic::error(span, &message)
-    }
 
     pub fn ensure_no_amibguity(expr: &Expr, node_type: &NodeType) -> DiagnosticResult<()> {
         if node_type.contains_ambiguity() {
@@ -37,7 +27,8 @@ mod check {
         if given.matches(expected) {
             Ok(())
         } else {
-            Err(type_mismatch(expr, given, expected))
+            let message = format!("Expected {}, got {}", expected, given);
+            Err(Diagnostic::error(expr, &message))
         }
     }
 

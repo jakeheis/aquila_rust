@@ -23,7 +23,12 @@ impl SpecializationRecord {
             for record in records {
                 println!("  {} -- {}", record.target, record.specialization);
                 for cond in &record.conditions {
-                    println!("    #if {}: {}", cond.gen_sym.unique_id(), cond.trait_sym.unique_id());
+                    match cond {
+                        IRCompilationCondition::ConformanceCheck(gen_sym, trait_sym) =>
+                            println!("    #if {}: {}", gen_sym.unique_id(), trait_sym.unique_id()),
+                        IRCompilationCondition::TypeEqualityCheck(gen_sym, node_type) =>
+                            println!("    #if {} == {}", gen_sym.unique_id(), node_type),
+                    }
                 }
             }
         }
@@ -41,18 +46,12 @@ impl SpecializationRecord {
 struct SpecRecordEntry {
     target: Symbol,
     specialization: GenericSpecialization,
-    conditions: Vec<PropagateCondition>,
-}
-
-#[derive(Clone, Debug)]
-struct PropagateCondition {
-    gen_sym: Symbol,
-    trait_sym: Symbol,
+    conditions: Vec<IRCompilationCondition>,
 }
 
 pub struct SpecializationRecorder<'a> {
     record: &'a mut SpecializationRecord,
-    conditions: Vec<PropagateCondition>,
+    conditions: Vec<IRCompilationCondition>,
 }
 
 impl<'a> SpecializationRecorder<'a> {
@@ -91,11 +90,8 @@ impl<'a> SpecializationRecorder<'a> {
                 self.visit_block(context, if_block);
                 self.visit_block(context, else_block);
             }
-            IRStatement::ConformanceCheck(gen_sym, trait_sym, block) => {
-                self.conditions.push(PropagateCondition {
-                    gen_sym: gen_sym.clone(),
-                    trait_sym: trait_sym.clone()
-                });
+            IRStatement::CompilationCondition(condition, block) => {
+                self.conditions.push(condition.clone());
                 self.visit_block(context, block);
                 self.conditions.pop();
             }
@@ -205,19 +201,19 @@ impl FinalSpecializationMap {
 }
 
 pub struct SpecializationPropagator<'a> {
-    libs: &'a [Module],
+    program: &'a Program,
     visited: HashSet<String>,
     map: FinalSpecializationMap,
 }
 
 impl<'a> SpecializationPropagator<'a> {
-    pub fn propagate(libs: &[Module], main: Symbol) -> FinalSpecializationMap {
-        // for lib in libs {
-        //     lib.specialization_record.dump();
+    pub fn propagate(program: &'a Program, main: Symbol) -> FinalSpecializationMap {
+        // for module in &program.modules {
+        //     module.specialization_record.dump();
         // }
 
         let mut prop = SpecializationPropagator {
-            libs,
+            program,
             visited: HashSet::new(),
             map: FinalSpecializationMap::new(),
         };
@@ -239,7 +235,7 @@ impl<'a> SpecializationPropagator<'a> {
         trace!("Adding function spec {} to {}", current_spec, cur);
         self.map.add_spec(cur.clone(), current_spec.clone());
 
-        let lib = self.libs.iter().find(|l| &l.name == cur.lib()).unwrap();
+        let lib = self.program.modules.iter().find(|l| &l.name == cur.lib()).unwrap();
 
         if let Some(calls) = lib.specialization_record.call_map.get(cur) {
             let calls = calls.clone();
@@ -287,7 +283,7 @@ impl<'a> SpecializationPropagator<'a> {
 
         self.map.add_spec(cur.clone(), current_spec.clone());
 
-        if let Some(type_metadata) = self.type_metadata(cur) {
+        if let Some(type_metadata) = self.program.symbols.type_metadata(cur) {
             let fields = type_metadata.fields.clone();
             for field in &fields {
                 if let NodeType::Instance(target, field_spec) = &field.var_type {
@@ -300,28 +296,13 @@ impl<'a> SpecializationPropagator<'a> {
         trace!("Finished function {}", cur);
     }
 
-    fn should_propagate(&self, current_spec: &GenericSpecialization, conditions: &[PropagateCondition]) -> bool {
+    fn should_propagate(&self, current_spec: &GenericSpecialization, conditions: &[IRCompilationCondition]) -> bool {
         for condition in conditions {
-            let resolved_type = current_spec.type_for(&condition.gen_sym).unwrap();
-            if let NodeType::Instance(type_sym, ..) = resolved_type {
-                let metadata = self.type_metadata(&type_sym).unwrap();
-                if !metadata.conforms_to(&condition.trait_sym) {
-                    return false;
-                }
-            } else {
+            if !condition.satisfied_by(current_spec, &self.program.symbols) {
                 return false;
             }
         }
         true
-    }
-
-    fn type_metadata(&self, symbol: &Symbol) -> Option<&TypeMetadata> {
-        for lib in self.libs {
-            if let Some(metadata) = lib.symbols.get_type_metadata(symbol) {
-                return Some(metadata);
-            }
-        }
-        None
     }
 }
 

@@ -265,18 +265,21 @@ impl StmtVisitor for ASTPrinter {
         })
     }
 
-    fn visit_conformance_condition_stmt(
+    fn visit_conditional_compilation_stmt(
         &mut self,
-        type_name: &SymbolicToken,
-        trait_name: &SymbolicToken,
+        condition: &CompilerCondition,
         body: &[Stmt],
     ) {
-        let message = format!(
-            "Conformance(type: {}, trait: {})",
-            type_name.token.lexeme(),
-            trait_name.token.lexeme()
-        );
+        let mut message = "Condition(".to_owned();
+        match condition {
+            CompilerCondition::Conformance(gen_name, trait_name) => 
+                message += &format!("{}: {}", gen_name.token.lexeme(), trait_name.token.lexeme()),
+            CompilerCondition::Equality(gen_name, type_name, _) =>
+                message += &format!("{} == {}", gen_name.token.lexeme(), type_name.span().lexeme()),
+        }
+        message += ")";
         self.write_ln(&message);
+
         self.indent(|visitor| {
             body.iter().for_each(|s| s.accept(visitor));
         });

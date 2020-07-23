@@ -191,17 +191,26 @@ impl StmtVisitor for IRGen {
         }
     }
 
-    fn visit_conformance_condition_stmt(
+    fn visit_conditional_compilation_stmt(
         &mut self,
-        type_name: &SymbolicToken,
-        trait_name: &SymbolicToken,
+        condition: &CompilerCondition,
         body: &[Stmt],
     ) {
         self.writer.start_block();
         self.gen_stmts(body);
-        self
-            .writer
-            .end_conformance_check(type_name.get_symbol().unwrap(), trait_name.get_symbol().unwrap())
+
+        match condition {
+            CompilerCondition::Conformance(gen_token, trait_token) =>
+                self
+                    .writer
+                    .end_conformance_check(gen_token.get_symbol().unwrap(), trait_token.get_symbol().unwrap()),
+            CompilerCondition::Equality(gen_token, _, resolved_type) => {
+                let resolved_type = resolved_type.borrow().as_ref().unwrap().clone();
+                self
+                    .writer
+                    .end_type_equality_check(gen_token.get_symbol().unwrap(), resolved_type);
+            }
+        }
     }
 
     fn visit_while_stmt(&mut self, condition: &Expr, body: &[Stmt]) {

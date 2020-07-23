@@ -1,5 +1,5 @@
 use super::check;
-use super::scope::{ScopeDefinition, SymbolResolution};
+use super::scope::{ScopeDefinition, SymbolResolution, GenericInfo};
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::library::*;
@@ -15,6 +15,26 @@ pub struct ExprChecker<'a> {
 impl<'a> ExprChecker<'a> {
     pub fn new(lib: Symbol, resolver: SymbolResolution<'a>, all_symbols: &'a SymbolStore) -> Self {
         ExprChecker { lib, resolver, all_symbols }
+    }
+
+    fn set_expr_type(&self, expr: &Expr, node_type: NodeType) -> DiagnosticResult<NodeType> {
+        let mut expr_type = node_type.clone();
+        if let NodeType::Instance(type_sym, _) = node_type {
+            if self.all_symbols.type_metadata(&type_sym).is_none() {
+                for scope in self.resolver.scopes.iter().rev() {
+                    if let Some(restrictions) = scope.generic_restrictions.get(&type_sym) {
+                        for restrict in restrictions {
+                            if let GenericInfo::Is(other) = restrict {
+                                expr_type = other.clone();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        expr.set_type(expr_type)
     }
 
     fn retrieve_method<S: ContainsSpan>(
@@ -59,12 +79,19 @@ impl<'a> ExprChecker<'a> {
             }
         } else {
             for scope in self.resolver.scopes.iter().rev() {
-                if let Some(restrict) = scope.generic_restrictions.get(target_symbol) {
-                    for trait_name in restrict {
-                        let trait_metadata = self.all_symbols.trait_metadata_symbol(trait_name).unwrap();
-                        if trait_metadata.function_requirements.iter().any(|m| m == method) {
-                            let sym = trait_metadata.symbol.child(method);
-                            return Ok((sym, specialization.clone()));
+                if let Some(restrictions) = scope.generic_restrictions.get(target_symbol) {
+                    for restriction in restrictions {
+                        match restriction {
+                            GenericInfo::Conforms(trait_sym) => {
+                                let trait_metadata = self.all_symbols.trait_metadata_symbol(trait_sym).unwrap();
+                                if trait_metadata.function_requirements.iter().any(|m| m == method) {
+                                    let sym = trait_metadata.symbol.child(method);
+                                    return Ok((sym, specialization.clone()));
+                                }
+                            }
+                            GenericInfo::Is(restricted_type) => {
+                                return self.retrieve_method(span, restricted_type, method);
+                            }
                         }
                     }
                 }
@@ -163,9 +190,14 @@ impl<'a> ExprChecker<'a> {
                     let mut implements = false;
                     for scope in self.resolver.scopes.iter().rev() {
                         let generic_restrictions = &scope.generic_restrictions;
-                        let known_conformances = generic_restrictions.get(type_sym).map(|g| g.as_slice()).unwrap_or(&[]);
-                        if known_conformances.contains(trait_symbol) {
-                            implements = true;
+                        let gen_infos = generic_restrictions.get(type_sym).map(|g| g.as_slice()).unwrap_or(&[]);
+                        for gen_info in gen_infos {
+                            if let GenericInfo::Conforms(trait_sym) = gen_info {
+                                if trait_sym == trait_symbol {
+                                    implements = true;
+                                    break;
+                                }
+                            }
                         }
                     }
 
@@ -220,7 +252,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
             .iter()
             .find(|e| e.0.matches(&lhs_type) && e.1.matches(&rhs_type))
         {
-            expr.set_type(matching_entry.2.clone())
+            self.set_expr_type(expr, matching_entry.2.clone())
         } else {
             let message = format!("Cannot {} on {} and {}", op.lexeme(), lhs_type, rhs_type);
             Err(Diagnostic::error(&Span::join(lhs, rhs), &message))
@@ -233,18 +265,18 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
         check::ensure_no_amibguity(expr, &operand_type)?;
 
         if let TokenKind::Ampersand = op.kind {
-            let boxed_type = Box::new(operand_type.clone());
-            return expr.set_type(NodeType::Pointer(boxed_type));
+            let expr_type = NodeType::pointer_to(operand_type.clone());
+            return self.set_expr_type(expr, expr_type);
         }
 
         if let TokenKind::At = op.kind {
-            let boxed_type = Box::new(operand_type.clone());
-            return expr.set_type(NodeType::Reference(boxed_type));
+            let expr_type = NodeType::reference_to(operand_type.clone());
+            return self.set_expr_type(expr, expr_type);
         }
 
         if let TokenKind::Star = op.kind {
             return match operand_type {
-                NodeType::Pointer(inner) => expr.set_type((*inner).clone()),
+                NodeType::Pointer(inner) | NodeType::Reference(inner) => self.set_expr_type(expr, (*inner).clone()),
                 _ => {
                     let message = format!("Cannot dereference object of type {}", operand_type);
                     Err(Diagnostic::error(operand, &message))
@@ -259,7 +291,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
         };
 
         if entries.iter().find(|e| e.matches(&operand_type)).is_some() {
-            expr.set_type(operand_type.clone())
+            self.set_expr_type(expr, operand_type.clone())
         } else {
             let message = format!("Cannot {} on {}", op.lexeme(), operand_type);
             Err(Diagnostic::error(operand, &message))
@@ -363,7 +395,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
             check::check_type_match(&call.arguments[index], &arg, &param)?;
         }
 
-        expr.set_type(function_type.return_type)
+        self.set_expr_type(expr, function_type.return_type)
     }
 
     fn visit_field_expr(
@@ -392,7 +424,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
             if let Some(field) = type_metadata.field_named(field_name) {
                 if field.public || check::symbol_accessible(&type_symbol, &self.lib) {
                     field_token.set_symbol(type_symbol.child(&field.name));
-                    expr.set_type(field.var_type.specialize(&specialization))
+                    self.set_expr_type(expr, field.var_type.specialize(&specialization))
                 } else {
                     Err(Diagnostic::error(field_token, "Field is private"))
                 }
@@ -422,7 +454,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
             TokenKind::StringLiteral => NodeType::pointer_to(NodeType::Byte),
             _ => panic!(),
         };
-        expr.set_type(node_type)
+        self.set_expr_type(expr, node_type)
     }
 
     fn visit_variable_expr(&mut self, expr: &Expr, name: &SpecializedToken) -> Self::ExprResult {
@@ -432,7 +464,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
                     return Err(Diagnostic::error(expr, "Cannot specialize variable"));
                 }
                 name.set_symbol(sym);
-                expr.set_type(var_type.clone())
+                self.set_expr_type(expr, var_type.clone())
             }
             Some(ScopeDefinition::Function(..)) => {
                 Err(Diagnostic::error(expr, "Cannot use function as variable"))
@@ -441,7 +473,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
                 Ok(NodeType::Instance(symbol, spec)) => {
                     trace!(target: "type_checker", "Treating variable as metatype of {}", symbol);
                     name.set_symbol(symbol.clone());
-                    expr.set_type(NodeType::Metatype(symbol.clone(), spec.clone()))
+                    self.set_expr_type(expr, NodeType::Metatype(symbol.clone(), spec.clone()))
                 }
                 Ok(_) => Err(Diagnostic::error(expr, "Type not allowed here")),
                 Err(diag) => Err(diag),
@@ -453,7 +485,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
     fn visit_array_expr(&mut self, expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
         if elements.is_empty() {
             let node_type = NodeType::Array(Box::new(NodeType::Ambiguous), 0);
-            return expr.set_type(node_type);
+            return self.set_expr_type(expr, node_type);
         }
 
         let mut element_types: Vec<NodeType> = Vec::new();
@@ -469,27 +501,25 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
             };
 
         for (index, element_type) in element_types.iter().enumerate() {
-            if !element_type.matches(&expected_type) {
-                return Err(check::type_mismatch(
-                    &elements[index],
-                    &element_type,
-                    &expected_type,
-                ));
+            if let Err(diag) = check::check_type_match(&elements[index], element_type, &expected_type) {
+                return Err(diag);
             }
         }
 
         let node_type = NodeType::Array(Box::new(expected_type.clone()), elements.len());
-        expr.set_type(node_type)
+        self.set_expr_type(expr, node_type)
     }
 
     fn visit_subscript_expr(&mut self, expr: &Expr, target: &Expr, arg: &Expr) -> Self::ExprResult {
         let target_type = target.accept(self)?;
         let arg_type = arg.accept(self)?;
 
-        match (target_type, arg_type) {
-            (NodeType::Array(inside, _), NodeType::Int) => expr.set_type((*inside).clone()),
-            (NodeType::Array(..), other) => Err(check::type_mismatch(arg, &other, &NodeType::Int)),
-            _ => Err(Diagnostic::error(expr, "Can't subscript into non-array")),
+        check::check_type_match(arg, &arg_type, &NodeType::Int)?;
+
+        if let NodeType::Array(inside, _) = target_type {
+            self.set_expr_type(expr, (*inside).clone())
+        } else {
+            Err(Diagnostic::error(expr, "Can't subscript into non-array"))
         }
     }
 
@@ -500,7 +530,7 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
         value: &Expr,
     ) -> Self::ExprResult {
         value.accept(self)?;
-        expr.set_type(self.resolver.resolve_explicit_type_or_err(explicit_type)?)
+        self.set_expr_type(expr, self.resolver.resolve_explicit_type_or_err(explicit_type)?)
     }
 }
 

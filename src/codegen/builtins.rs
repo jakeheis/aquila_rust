@@ -14,7 +14,6 @@ impl Builtin {
             "stdlib$Memory$Meta$size" => Some(Builtin::size()),
             "stdlib$ptr_offset" => Some(Builtin::ptr_offset()),
             "stdlib$_read_line" => Some(Builtin::read_line()),
-            "stdlib$print" => Some(Builtin::print()),
             _ => None,
         }
     }
@@ -37,13 +36,6 @@ impl Builtin {
         Builtin {
             write: Some(write_read_line),
             special_call: None,
-        }
-    }
-
-    fn print() -> Self {
-        Builtin {
-            write: None,
-            special_call: Some(print_call),
         }
     }
 }
@@ -243,42 +235,4 @@ fn size_call(
         expr_type: expr_type,
     };
     IRExpr::call_extern("sizeof", vec![arg], NodeType::Double)
-}
-
-fn print_call(
-    _writer: &mut IRWriter,
-    _func_symbol: &Symbol,
-    _spec: &GenericSpecialization,
-    mut args: Vec<IRExpr>,
-) -> IRExpr {
-    let mut arg = args.remove(0);
-
-    if let NodeType::Reference(to) = &arg.expr_type {
-        let to = *to.clone();
-        arg = IRExpr {
-            kind: IRExprKind::Unary(IRUnaryOperator::Dereference, Box::new(arg)),
-            expr_type: to,
-        };
-    }
-
-    let node_type = arg.expr_type.clone();
-    
-    if let NodeType::Instance(..) = &node_type {
-        let print_object = Symbol::stdlib("print_object");
-        let spec =
-            GenericSpecialization::new(&print_object, &["T".to_owned()], vec![node_type.clone()]);
-        IRExpr::call(print_object, spec.clone(), vec![arg], NodeType::Void)
-    } else {
-        let format_specificer = match node_type {
-            NodeType::Int | NodeType::Bool => "%i",
-            NodeType::Double => "%f",
-            node_type if node_type.is_pointer_to(NodeType::Byte) => "%s",
-            _ => unreachable!(),
-        };
-
-        let format_line = format!("{}\\n", format_specificer);
-        let stdout = IRExpr::int_literal("1");
-        let format_expr = IRExpr::string_literal(&format_line);
-        IRExpr::call_extern("dprintf", vec![stdout, format_expr, arg], NodeType::Void)
-    }
 }

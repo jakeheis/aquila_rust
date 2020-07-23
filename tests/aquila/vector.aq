@@ -4,47 +4,47 @@ my_vec.push(4);
 my_vec.push(7);
 
 /// -> 8
-print(*my_vec.get(1) * 2);
+print[int](*my_vec.get(1) * 2);
 
 /// -> 5
 my_vec.replace(0, 5);
-print(*my_vec.get(0));
+print[int](*my_vec.get(0));
 
 /// -> 5
 /// -> 4
 /// -> 7
 for num in @my_vec {
-    print(num);
+    print[int](*num);
 }
 
 /// -> 7
-print(my_vec.pop());
+print[int](my_vec.pop());
 /// -> 4
-print(my_vec.pop());
+print[int](my_vec.pop());
 
 let vec_of_vecs: Vec[Vec[bool]] = Vec[Vec[bool]].new();
 vec_of_vecs.push(Vec[bool].new());
 vec_of_vecs.push(Vec[bool].new());
 
 /// -> Vec(Vec, Vec)
-print(vec_of_vecs);
+print[Vec[Vec[bool]]](vec_of_vecs);
 
 (*vec_of_vecs.get(1)).push(false);
 (*vec_of_vecs.get(1)).push(true);
 
-/// -> 1
-print(*(*vec_of_vecs.get(1)).get(1));
+/// -> true
+print[bool](*(*vec_of_vecs.get(1)).get(1));
 
 /// -> 2
-print(vec_of_vecs.count);
+print[int](vec_of_vecs.count);
 
 def get_count(vec: ref Vec[Vec[bool]]) {
-    print(vec.count);
+    print[int](vec.count);
 }
 
 /// -> 2
 get_count(@vec_of_vecs);
 
 /// error
-print(my_vec.element_size);
+print[int](my_vec.element_size);
 /// end

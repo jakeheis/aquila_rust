@@ -6,6 +6,7 @@ use crate::lexing::*;
 use crate::library::Lib;
 use log::trace;
 use std::rc::Rc;
+use std::cell::RefCell;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -127,7 +128,7 @@ impl Parser {
         } else if self.matches(TokenKind::If) {
             self.if_stmt()
         } else if self.matches(TokenKind::CompileTimeIf) {
-            self.conformance_condition()
+            self.conditional_compilation()
         } else if self.matches(TokenKind::While) {
             self.while_stmt()
         } else if self.matches(TokenKind::For) {
@@ -478,27 +479,35 @@ impl Parser {
         ))
     }
 
-    fn conformance_condition(&mut self) -> DiagnosticResult<Stmt> {
+    fn conditional_compilation(&mut self) -> DiagnosticResult<Stmt> {
         let if_span = self.previous().span.clone();
 
-        self.consume(TokenKind::LeftParen, "Expect '(' after #if")?;
-
-        let type_name = self
-            .consume(TokenKind::Identifier, "Expect type name")?
-            .clone();
-        self.consume(TokenKind::Colon, "Expect ':' after type name")?;
-        let trait_name = self
-            .consume(TokenKind::Identifier, "Expect trait name")?
+        let generic_name = self
+            .consume(TokenKind::Identifier, "Expect generic name")?
             .clone();
 
-        self.consume(TokenKind::RightParen, "Expect ')' after condition")?;
+        let condition = if self.matches(TokenKind::Colon) {
+            let trait_name = self
+                .consume(TokenKind::Identifier, "Expect trait name")?
+                .clone();
+            CompilerCondition::Conformance(SymbolicToken::new(generic_name), SymbolicToken::new(trait_name))
+        } else if self.matches(TokenKind::EqualEqual) {
+            let check_name = self.parse_explicit_type()?;
+            CompilerCondition::Equality(
+                SymbolicToken::new(generic_name), 
+                check_name,
+                RefCell::new(None),
+            )
+        } else {
+            return Err(Diagnostic::error(self.current(), "Unrecognized compilation condition"));
+        };
 
         self.consume(TokenKind::LeftBrace, "Expect '{' after condition")?;
         let body = self.block();
         let end_brace = self.consume(TokenKind::RightBrace, "Expect '}' after if body")?;
 
-        Ok(Stmt::conformance_condition(
-            if_span, type_name, trait_name, body, end_brace,
+        Ok(Stmt::conditional_compilation(
+            if_span, condition, body, end_brace,
         ))
     }
 

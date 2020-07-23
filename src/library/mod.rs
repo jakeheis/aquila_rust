@@ -8,7 +8,7 @@ mod symbol_table;
 pub use metadata::{
     FunctionKind, FunctionMetadata, GenericSpecialization, TraitMetadata, TypeMetadata, VarMetadata
 };
-pub use module::{Module, ModuleBuilder};
+pub use module::{Module, ModuleBuilder, Program};
 pub use node_type::{FunctionType, NodeType};
 pub use symbol_table::{Symbol, SymbolTable, SymbolStore};
 

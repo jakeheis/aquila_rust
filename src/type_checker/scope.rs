@@ -33,11 +33,16 @@ pub enum ScopeDefinition {
     // GenericType(GenericParameterMetadata)
 }
 
+pub enum GenericInfo {
+    Conforms(Symbol),
+    Is(NodeType),
+}
+
 pub struct Scope {
     pub id: Symbol,
     definitions: HashMap<String, ScopeDefinition>,
     pub scope_type: ScopeType,
-    pub generic_restrictions: HashMap<Symbol, Vec<Symbol>>,
+    pub generic_restrictions: HashMap<Symbol, Vec<GenericInfo>>,
 }
 
 impl Scope {

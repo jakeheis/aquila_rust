@@ -171,11 +171,17 @@ impl ContainsSpan for LocalVariableDecl {
 }
 
 #[derive(Debug)]
+pub enum CompilerCondition {
+    Conformance(SymbolicToken, SymbolicToken),
+    Equality(SymbolicToken, ExplicitType, RefCell<Option<NodeType>>),
+}
+
+#[derive(Debug)]
 pub enum StmtKind {
     LocalVariableDecl(LocalVariableDecl),
     Assignment(Box<Expr>, Box<Expr>),
     IfStmt(Expr, Vec<Stmt>, Vec<Stmt>),
-    ConformanceConditionStmt(SymbolicToken, SymbolicToken, Vec<Stmt>),
+    ConditionalCompilationStmt(CompilerCondition, Vec<Stmt>),
     WhileStmt(Expr, Vec<Stmt>),
     ForStmt(SymbolicToken, Expr, Vec<Stmt>),
     ReturnStmt(Option<Expr>),
@@ -201,8 +207,8 @@ impl Stmt {
             StmtKind::IfStmt(condition, body, else_body) => {
                 visitor.visit_if_stmt(&condition, &body, &else_body)
             }
-            StmtKind::ConformanceConditionStmt(type_name, trait_name, body) => {
-                visitor.visit_conformance_condition_stmt(type_name, trait_name, &body)
+            StmtKind::ConditionalCompilationStmt(condition, body) => {
+                visitor.visit_conditional_compilation_stmt(condition, &body)
             }
             StmtKind::WhileStmt(condition, body) => visitor.visit_while_stmt(condition, &body),
             StmtKind::ForStmt(variable, array, body) => {
@@ -248,18 +254,16 @@ impl Stmt {
         Stmt::new(StmtKind::IfStmt(condition, body, else_body), span)
     }
 
-    pub fn conformance_condition(
+    pub fn conditional_compilation(
         if_span: Span,
-        type_name: Token,
-        trait_name: Token,
+        condition: CompilerCondition,
         body: Vec<Stmt>,
         end_brace: &Token,
     ) -> Self {
         let span = Span::join(&if_span, end_brace);
         Stmt::new(
-            StmtKind::ConformanceConditionStmt(
-                SymbolicToken::new(type_name), 
-                SymbolicToken::new(trait_name), 
+            StmtKind::ConditionalCompilationStmt(
+                condition,
                 body
             ),
             span,
@@ -326,10 +330,9 @@ pub trait StmtVisitor {
         else_body: &[Stmt],
     ) -> Self::StmtResult;
 
-    fn visit_conformance_condition_stmt(
+    fn visit_conditional_compilation_stmt(
         &mut self,
-        type_name: &SymbolicToken,
-        trait_name: &SymbolicToken,
+        condition: &CompilerCondition,
         body: &[Stmt],
     ) -> Self::StmtResult;
 

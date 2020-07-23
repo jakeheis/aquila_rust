@@ -1,4 +1,4 @@
-use crate::library::{GenericSpecialization, NodeType, Symbol, VarMetadata, TypeMetadata};
+use crate::library::{GenericSpecialization, NodeType, Symbol, VarMetadata, TypeMetadata, SymbolStore};
 
 #[derive(Debug)]
 pub struct IRStructure {
@@ -48,6 +48,32 @@ impl IRVariable {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum IRCompilationCondition {
+    ConformanceCheck(Symbol, Symbol),
+    TypeEqualityCheck(Symbol, NodeType),
+}
+
+impl IRCompilationCondition {
+    pub fn satisfied_by(&self, spec: &GenericSpecialization, store: &SymbolStore) -> bool {
+        match self {
+            IRCompilationCondition::ConformanceCheck(gen_sym, trait_sym) => {
+                let resolved_type = spec.type_for(gen_sym).unwrap();
+                if let NodeType::Instance(type_sym, ..) = resolved_type {
+                    let metadata = store.type_metadata(&type_sym).unwrap();
+                    metadata.conforms_to(trait_sym)
+                } else {
+                    false
+                }
+            }
+            IRCompilationCondition::TypeEqualityCheck(gen_sym, node_type) => {
+                let resolved_type = spec.type_for(gen_sym).unwrap();
+                resolved_type.matches(node_type)
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum IRStatement {
     DeclLocal(IRVariable),
@@ -56,7 +82,7 @@ pub enum IRStatement {
     Condition(IRExpr, Vec<IRStatement>, Vec<IRStatement>),
     Execute(IRExpr),
     Return(Option<IRExpr>),
-    ConformanceCheck(Symbol, Symbol, Vec<IRStatement>),
+    CompilationCondition(IRCompilationCondition, Vec<IRStatement>),
     Break,
 }
 
