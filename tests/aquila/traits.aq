@@ -8,7 +8,7 @@ type Person {
 
 impl Person: Greets {
     def greet() {
-        print[ptr byte]("hello");
+        print("hello");
     }
 }
 
@@ -22,19 +22,19 @@ def takes_greeter[T](greeter: T) where T: Greets {
 }
 
 /// -> hello
-takes_greeter[Person](person);
+takes_greeter(person);
 
 def try_greet[T](obj: T) {
     #if T: Greets {
-        takes_greeter[T](obj);
+        takes_greeter(obj);
     }
 }
 
-try_greet[int](4);
+try_greet(4);
 
 /// -> hello
-try_greet[Person](person);
+try_greet(person);
 
 /// error
-takes_greeter[int](4);
+takes_greeter(4);
 /// end

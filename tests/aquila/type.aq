@@ -28,9 +28,9 @@ type TestType {
 let instance: TestType = TestType.create();
 
 /// -> 20
-print[int](instance.add());
+print(instance.add());
 
 let second_instance: TestType = TestType.create_again();
 
 /// -> 6
-print[int](second_instance.add());
+print(second_instance.add());

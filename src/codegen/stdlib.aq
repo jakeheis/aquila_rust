@@ -78,9 +78,9 @@ pub def fatal_error(message: ptr byte, #caller) {
 }
 
 pub def fatal_error_location(message: ptr byte, location: ptr byte) {
-    print[ptr byte](String.literal("Fatal error: ").append_literal(message).storage);
-    print[ptr byte]("");
-    print[ptr byte](location);
+    print(String.literal("Fatal error: ").append_literal(message).storage);
+    print("");
+    print(location);
     exit(1);
 }
 

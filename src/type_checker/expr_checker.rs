@@ -1,5 +1,6 @@
 use super::check;
 use super::scope::{ScopeDefinition, SymbolResolution, GenericInfo};
+use super::generic_inference;
 use crate::diagnostic::*;
 use crate::lexing::*;
 use crate::library::*;
@@ -337,20 +338,19 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
             return Err(Diagnostic::error(expr, &message));
         }
 
-        // let function_specialization = if function_specialization.is_empty() {
-        //     match GenericSpecialization::infer(self.lib.as_ref(), &metadata, &arg_types) {
-        //         Ok(spec) => spec,
-        //         Err(symbol) => {
-        //             let message = format!(
-        //                 "Couldn't infer generic type {}",
-        //                 symbol.last_component()
-        //             );
-        //             return Err(Diagnostic::error(expr, &message));
-        //         }
-        //     }
-        // } else {
         let function_specialization = if is_init {
             GenericSpecialization::empty()
+        } else if call.name.specialization.is_empty() {
+            match generic_inference::infer_from_args(&metadata, &arg_types) {
+                Ok(spec) => spec,
+                Err(symbol) => {
+                    let message = format!(
+                        "Couldn't infer generic type {}",
+                        symbol.name()
+                    );
+                    return Err(Diagnostic::error(expr, &message));
+                }
+            }
         } else {
             if call.name.specialization.len() != metadata.generics.len() {
                 let message = format!(

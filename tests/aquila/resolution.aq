@@ -2,16 +2,16 @@ type Resolve {
     let a: int;
 
     def shadow() {
-        print[int](a);
+        print(a);
         let a = 4;
-        print[int](a);
+        print(a);
 
         if true {
             let a = 6;
-            print[int](a);
+            print(a);
         }
 
-        print[int](a);
+        print(a);
     }
 }
 

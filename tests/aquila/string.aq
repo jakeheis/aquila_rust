@@ -3,38 +3,38 @@ let dyn = String.literal("hello");
 let combo1 = dyn.append_literal(" world");
 
 /// -> 'hello world'
-print[String](combo1);
+print(combo1);
 
 let combo2 = combo1.append_literal(" ag");
 
 /// -> 'hello world ag'
-print[String](combo2);
+print(combo2);
 
 /// -> 'hello world again'
-print[String](dyn.append_literal(" world").append_literal(" again"));
+print(dyn.append_literal(" world").append_literal(" again"));
 
 
 let buffer = StringBuffer.new();
 
 buffer.push("first");
 /// -> 'first'
-print[String](buffer.content);
+print(buffer.content);
 
 buffer.push(" second ");
 /// -> 'first second '
-print[String](buffer.content);
+print(buffer.content);
 
 buffer.push_int(3);
 /// -> 'first second 3'
-print[String](buffer.content);
+print(buffer.content);
 
 buffer.push_double(4.5);
 /// -> 'first second 34.5'
-print[String](buffer.content);
+print(buffer.content);
 
 buffer.push_bool(true);
 /// -> 'first second 34.5true'
-print[String](buffer.content);
+print(buffer.content);
 
 let stdout = Stream.stdout();
 

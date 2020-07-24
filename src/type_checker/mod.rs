@@ -52,3 +52,50 @@ mod check {
         symbol.lib() == from_lib.lib()
     }
 }
+
+mod generic_inference {
+
+    use crate::library::{FunctionMetadata, NodeType, Symbol, GenericSpecialization};
+    use std::collections::HashMap;
+
+    pub fn infer_from_args(
+        metadata: &FunctionMetadata,
+        arg_types: &[NodeType],
+    ) -> Result<GenericSpecialization, Symbol> {
+        let mut spec_map: HashMap<Symbol, NodeType> = HashMap::new();
+        for gen in &metadata.generics {
+            let sym = metadata.symbol.child(&gen);
+            spec_map.insert(sym, NodeType::Ambiguous);
+        }
+
+        for (param, arg_type) in metadata.parameters.iter().zip(arg_types).rev() {
+            if let Some(inferred) = infer_generic_type(&param.var_type, arg_type) {
+                spec_map.insert(inferred.0, inferred.1);
+            }
+        }
+        for (symbol, spec) in spec_map.iter() {
+            if spec.contains_ambiguity() {
+                return Err(symbol.clone());
+            }
+        }
+
+        Ok(GenericSpecialization { map: spec_map })
+    }
+
+    fn infer_generic_type(
+        param: &NodeType,
+        arg: &NodeType,
+    ) -> Option<(Symbol, NodeType)> {
+        match (param, arg) {
+            (NodeType::GenericInstance(symbol), arg) => Some((symbol.clone(), arg.clone())),
+            (NodeType::Pointer(param_to), NodeType::Pointer(arg_to)) => {
+                infer_generic_type(param_to, arg_to)
+            }
+            (NodeType::Reference(param_to), NodeType::Reference(arg_to)) => {
+                infer_generic_type(param_to, arg_to)
+            }
+            _ => None,
+        }
+    }
+
+}
