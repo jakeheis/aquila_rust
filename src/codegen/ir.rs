@@ -195,7 +195,7 @@ impl IRExpr {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum IRBinaryOperator {
     Plus,
     Minus,
@@ -211,7 +211,7 @@ pub enum IRBinaryOperator {
     Or,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum IRUnaryOperator {
     Negate,
     Invert,

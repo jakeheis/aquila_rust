@@ -928,7 +928,7 @@ impl TokenKind {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, PartialOrd)]
+#[derive(PartialEq, PartialOrd)]
 enum Precedence {
     Assignment,
     Logic,

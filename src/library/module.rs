@@ -34,7 +34,6 @@ impl ParsedModule {
     }
 }
 
-#[derive(Debug)]
 pub struct Module {
     pub name: String,
     pub structures: Vec<IRStructure>,

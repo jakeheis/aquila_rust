@@ -125,7 +125,6 @@ impl std::fmt::Display for Symbol {
     }
 }
 
-#[derive(Debug)]
 pub struct SymbolTable {
     pub lib: Symbol,
     pub type_metadata: HashMap<Symbol, TypeMetadata>,

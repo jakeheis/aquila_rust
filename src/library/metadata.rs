@@ -205,7 +205,6 @@ impl fmt::Display for FunctionMetadata {
     }
 }
 
-#[derive(Clone, Debug)]
 pub struct TraitMetadata {
     pub symbol: Symbol,
     pub function_requirements: Vec<String>,
