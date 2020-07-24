@@ -278,8 +278,7 @@ impl<'a> SymbolResolution<'a> {
             return TypeResolutionResult::Error(Diagnostic::error(token, &message));
         }
 
-        let instance_type = NodeType::Instance(name.clone(), GenericSpecialization::empty());
-
+        let instance_type = NodeType::GenericInstance(name.clone());
         TypeResolutionResult::Found(instance_type)
     }
 

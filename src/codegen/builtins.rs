@@ -232,7 +232,7 @@ fn size_call(
     let expr_type = spec.type_for(&mem_type).unwrap().clone();
     let arg = IRExpr {
         kind: IRExprKind::ExplicitType,
-        expr_type: expr_type,
+        expr_type: NodeType::Metatype(Box::new(expr_type)),
     };
     IRExpr::call_extern("sizeof", vec![arg], NodeType::Double)
 }

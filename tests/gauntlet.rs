@@ -39,12 +39,12 @@ fn string() -> Result<(), &'static str> {
 }
 
 #[test]
-fn traits_test() -> Result<(), &'static str> {
+fn traits() -> Result<(), &'static str> {
     test_file("traits")
 }
 
 #[test]
-fn type_test() -> Result<(), &'static str> {
+fn types() -> Result<(), &'static str> {
     test_file("type")
 }
 

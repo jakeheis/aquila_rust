@@ -463,10 +463,10 @@ impl ExprVisitor for IRGen {
 
                 let possible_trait = function_symbol.owner_symbol().and_then(|o| self.all_symbols.trait_metadata_symbol(&o));
                 if possible_trait.is_some() {
-                    if let NodeType::Instance(sym, _) = &target_expr.expr_type {
+                    if let NodeType::GenericInstance(sym) = &target_expr.expr_type {
                         ir_symbol = sym.child(function_symbol.name());
                     } else if let NodeType::Reference(to) = &target_expr.expr_type {
-                        if let NodeType::Instance(sym, _) = to.as_ref() {
+                        if let NodeType::GenericInstance(sym) = to.as_ref() {
                             ir_symbol = sym.child(function_symbol.name());
                         } else {
                             panic!()
@@ -546,11 +546,14 @@ impl ExprVisitor for IRGen {
     fn visit_variable_expr(&mut self, expr: &Expr, name: &SpecializedToken) -> Self::ExprResult {
         let nonspec_expr_type = expr.get_type().unwrap();
 
-        if let NodeType::Metatype(..) = &nonspec_expr_type {
-            return IRExpr {
-                kind: IRExprKind::ExplicitType,
-                expr_type: nonspec_expr_type,
-            };
+        match &nonspec_expr_type {
+            NodeType::Metatype(..) => {
+                return IRExpr {
+                    kind: IRExprKind::ExplicitType,
+                    expr_type: nonspec_expr_type,
+                };
+            },
+            _ => (),
         }
 
         let expr_type = self.get_expr_type(expr);

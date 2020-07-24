@@ -226,8 +226,12 @@ impl CodeWriter {
             IRExprKind::Literal(l) => l.clone(),
             IRExprKind::Variable(var) => String::from(var),
             IRExprKind::ExplicitType => {
-                let (to_type, _) = self.convert_type(&expr_type, String::new(), false);
-                to_type
+                if let NodeType::Metatype(inner) = expr_type {
+                    let (to_type, _) = self.convert_type(&inner, String::new(), false);
+                    to_type
+                } else {
+                    panic!()
+                }
             }
             IRExprKind::Cast(value) => {
                 let value = self.form_expression(value, enclosing_spec);

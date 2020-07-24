@@ -83,7 +83,7 @@ impl TypeMetadata {
             .iter()
             .map(|g| {
                 let sym = self.symbol.child(&g);
-                NodeType::Instance(sym, GenericSpecialization::empty())
+                NodeType::GenericInstance(sym)
             })
             .collect();
         GenericSpecialization::new(&self.symbol, &self.generics, dummy_generics)
@@ -356,6 +356,12 @@ impl std::hash::Hash for GenericSpecialization {
 
 impl std::fmt::Display for GenericSpecialization {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "GenericSpecialization({})", self.display_list())
+        let mut keys: Vec<_> = self.map.keys().collect();
+        keys.sort();
+        let list = keys.iter()
+            .map(|symbol| format!("{}={}", symbol.unique_id(), self.map.get(symbol).unwrap()))
+            .collect::<Vec<String>>()
+            .join(",");
+        write!(f, "GenericSpecialization({})", list)
     }
 }

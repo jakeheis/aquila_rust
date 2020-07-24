@@ -9,7 +9,8 @@ pub enum NodeType {
     Bool,
     Byte,
     Instance(Symbol, GenericSpecialization),
-    Metatype(Symbol, GenericSpecialization),
+    GenericInstance(Symbol),
+    Metatype(Box<NodeType>),
     Pointer(Box<NodeType>),
     Reference(Box<NodeType>),
     Array(Box<NodeType>, usize),
@@ -71,11 +72,12 @@ impl NodeType {
             | (NodeType::Bool, NodeType::Bool)
             | (NodeType::Byte, NodeType::Byte) => true,
             (NodeType::Instance(lhs, lhs_spec), NodeType::Instance(rhs, rhs_spec))
-            | (NodeType::Metatype(lhs, lhs_spec), NodeType::Metatype(rhs, rhs_spec))
                 if lhs == rhs && lhs_spec == rhs_spec =>
             {
                 true
             }
+            (NodeType::GenericInstance(lhs), NodeType::GenericInstance(rhs)) if lhs == rhs => true,
+            (NodeType::Metatype(lhs), NodeType::Metatype(rhs)) if lhs.matches(rhs) => true,
             (NodeType::Pointer(lhs), NodeType::Pointer(rhs)) 
             | (NodeType::Reference(lhs), NodeType::Reference(rhs)) => lhs.matches(&rhs),
             (NodeType::Function(lhs), NodeType::Function(rhs))
@@ -108,23 +110,20 @@ impl NodeType {
 
     pub fn specialize(&self, specialization: &GenericSpecialization) -> NodeType {
         match self {
+            NodeType::GenericInstance(sym) => {
+                if let Some(node_type) = specialization.type_for(sym) {
+                    node_type.clone()
+                } else {
+                    self.clone()
+                }
+            },
             NodeType::Instance(symbol, spec) => {
-                if let Some(specialized_type) = specialization.type_for(symbol) {
-                    // spec will be empty; generic parameters aren't specialized themselves, so it can be ignored
-                    specialized_type.clone()
-                } else {
-                    let new_spec = spec.resolve_generics_using(specialization);
-                    NodeType::Instance(symbol.clone(), new_spec)
-                }
+                let new_spec = spec.resolve_generics_using(specialization);
+                NodeType::Instance(symbol.clone(), new_spec)
             }
-            NodeType::Metatype(symbol, spec) => {
-                if let Some(specialized_type) = specialization.type_for(symbol) {
-                    // spec will be empty; generic parameters aren't specialized themselves, so it can be ignored
-                    specialized_type.clone()
-                } else {
-                    let new_spec = spec.resolve_generics_using(specialization);
-                    NodeType::Metatype(symbol.clone(), new_spec)
-                }
+            NodeType::Metatype(inner) => {
+                let inner = inner.specialize(specialization);
+                NodeType::Metatype(Box::new(inner))
             }
             NodeType::Pointer(to) => NodeType::pointer_to(to.specialize(specialization)),
             NodeType::Reference(to) => NodeType::reference_to(to.specialize(specialization)),
@@ -164,6 +163,7 @@ impl NodeType {
                     ty.mangled() + "__" + &spec.symbolic_list()
                 }
             }
+            NodeType::GenericInstance(sym) => sym.mangled(),
             NodeType::Int | NodeType::Double | NodeType::Void | NodeType::Bool | NodeType::Byte => {
                 self.to_string()
             }
@@ -207,19 +207,14 @@ impl std::fmt::Display for NodeType {
             NodeType::Reference(ty) => format!("ref {}", ty),
             NodeType::Array(ty, size) => format!("Array[{}, count={}]", ty, size),
             NodeType::Instance(ty, specialization) => {
-                let mut string = ty.name().to_owned();
+                let mut string = ty.unique_id().to_owned();
                 if !specialization.map.is_empty() {
                     string += &format!("[{}]", specialization.display_list());
                 }
                 string
             }
-            NodeType::Metatype(ty, specialization) => {
-                let mut string = format!("{}.Metatype", ty.name());
-                if !specialization.map.is_empty() {
-                    string += &format!("[{}]", specialization.display_list());
-                }
-                string
-            }
+            NodeType::GenericInstance(ty) => format!("Generic({})", ty.unique_id()),
+            NodeType::Metatype(inner) => format!("{}.Metatype", inner),
             NodeType::Ambiguous => String::from("_"),
         };
         write!(f, "{}", kind)

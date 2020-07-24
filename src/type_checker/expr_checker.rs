@@ -19,15 +19,13 @@ impl<'a> ExprChecker<'a> {
 
     fn set_expr_type(&self, expr: &Expr, node_type: NodeType) -> DiagnosticResult<NodeType> {
         let mut expr_type = node_type.clone();
-        if let NodeType::Instance(type_sym, _) = node_type {
-            if self.all_symbols.type_metadata(&type_sym).is_none() {
-                for scope in self.resolver.scopes.iter().rev() {
-                    if let Some(restrictions) = scope.generic_restrictions.get(&type_sym) {
-                        for restrict in restrictions {
-                            if let GenericInfo::Is(other) = restrict {
-                                expr_type = other.clone();
-                                break;
-                            }
+        if let NodeType::GenericInstance(type_sym) = node_type {
+            for scope in self.resolver.scopes.iter().rev() {
+                if let Some(restrictions) = scope.generic_restrictions.get(&type_sym) {
+                    for restrict in restrictions {
+                        if let GenericInfo::Is(other) = restrict {
+                            expr_type = other.clone();
+                            break;
                         }
                     }
                 }
@@ -50,56 +48,55 @@ impl<'a> ExprChecker<'a> {
 
         let (target_symbol, specialization, is_meta) = match target {
             NodeType::Instance(t, s) => (t, s, false),
-            NodeType::Metatype(t, s) => (t, s, true),
-            NodeType::Reference(inside) => {
-                if let NodeType::Instance(t, s) = inside.as_ref() {
-                    (t, s, false)
+            NodeType::Metatype(inner) => {
+                if let NodeType::Instance(t, s) = inner.as_ref() {
+                    (t, s, true)
                 } else {
                     return err;
                 }
-            }
-            _ => return err
-        };
-
-        if let Some(target_metadata) = self.all_symbols.type_metadata(target_symbol) {
-            let method_metadata = if is_meta {
-                let name = target_metadata.meta_method_named(method);
-                name.map(|n| target_symbol.meta_symbol().child(&n))
-            } else {
-                let name = target_metadata.method_named(method);
-                name.map(|n| target_symbol.child(&n))
-            };
-    
-            match method_metadata {
-                Some(method) => Ok((method, specialization.clone())),
-                None => {
-                    let message = format!("Type '{}' does not have method '{}'", target, method);
-                    Err(Diagnostic::error(span, &message))
-                }
-            }
-        } else {
-            for scope in self.resolver.scopes.iter().rev() {
-                if let Some(restrictions) = scope.generic_restrictions.get(target_symbol) {
-                    for restriction in restrictions {
-                        match restriction {
-                            GenericInfo::Conforms(trait_sym) => {
-                                let trait_metadata = self.all_symbols.trait_metadata_symbol(trait_sym).unwrap();
-                                if trait_metadata.function_requirements.iter().any(|m| m == method) {
-                                    let sym = trait_metadata.symbol.child(method);
-                                    return Ok((sym, specialization.clone()));
+            },
+            NodeType::GenericInstance(sym) => {
+                for scope in self.resolver.scopes.iter().rev() {
+                    if let Some(restrictions) = scope.generic_restrictions.get(sym) {
+                        for restriction in restrictions {
+                            match restriction {
+                                GenericInfo::Conforms(trait_sym) => {
+                                    let trait_metadata = self.all_symbols.trait_metadata_symbol(trait_sym).unwrap();
+                                    if trait_metadata.function_requirements.iter().any(|m| m == method) {
+                                        let sym = trait_metadata.symbol.child(method);
+                                        return Ok((sym, GenericSpecialization::empty()));
+                                    }
                                 }
-                            }
-                            GenericInfo::Is(restricted_type) => {
-                                return self.retrieve_method(span, restricted_type, method);
+                                GenericInfo::Is(restricted_type) => {
+                                    return self.retrieve_method(span, restricted_type, method);
+                                }
                             }
                         }
                     }
                 }
 
+                let message = format!("Type '{}' does not have method '{}'", target, method);
+                return Err(Diagnostic::error(span, &message));
             }
-            
-            let message = format!("Type '{}' does not have method '{}'", target, method);
-            Err(Diagnostic::error(span, &message))
+            NodeType::Reference(inside) => return self.retrieve_method(span, inside, method),
+            _ => return err
+        };
+
+        let target_metadata = self.all_symbols.type_metadata(target_symbol).unwrap(); 
+        let method_metadata = if is_meta {
+            let name = target_metadata.meta_method_named(method);
+            name.map(|n| target_symbol.meta_symbol().child(&n))
+        } else {
+            let name = target_metadata.method_named(method);
+            name.map(|n| target_symbol.child(&n))
+        };
+
+        match method_metadata {
+            Some(method) => Ok((method, specialization.clone())),
+            None => {
+                let message = format!("Type '{}' does not have method '{}'", target, method);
+                Err(Diagnostic::error(span, &message))
+            }
         }
     }
 
@@ -176,8 +173,9 @@ impl<'a> ExprChecker<'a> {
     ) -> DiagnosticResult<()> {
         for (generic_symbol, trait_symbol) in restrictions {
             let specialized_type = specialization.type_for(&generic_symbol).unwrap();
-            if let NodeType::Instance(type_sym, ..) = specialized_type {                
-                if let Some(metadata) = self.all_symbols.type_metadata(&type_sym) {
+            match specialized_type {
+                NodeType::Instance(type_sym, ..) => {
+                    let metadata = self.all_symbols.type_metadata(&type_sym).unwrap();
                     if !metadata.conforms_to(trait_symbol) {
                         let message = format!(
                             "Type '{}' does not implement '{}'",
@@ -186,11 +184,12 @@ impl<'a> ExprChecker<'a> {
                         );
                         return Err(Diagnostic::error(span, &message));
                     }
-                } else {
+                },
+                NodeType::GenericInstance(sym) => {
                     let mut implements = false;
                     for scope in self.resolver.scopes.iter().rev() {
                         let generic_restrictions = &scope.generic_restrictions;
-                        let gen_infos = generic_restrictions.get(type_sym).map(|g| g.as_slice()).unwrap_or(&[]);
+                        let gen_infos = generic_restrictions.get(sym).map(|g| g.as_slice()).unwrap_or(&[]);
                         for gen_info in gen_infos {
                             if let GenericInfo::Conforms(trait_sym) = gen_info {
                                 if trait_sym == trait_symbol {
@@ -204,15 +203,16 @@ impl<'a> ExprChecker<'a> {
                     if !implements {
                         let message = format!(
                             "Generic '{}' is not constrained to types which implement '{}'",
-                            type_sym.name(),
+                            sym.name(),
                             trait_symbol.name()
                         );
                         return Err(Diagnostic::error(span, &message));
                     }
                 }
-            } else {
-                let message = format!("Type does not implement '{}'", trait_symbol.name());
-                return Err(Diagnostic::error(span, &message));
+                other => {
+                    let message = format!("Type '{}' does not implement '{}'", other, trait_symbol.name());
+                    return Err(Diagnostic::error(span, &message));
+                }
             }
         }
 
@@ -473,7 +473,14 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
                 Ok(NodeType::Instance(symbol, spec)) => {
                     trace!(target: "type_checker", "Treating variable as metatype of {}", symbol);
                     name.set_symbol(symbol.clone());
-                    self.set_expr_type(expr, NodeType::Metatype(symbol.clone(), spec.clone()))
+                    let boxed = Box::new(NodeType::Instance(symbol, spec));
+                    self.set_expr_type(expr, NodeType::Metatype(boxed))
+                }
+                Ok(NodeType::GenericInstance(sym)) => {
+                    trace!(target: "type_checker", "Treating variable as metatype of {}", sym);
+                    name.set_symbol(sym.clone());
+                    let boxed = Box::new(NodeType::GenericInstance(sym));
+                    self.set_expr_type(expr, NodeType::Metatype(boxed))
                 }
                 Ok(_) => Err(Diagnostic::error(expr, "Type not allowed here")),
                 Err(diag) => Err(diag),
