@@ -86,7 +86,7 @@ pub enum IRStatement {
     Break,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct IRExpr {
     pub kind: IRExprKind,
     pub expr_type: NodeType,
@@ -219,7 +219,7 @@ pub enum IRUnaryOperator {
     Dereference,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum IRExprKind {
     FieldAccess(Box<IRExpr>, String),
     DerefFieldAccess(Box<IRExpr>, String),

@@ -1,35 +1,39 @@
 
-def take_ref(obj: ref Vec[int]) {
-  print(obj.count);
+// def take_ref(obj: ref Vec[int]) {
+//   print(obj.count);
+// }
+
+// // print_object[Vec[int]](vector);
+
+// let obj = Vec[int].new();
+// take_ref(@obj);
+
+// // let maybe_str = Optional[String].some(obj);
+// // print(maybe_str);
+
+// let maybe_int = Optional[int].some(5);
+// print(maybe_int);
+
+// let vec = Vec[String].new();
+// vec.push(String.literal("first"));
+// vec.push(String.literal("second"));
+// vec.push(String.literal("third"));
+
+// print(vec);
+
+// print(4);
+
+// type OtherType {
+
+// }
+
+// let o: OtherType;
+
+// print(o);
+
+for i in @Range.bounds(1, 5) {
+  print(i);
 }
-
-// print_object[Vec[int]](vector);
-
-let obj = Vec[int].new();
-take_ref(@obj);
-
-// let maybe_str = Optional[String].some(obj);
-// print(maybe_str);
-
-let maybe_int = Optional[int].some(5);
-print(maybe_int);
-
-let vec = Vec[String].new();
-vec.push(String.literal("first"));
-vec.push(String.literal("second"));
-vec.push(String.literal("third"));
-
-print(vec);
-
-print(4);
-
-type OtherType {
-
-}
-
-let o: OtherType;
-
-print(o);
 
 // let
 

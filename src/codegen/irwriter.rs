@@ -134,7 +134,7 @@ impl IRWriter {
         var
     }
 
-    pub fn addres_of_expr(&mut self, value: IRExpr) -> IRExpr {
+    pub fn addres_of_expr(&mut self, value: IRExpr, as_ref: bool) -> IRExpr {
         if let IRExprKind::Unary(IRUnaryOperator::Dereference, target) = value.kind {
             return *target;
         }
@@ -146,7 +146,11 @@ impl IRWriter {
             IRExpr::variable(&var)
         };
 
-        let expr_type = NodeType::pointer_to(object.expr_type.clone());
+        let expr_type = if as_ref {
+            NodeType::reference_to(object.expr_type.clone())
+        } else {
+            NodeType::pointer_to(object.expr_type.clone())
+        };
         IRExpr {
             kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(object)),
             expr_type,

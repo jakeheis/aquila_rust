@@ -14,6 +14,13 @@ def take_array(ar: [int; 3]) {
 
 take_array(nums);
 
+/// -> 0
+/// -> 1
+/// -> 2
+for num in @Range.bounds(0, 2) {
+    print(num);
+}
+
 /// error
 take_array([1, 2]);
 /// end

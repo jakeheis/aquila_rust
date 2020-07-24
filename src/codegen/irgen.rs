@@ -35,6 +35,7 @@ impl IRGen {
         }
 
         if !module.main.is_empty() {
+            trace!("Gen IR for main");
             self.writer.start_block();
             for s in &module.main {
                 s.accept(&mut self);
@@ -117,6 +118,8 @@ impl IRGen {
 
     fn gen_function_decl(&mut self, decl: &FunctionDecl) {
         let func_symbol = decl.name.get_symbol().unwrap();
+
+        trace!("Gen IR for func {}", func_symbol);
 
         let mut func_metadata = self.all_symbols.function_metadata(&func_symbol).unwrap().clone();
 
@@ -222,8 +225,13 @@ impl StmtVisitor for IRGen {
     fn visit_for_stmt(&mut self, variable: &SymbolicToken, iter_expr: &Expr, body: &[Stmt]) {
         let counter = self.writer.declare_temp_no_init(NodeType::Int);
 
-        let iterator = iter_expr.accept(self);
-        let iterator_type = iter_expr.get_type().unwrap();
+        let iter_expr = iter_expr.accept(self);
+        let iterator_type = iter_expr.expr_type.clone();
+        let iter_expr = IRExpr {
+            kind: iter_expr.kind,
+            expr_type: iterator_type.coerce_array_to_ptr(),
+        };
+        let iterator = self.writer.declare_temp(iter_expr);
 
         let limit = match &iterator_type {
             NodeType::Reference(to) => {
@@ -231,7 +239,7 @@ impl StmtVisitor for IRGen {
                     NodeType::Instance(symbol, _) if symbol == &Symbol::stdlib("Range") => {
                         let start = IRExpr {
                             kind: IRExprKind::DerefFieldAccess(
-                                Box::new(iterator.clone()),
+                                Box::new(IRExpr::variable(&iterator)),
                                 symbol.child("start").mangled(),
                             ),
                             expr_type: NodeType::Int,
@@ -239,7 +247,7 @@ impl StmtVisitor for IRGen {
                         self.writer.assign(IRExpr::variable(&counter), start);
                         IRExpr {
                             kind: IRExprKind::DerefFieldAccess(
-                                Box::new(iterator.clone()),
+                                Box::new(IRExpr::variable(&iterator)),
                                 symbol.child("end").mangled(),
                             ),
                             expr_type: NodeType::Int,
@@ -250,13 +258,13 @@ impl StmtVisitor for IRGen {
                             .assign(IRExpr::variable(&counter), IRExpr::int_literal("0"));
                         IRExpr {
                             kind: IRExprKind::DerefFieldAccess(
-                                Box::new(iterator.clone()),
+                                Box::new(IRExpr::variable(&iterator)),
                                 symbol.child("count").mangled(),
                             ),
                             expr_type: NodeType::Int,
                         }
                     },
-                    _ => unimplemented!()
+                    ty => unimplemented!("can't iterate over {}", ty)
                 }
             }
             NodeType::Array(_, count) => {
@@ -264,7 +272,7 @@ impl StmtVisitor for IRGen {
                     .assign(IRExpr::variable(&counter), IRExpr::int_literal("0"));
                 IRExpr::int_literal(&count.to_string())
             }
-            _ => unimplemented!(),
+            ty => unimplemented!("can't iterate over {}", ty),
         };
 
         self.writer.start_block();
@@ -301,7 +309,7 @@ impl StmtVisitor for IRGen {
 
                         let storage = IRExpr {
                             kind: IRExprKind::DerefFieldAccess(
-                                Box::new(iterator.clone()),
+                                Box::new(IRExpr::variable(&iterator)),
                                 symbol.child("storage").mangled(),
                             ),
                             expr_type: element_ty.clone(),
@@ -333,7 +341,7 @@ impl StmtVisitor for IRGen {
                     IRExpr::variable(&local),
                     IRExpr {
                         kind: IRExprKind::Binary(
-                            Box::new(iterator),
+                            Box::new(IRExpr::variable(&iterator)),
                             IRBinaryOperator::Plus,
                             Box::new(IRExpr::variable(&counter)),
                         ),
@@ -418,8 +426,11 @@ impl ExprVisitor for IRGen {
         let op_type = match &op.kind {
             TokenKind::Minus => IRUnaryOperator::Negate,
             TokenKind::Bang => IRUnaryOperator::Invert,
-            TokenKind::Ampersand | TokenKind::At => {
-                return self.writer.addres_of_expr(operand);
+            TokenKind::Ampersand => {
+                return self.writer.addres_of_expr(operand, false);
+            }
+            TokenKind::At => {
+                return self.writer.addres_of_expr(operand, true);
             }
             TokenKind::Star => {
                 if let IRExprKind::Unary(IRUnaryOperator::Reference, _) = &operand.kind {
@@ -469,7 +480,7 @@ impl ExprVisitor for IRGen {
                 let target_expr = if let NodeType::Reference(..) = target_expr.expr_type {
                     target_expr
                 } else {
-                    self.writer.addres_of_expr(target_expr)
+                    self.writer.addres_of_expr(target_expr, false)
                 };
                 arg_exprs.insert(0, target_expr);
             } else {
