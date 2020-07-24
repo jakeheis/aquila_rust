@@ -1,6 +1,6 @@
 use aquila::diagnostic::*;
 use aquila::lexing::*;
-use aquila::library::Lib;
+use aquila::library::ParsedModule;
 use aquila::parsing::*;
 
 mod common;
@@ -95,7 +95,7 @@ fn assert_failure(tokens: Vec<Token>, expected: &[Diagnostic]) -> TestResult {
     )
 }
 
-fn test_parse(mut tokens: Vec<Token>) -> (Lib, Vec<Diagnostic>) {
+fn test_parse(mut tokens: Vec<Token>) -> (ParsedModule, Vec<Diagnostic>) {
     tokens.push(test_token::semicolon());
     let (_, combined) = test_token::join(&tokens);
     let (reporter, mut diagnostics) = TestReporter::new();

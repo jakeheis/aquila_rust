@@ -1,10 +1,8 @@
 use super::ir::*;
 use crate::library::*;
 use crate::source::Span;
-use std::rc::Rc;
 
 pub struct IRWriter {
-    pub lib: Rc<Lib>,
     pub all_symbols: SymbolStore,
     pub structures: Vec<IRStructure>,
     pub functions: Vec<IRFunction>,
@@ -13,9 +11,8 @@ pub struct IRWriter {
 }
 
 impl IRWriter {
-    pub fn new(lib: Rc<Lib>, all_symbols: SymbolStore) -> Self {
+    pub fn new(all_symbols: SymbolStore) -> Self {
         IRWriter {
-            lib,
             all_symbols,
             structures: Vec::new(),
             functions: Vec::new(),
@@ -45,9 +42,9 @@ impl IRWriter {
         self.blocks.push(Vec::new());
     }
 
-    pub fn end_decl_main(&mut self) {
+    pub fn end_decl_main(&mut self, main_symbol: Symbol) {
         let main = IRFunction {
-            name: Symbol::main_symbol(&self.lib.name),
+            name: main_symbol,
             parameters: Vec::new(),
             return_type: NodeType::Int,
             statements: self.blocks.pop().unwrap(),

@@ -10,61 +10,50 @@ use log::trace;
 use std::rc::Rc;
 
 pub struct IRGen {
-    lib: Rc<Lib>,
     all_symbols: SymbolStore,
     writer: IRWriter,
     current_type: Option<TypeMetadata>,
 }
 
 impl IRGen {
-    pub fn new(lib: Lib, all_symbols: SymbolStore) -> Self {
-        let lib = Rc::new(lib);
-        let writer = IRWriter::new(Rc::clone(&lib), all_symbols.clone());
+    pub fn new(all_symbols: SymbolStore) -> Self {
+        let writer = IRWriter::new(all_symbols.clone());
         IRGen {
-            lib,
             all_symbols,
             writer,
             current_type: None,
         }
     }
 
-    pub fn generate(mut self, lib_symbols: Rc<SymbolTable>) -> Module {
-        let lib = Rc::clone(&self.lib);
-
-        for t in &lib.type_decls {
+    pub fn generate(mut self, module: ParsedModule, module_symbols: Rc<SymbolTable>) -> Module {
+        for t in &module.type_decls {
             self.visit_type_decl(t);
         }
-        self.gen_function_decls(&lib.function_decls);
-        for c in &lib.conformance_decls {
+        self.gen_function_decls(&module.function_decls);
+        for c in &module.conformance_decls {
             self.conformance_decl(c);
         }
 
-        if !lib.main.is_empty() {
+        if !module.main.is_empty() {
             self.writer.start_block();
-            for s in &lib.main {
+            for s in &module.main {
                 s.accept(&mut self);
             }
             self.writer.return_value(IRExpr::int_literal("0"));
-            self.writer.end_decl_main();
+            self.writer.end_decl_main(Symbol::main_symbol(&module.name));
         }
 
         let IRWriter {
-            lib: lib_copy,
             structures,
             functions,
             ..
         } = self.writer;
 
-        std::mem::drop(lib);
-        std::mem::drop(lib_copy);
-
-        let lib = Rc::try_unwrap(self.lib).ok().unwrap();
-
         let mut new = Module {
-            name: lib.name,
+            name: module.name,
             structures,
             functions,
-            symbols: lib_symbols,
+            symbols: module_symbols,
             specialization_record: SpecializationRecord::new(),
         };
 

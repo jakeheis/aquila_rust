@@ -2,11 +2,37 @@ use super::{SymbolTable, SymbolStore, Symbol};
 use crate::codegen::*;
 use crate::diagnostic::*;
 use crate::source;
-use crate::parsing::Parser;
+use crate::parsing::*;
 use crate::lexing::Lexer;
 use crate::type_checker::{TypeChecker, SymbolTableBuilder};
 use std::rc::Rc;
 use log::trace;
+
+pub struct ParsedModule {
+    pub name: String,
+    pub type_decls: Vec<TypeDecl>,
+    pub function_decls: Vec<FunctionDecl>,
+    pub trait_decls: Vec<TraitDecl>,
+    pub conformance_decls: Vec<ConformanceDecl>,
+    pub main: Vec<Stmt>,
+}
+
+impl ParsedModule {
+    pub fn new(name: &str) -> Self {
+        ParsedModule {
+            name: String::from(name),
+            type_decls: Vec::new(),
+            function_decls: Vec::new(),
+            trait_decls: Vec::new(),
+            conformance_decls: Vec::new(),
+            main: Vec::new(),
+        }
+    }
+
+    pub fn root_sym(&self) -> Symbol {
+        Symbol::lib_root(&self.name)
+    }
+}
 
 #[derive(Debug)]
 pub struct Module {
@@ -88,7 +114,7 @@ impl ModuleBuilder {
         //     return Err("Cycle checker failed");
         // }
 
-        let module = IRGen::new(lib, self.symbol_store.clone()).generate(symbols);
+        let module = IRGen::new(self.symbol_store.clone()).generate(lib, symbols);
         
         self.modules.push(module);
         

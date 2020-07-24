@@ -3,7 +3,7 @@ use super::ast_printer::ASTPrinter;
 use super::expr::*;
 use crate::diagnostic::*;
 use crate::lexing::*;
-use crate::library::Lib;
+use crate::library::ParsedModule;
 use log::trace;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -23,8 +23,8 @@ impl Parser {
         }
     }
 
-    pub fn parse(mut self, name: &str) -> Lib {
-        let mut lib = Lib::new(name);
+    pub fn parse(mut self, name: &str) -> ParsedModule {
+        let mut module = ParsedModule::new(name);
 
         while !self.is_at_end() {
             match self.top_level(false) {
@@ -32,11 +32,11 @@ impl Parser {
                     ASTPrinter::trace().visit(&node);
 
                     match node {
-                        ASTNode::TypeDecl(decl) => lib.type_decls.push(decl),
-                        ASTNode::FunctionDecl(decl) => lib.function_decls.push(decl),
-                        ASTNode::TraitDecl(decl) => lib.trait_decls.push(decl),
-                        ASTNode::ConformanceDecl(decl) => lib.conformance_decls.push(decl),
-                        ASTNode::Stmt(decl) => lib.main.push(decl),
+                        ASTNode::TypeDecl(decl) => module.type_decls.push(decl),
+                        ASTNode::FunctionDecl(decl) => module.function_decls.push(decl),
+                        ASTNode::TraitDecl(decl) => module.trait_decls.push(decl),
+                        ASTNode::ConformanceDecl(decl) => module.conformance_decls.push(decl),
+                        ASTNode::Stmt(decl) => module.main.push(decl),
                     }
                 }
                 Err(diagnostic) => {
@@ -46,7 +46,7 @@ impl Parser {
             }
         }
 
-        lib
+        module
     }
 
     fn top_level(&mut self, public: bool) -> DiagnosticResult<ASTNode> {

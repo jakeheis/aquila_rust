@@ -19,28 +19,28 @@ pub struct Analysis {
 }
 
 impl TypeChecker {
-    pub fn check(lib: &Lib, all_symbols: SymbolStore, lib_symbols: Rc<SymbolTable>, reporter: Rc<dyn Reporter>) {
+    pub fn check(module: &ParsedModule, all_symbols: SymbolStore, lib_symbols: Rc<SymbolTable>, reporter: Rc<dyn Reporter>) {
         let mut checker = TypeChecker {
             reporter,
             all_symbols,
             lib_symbols,
-            context: ContextTracker::new(lib.root_sym()),
+            context: ContextTracker::new(module.root_sym()),
         };
 
-        for decl in &lib.type_decls {
+        for decl in &module.type_decls {
             checker.check_type_decl(decl);
         }
-        for decl in &lib.function_decls {
+        for decl in &module.function_decls {
             checker.check_function_decl(decl);
         }
-        for decl in &lib.conformance_decls {
+        for decl in &module.conformance_decls {
             checker.check_conformance_decl(decl);
         }
 
         checker
             .context
-            .push_scope(Symbol::main_symbol(&lib.name), ScopeType::InsideFunction);
-        checker.check_list(&lib.main);
+            .push_scope(Symbol::main_symbol(&module.name), ScopeType::InsideFunction);
+        checker.check_list(&module.main);
         checker.context.pop_scope();
     }
 

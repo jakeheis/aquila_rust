@@ -265,21 +265,6 @@ impl GenericSpecialization {
         resolved_self
     }
 
-    pub fn subset(&self, owner: &Symbol) -> Self {
-        let map = self
-            .map
-            .iter()
-            .flat_map(|(symbol, node_type)| {
-                if owner.directly_owns(symbol) {
-                    Some((symbol.clone(), node_type.clone()))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        GenericSpecialization { map }
-    }
-
     pub fn type_for(&self, symbol: &Symbol) -> Option<&NodeType> {
         self.map.get(symbol)
     }

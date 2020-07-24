@@ -13,28 +13,28 @@ pub struct SymbolTableBuilder<'a> {
 }
 
 impl<'a> SymbolTableBuilder<'a> {
-    pub fn build_symbols(lib: &Lib, dependencies: &'a SymbolStore, reporter: Rc<dyn Reporter>) -> SymbolTable {
+    pub fn build_symbols(module: &ParsedModule, dependencies: &'a SymbolStore, reporter: Rc<dyn Reporter>) -> SymbolTable {
         let mut builder = SymbolTableBuilder {
-            context: ContextTracker::new(lib.root_sym()),
-            symbols: SymbolTable::new(&lib.name),
+            context: ContextTracker::new(module.root_sym()),
+            symbols: SymbolTable::new(&module.name),
             dependencies,
             reporter,
         };
 
-        builder.build_type_headers(&lib.type_decls);
+        builder.build_type_headers(&module.type_decls);
 
-        for decl in &lib.trait_decls {
+        for decl in &module.trait_decls {
             builder.build_trait_header(decl);
         }
 
-        for decl in &lib.trait_decls {
+        for decl in &module.trait_decls {
             builder.build_trait_body(decl);
         }
 
-        builder.build_type_internals(&lib.type_decls);
-        builder.build_functions(&lib.function_decls, false);
+        builder.build_type_internals(&module.type_decls);
+        builder.build_functions(&module.function_decls, false);
 
-        for decl in &lib.conformance_decls {
+        for decl in &module.conformance_decls {
             builder.build_conformance(decl);
         }
 
