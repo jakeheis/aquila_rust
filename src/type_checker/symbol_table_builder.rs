@@ -118,6 +118,19 @@ impl<'a> SymbolTableBuilder<'a> {
 
         self.context.pop_scope(); // Meta pop
 
+        let name_sym = self.current_symbol().child("_name");
+        type_metadata.methods.push(name_sym.name().to_owned());
+        self.symbols.insert_func_metadata(name_sym.clone(), FunctionMetadata {
+            symbol: name_sym,
+            kind: FunctionKind::Method(type_symbol.clone()),
+            generics: Vec::new(),
+            parameters: Vec::new(),
+            return_type: NodeType::pointer_to(NodeType::Byte),
+            is_public: true,
+            generic_restrictions: Vec::new(),
+            include_caller: false,
+        });
+
         let deinit_symbol = self.current_symbol().deinit_symbol();
         type_metadata.methods.push(deinit_symbol.name().to_owned());
         self.symbols.insert_func_metadata(

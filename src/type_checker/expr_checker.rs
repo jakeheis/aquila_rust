@@ -141,31 +141,6 @@ impl<'a> ExprChecker<'a> {
         }
     }
 
-    fn visit_print(
-        &self,
-        arg: &Expr,
-        arg_type: &NodeType,
-    ) -> DiagnosticResult<()> {
-        match arg_type {
-            NodeType::Int | NodeType::Double | NodeType::Bool => Ok(()),
-            arg_type if arg_type.is_pointer_to(NodeType::Byte) => Ok(()),
-            NodeType::Instance(sym, ..) => {
-                let metadata = self.all_symbols.type_metadata(&sym).unwrap();
-                if !metadata.conforms_to(&Symbol::writable_symbol()) {
-                    let message = format!("Can't print object of type {}", sym.mangled());
-                    Err(Diagnostic::error(arg, &message))
-                } else {
-                    Ok(())
-                }
-            }
-            NodeType::Reference(to) => self.visit_print(arg, to.as_ref()),
-            _ => {
-                let message = format!("Can't print object of type {}", arg_type);
-                Err(Diagnostic::error(arg, &message))
-            }
-        }
-    }
-
     fn check_specialization_restrictions(
         &self,
         specialization: &GenericSpecialization,
@@ -378,10 +353,6 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
         )?;
 
         call.set_specialization(full_call_specialization.clone());
-
-        if metadata.symbol == Symbol::stdlib("print") {
-            self.visit_print(&call.arguments[0], &arg_types[0])?;
-        }
 
         let function_type = metadata.full_type().specialize(&full_call_specialization);
 

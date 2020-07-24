@@ -51,21 +51,41 @@ pub type Memory {
 
 pub def print[T](obj: T) {
     let buffer = StringBuffer.new();
+
+    let has_written = false;
+
     #if T: Writable  {
         obj.write(@buffer);
+        has_written = true;
     }
+
     #if T == int {
         buffer.push_int(obj);
+        has_written = true;
     }
     #if T == double {
         buffer.push_double(obj);
+        has_written = true;
     }
     #if T == bool {
         buffer.push_bool(obj);
+        has_written = true;
     }
     #if T == ptr byte {
         buffer.push(obj);
+        has_written = true;
     }
+
+    if has_written == false {
+        #if T: AnyObject {
+            buffer.push(obj._name());
+            has_written = true;
+        }
+        if has_written == false {
+            buffer.push("<ptr or ref>");
+        }
+    }
+
     Stream.stdout().writeln(@buffer.content);
 }
 
@@ -386,5 +406,7 @@ trait Iterable {}
 // }
 
 trait AnyObject {
+    // TODO: make this a meta requirement when they are supported
+    def _name(): ptr byte;
     def deinit();
 }

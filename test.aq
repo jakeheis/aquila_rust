@@ -23,6 +23,14 @@ print(vec);
 
 print(4);
 
+type OtherType {
+
+}
+
+let o: OtherType;
+
+print(o);
+
 // let
 
 // print_object[String](obj);

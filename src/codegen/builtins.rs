@@ -163,7 +163,7 @@ pub fn write_type_deinit(
     writer: &mut IRWriter,
     type_metadata: &TypeMetadata,
 ) {
-    let deinit_symbol = Symbol::deinit_symbol(&type_metadata.symbol);
+    let deinit_symbol = type_metadata.symbol.deinit_symbol();
     let deinit_metadata = writer
         .all_symbols
         .function_metadata(&deinit_symbol)
@@ -218,6 +218,22 @@ pub fn write_type_deinit(
     }
 
     writer.end_decl_func(&deinit_metadata);
+}
+
+pub fn write_type_name_func(
+    writer: &mut IRWriter,
+    type_metadata: &TypeMetadata) 
+{
+    let name_symbol = type_metadata.symbol.child("_name");
+    let name_metadata = writer
+        .all_symbols
+        .function_metadata(&name_symbol)
+        .unwrap()
+        .clone();
+
+    writer.start_block();
+    writer.return_value(IRExpr::string_literal(type_metadata.symbol.name()));
+    writer.end_decl_func(&name_metadata)
 }
 
 // Call impls

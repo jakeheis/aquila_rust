@@ -114,6 +114,7 @@ impl IRGen {
             &mut self.writer,
             &type_metadata,
         );
+        builtins::write_type_name_func(&mut self.writer, &type_metadata);
 
         trace!("Writing methods for {}", type_symbol);
 
