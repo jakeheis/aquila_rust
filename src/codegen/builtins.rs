@@ -12,6 +12,7 @@ impl Builtin {
     fn named(symbol: &Symbol) -> Option<Builtin> {
         match symbol.unique_id() {
             "stdlib$Memory$Meta$size" => Some(Builtin::size()),
+            "stdlib$Memory$Meta$stack_buffer" => Some(Builtin::stack_buffer()),
             "stdlib$ptr_offset" => Some(Builtin::ptr_offset()),
             "stdlib$_read_line" => Some(Builtin::read_line()),
             _ => None,
@@ -22,6 +23,13 @@ impl Builtin {
         Builtin {
             write: None,
             special_call: Some(size_call),
+        }
+    }
+
+    fn stack_buffer() -> Self {
+        Builtin {
+            write: None,
+            special_call: Some(stack_buffer_call),
         }
     }
 
@@ -42,7 +50,7 @@ impl Builtin {
 
 pub fn is_direct_c_binding(symbol: &Symbol) -> bool {
     let bindings = [
-        "strlen", "memcpy", "malloc", "sizeof", "realloc", "exit", "free", "asprintf", "dprintf"
+        "strlen", "memcpy", "malloc", "sizeof", "realloc", "exit", "free", "dprintf", "snprintf"
     ];
     for binding in &bindings {
         if symbol == &Symbol::stdlib(binding) {
@@ -251,4 +259,18 @@ fn size_call(
         expr_type: NodeType::Metatype(Box::new(expr_type)),
     };
     IRExpr::call_extern("sizeof", vec![arg], NodeType::Double)
+}
+
+
+fn stack_buffer_call(
+    writer: &mut IRWriter,
+    func_symbol: &Symbol,
+    spec: &GenericSpecialization,
+    mut args: Vec<IRExpr>,
+) -> IRExpr {
+    let gen_sym = func_symbol.child("T");
+    let element_type = spec.type_for(&gen_sym).unwrap().clone();
+
+    let array = writer.declare_array(element_type, args.remove(0));
+    IRExpr::variable(&array)
 }

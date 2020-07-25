@@ -1,11 +1,12 @@
 builtin def malloc(count: int): ptr any;
 builtin def realloc(location: ptr any, count: int): ptr any;
 builtin def free(location: ptr any);
-builtin def strlen(location: ptr byte): int;
 builtin def memcpy(to: ptr any, from: ptr any, length: int): int;
 builtin def sizeof(object: any): int;
 builtin def exit(code: int);
-builtin def asprintf(result: ptr ptr byte, format: ptr byte, arg: any);
+
+builtin def strlen(location: ptr byte): int;
+builtin def snprintf(buffer: ptr byte, size: int, format: ptr byte, arg: any): int;
 builtin def dprintf(fd: int, format: ptr byte, arg: any);
 
 builtin def ptr_offset(pointer: ptr any, distance: int): ptr any;
@@ -46,6 +47,8 @@ pub type Memory {
     meta def drop[T](loc: ptr T) {
         free(loc);
     }
+
+    builtin meta def stack_buffer[T](length: int): ptr T;
 
 }
 
@@ -347,6 +350,7 @@ pub type Stream {
 // ref cannot be stored
 // box StringBuilder is ref counted Box
 // can be demoted to ref StringBuilder
+// ref or box can be unsafely saved as ptr
 
 pub type StringBuffer {
 
@@ -377,10 +381,13 @@ pub type StringBuffer {
     }
 
     def push_primitive[T](format: ptr byte, value: T) {
-        let bytes: ptr byte;
-        asprintf(&bytes, format, value);
-        content = content.append_literal(bytes);
-        Memory.drop(bytes);
+        let initial_buffer = Memory.stack_buffer[byte](1);
+        let length = snprintf(initial_buffer, 1, format, value);
+
+        let actual_buffer = Memory.stack_buffer[byte](length + 1);
+        snprintf(actual_buffer, length + 1, format, value);
+
+        content = content.append_literal(actual_buffer);
     }
 
 }

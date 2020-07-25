@@ -124,14 +124,35 @@ impl IRWriter {
         var
     }
 
+    pub fn declare_array(&mut self, element_ty: NodeType, count: IRExpr) -> IRVariable {
+        let name = self.next_temp();
+        self.add_stmt(IRStatement::DeclArray(
+            name.clone(),
+            element_ty.clone(), 
+            count
+        ));
+
+        let ptr_type = NodeType::pointer_to(element_ty);
+        let ptr = self.declare_temp_no_init(ptr_type.clone());
+        self.assign_var(&ptr, IRExpr {
+            kind: IRExprKind::Variable(name),
+            expr_type: ptr_type,
+        });
+        ptr
+    }
+
     pub fn declare_temp_no_init(&mut self, var_type: NodeType) -> IRVariable {
-        self.temp_count = self.temp_count + 1;
         let var = IRVariable {
-            name: format!("_ir_tmp_{}", self.temp_count),
+            name: self.next_temp(),
             var_type,
         };
         self.declare_var(&var);
         var
+    }
+
+    fn next_temp(&mut self) -> String {
+        self.temp_count = self.temp_count + 1;
+        format!("_ir_tmp_{}", self.temp_count)
     }
 
     pub fn addres_of_expr(&mut self, value: IRExpr, as_ref: bool) -> IRExpr {

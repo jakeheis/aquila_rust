@@ -583,7 +583,13 @@ impl ExprVisitor for IRGen {
     }
 
     fn visit_array_expr(&mut self, expr: &Expr, elements: &[Expr]) -> Self::ExprResult {
-        let array = self.writer.declare_temp_no_init(expr.get_type().unwrap());
+        let (element_ty, size) = if let NodeType::Array(ty, size) = expr.get_type().unwrap() {
+            (ty, size)
+        } else {
+            panic!()
+        };
+        let size = size.to_string();
+        let array = self.writer.declare_array(*element_ty, IRExpr::int_literal(&size));
 
         for (index, element) in elements.iter().enumerate() {
             let element = element.accept(self);

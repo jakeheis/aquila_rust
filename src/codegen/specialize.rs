@@ -79,6 +79,10 @@ impl<'a> SpecializationRecorder<'a> {
     fn visit_stmt(&mut self, context: &Symbol, stmt: &IRStatement) {
         match stmt {
             IRStatement::DeclLocal(var) => self.add_ir_var(context, var),
+            IRStatement::DeclArray(_, element_ty, count) => {
+                self.add_node_type(context, element_ty);
+                self.visit_expr(context, count);
+            }
             IRStatement::Assign(_, value) => {
                 self.visit_expr(context, value);
             }

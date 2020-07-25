@@ -123,6 +123,7 @@ impl<'a> FreeWriter<'a> {
                     loop_writer.write();
                 }
                 IRStatement::Assign(..) | IRStatement::Execute(..) => (),
+                IRStatement::DeclArray(..) => (),
             }
             if done {
                 break;

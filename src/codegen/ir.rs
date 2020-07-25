@@ -77,6 +77,7 @@ impl IRCompilationCondition {
 #[derive(Debug)]
 pub enum IRStatement {
     DeclLocal(IRVariable),
+    DeclArray(String, NodeType, IRExpr),
     Assign(IRExpr, IRExpr),
     Loop(Vec<IRStatement>),
     Condition(IRExpr, Vec<IRStatement>, Vec<IRStatement>),

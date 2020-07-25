@@ -103,6 +103,12 @@ impl CodeWriter {
                 let line = format!("{};", self.type_and_name(&var_type, &var.name));
                 self.writeln(&line);
             }
+            IRStatement::DeclArray(name, element_ty, count) => {
+                let element_ty = element_ty.specialize(spec);
+                let count = self.form_expression(count, spec);
+                let line = format!("{}[{}];", self.type_and_name(&element_ty, &name), count);
+                self.writeln(&line);
+            }
             IRStatement::Assign(object, value) => {
                 let object = self.form_expression(object, spec);
                 let value = self.form_expression(value, spec);

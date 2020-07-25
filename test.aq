@@ -31,6 +31,8 @@
 
 // print(o);
 
+print(2.0 / 3);
+
 for i in @Range.bounds(1, 5) {
   print(i);
 }
