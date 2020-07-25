@@ -167,6 +167,15 @@ impl IRExpr {
         IRExpr::unary(IRUnaryOperator::Reference, var, expr_type)
     }
 
+    pub fn dereference(var: &IRVariable) -> Self {
+        let expr_type = if let NodeType::Pointer(to) = &var.var_type {
+            *to.clone()
+        } else {
+            panic!()
+        };
+        IRExpr::unary(IRUnaryOperator::Dereference, var, expr_type)
+    }
+
     pub fn unary(op: IRUnaryOperator, var: &IRVariable, expr_type: NodeType) -> Self {
         let var = IRExpr::variable(var);
         IRExpr {

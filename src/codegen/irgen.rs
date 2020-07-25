@@ -374,8 +374,18 @@ impl StmtVisitor for IRGen {
 
     fn visit_assignment_stmt(&mut self, target: &Expr, value: &Expr) -> Self::StmtResult {
         let target = target.accept(self);
+
+        let adddress_type = NodeType::pointer_to(target.expr_type.clone());
+        let address = self.writer.declare_temp(IRExpr {
+            kind: IRExprKind::Unary(IRUnaryOperator::Reference, Box::new(target)),
+            expr_type: adddress_type,
+        });
+
+        // Declare old value as var so memory.rs cleans it up
+        self.writer.declare_temp(IRExpr::dereference(&address));
+
         let value = value.accept(self);
-        self.writer.assign(target, value);
+        self.writer.assign(IRExpr::dereference(&address), value);
     }
 
     fn visit_expression_stmt(&mut self, expr: &Expr) -> Self::StmtResult {
@@ -447,7 +457,20 @@ impl ExprVisitor for IRGen {
     }
 
     fn visit_function_call_expr(&mut self, expr: &Expr, call: &FunctionCall) -> Self::ExprResult {
-        let mut arg_exprs: Vec<_> = call.arguments.iter().map(|a| a.accept(self)).collect();
+        let mut arg_exprs: Vec<_> = Vec::new();
+        for arg in &call.arguments {
+            let mut arg = arg.accept(self);
+            if !arg.has_defined_location() {
+                match &arg.expr_type {
+                    NodeType::Instance(..) | NodeType::GenericInstance(..) => {
+                        let var = self.writer.declare_temp(arg);
+                        arg = IRExpr::variable(&var);
+                    }
+                    _ => ()
+                }
+            }
+            arg_exprs.push(arg);
+        }
 
         let function_symbol = call.name.get_symbol().unwrap();
         let mut ir_symbol = function_symbol.clone();
