@@ -142,7 +142,7 @@ pub mod test_token {
     pub fn join(tokens: &[Token]) -> (Source, Vec<Token>) {
         let combined = tokens
             .iter()
-            .map(|t| &t.span.source.content)
+            .map(|t| t.span.source.all_content())
             .fold(String::new(), |acc, c| acc + c);
         let new_source = source::text(&combined);
         let mut index = 0;

@@ -9,29 +9,40 @@ pub fn file(file: &str) -> Source {
     let full_name = path.to_str().unwrap();
     let short_name = path.file_stem().unwrap().to_str().unwrap();
 
-    Rc::new(SourceImpl {
-        full_name: String::from(full_name),
-        short_name: String::from(short_name),
+    Rc::new(SourceImpl::new(
+        full_name.to_owned(),
+        short_name.to_owned(),
         content,
-    })
+    ))
 }
 
 pub fn text(text: &str) -> Source {
-    Rc::new(SourceImpl {
-        full_name: String::from("<stdin>"),
-        short_name: String::from("<stdin>"),
-        content: String::from(text),
-    })
+    Rc::new(SourceImpl::new(
+        "<stdin>".to_owned(),
+        "<stdin>".to_owned(),
+        text.to_owned(),
+    ))
 }
 
 #[derive(Debug)]
 pub struct SourceImpl {
     pub full_name: String,
     pub short_name: String,
-    pub content: String,
+    content: String,
+    characters: Vec<char>,
 }
 
 impl SourceImpl {
+    fn new(full_name: String, short_name: String, content: String) -> Self {
+        let characters: Vec<_> = content.chars().collect();
+        Self {
+            full_name,
+            short_name,
+            content,
+            characters,
+        }
+    }
+
     pub fn full_name(&self) -> &str {
         &self.full_name
     }
@@ -41,11 +52,15 @@ impl SourceImpl {
     }
 
     pub fn character(&self, number: usize) -> char {
-        self.content.chars().nth(number).unwrap()
+        self.characters[number]
     }
 
     pub fn length(&self) -> usize {
-        self.content.chars().count()
+        self.characters.len()
+    }
+
+    pub fn all_content(&self) -> &str {
+        &self.content
     }
 
     pub fn lexeme(&self, index: usize, length: usize) -> &str {
@@ -69,21 +84,6 @@ impl Span {
             index,
             length,
             line,
-        }
-    }
-
-    pub fn unknown() -> Self {
-        let name = String::from("<unknown>");
-        let source = SourceImpl {
-            full_name: name.clone(),
-            short_name: name,
-            content: String::from(""),
-        };
-        Span {
-            source: Rc::new(source),
-            index: 0,
-            length: 0,
-            line: 1,
         }
     }
 

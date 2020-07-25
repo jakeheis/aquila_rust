@@ -361,11 +361,11 @@ pub type StringBuffer {
     }
 
     pub def push_int(value: int) {
-        push_primitive[int]("%i", value);
+        push_primitive("%i", value);
     }
 
     pub def push_double(value: double) {
-        push_primitive[double]("%g", value);
+        push_primitive("%g", value);
     }
 
     pub def push_bool(value: bool) {
@@ -380,13 +380,13 @@ pub type StringBuffer {
         let bytes: ptr byte;
         asprintf(&bytes, format, value);
         content = content.append_literal(bytes);
-        Memory.drop[byte](bytes);
+        Memory.drop(bytes);
     }
 
 }
 
 trait Writable {
-    def write(builder: ref StringBuffer);
+    def write(buffer: ref StringBuffer);
 }
 
 trait Freeable {
