@@ -33,3 +33,10 @@ pub fn run_with_reporter(
 
     Ok(())
 }
+
+pub fn should_trace() -> bool {
+    match std::env::var("RUST_LOG") {
+        Ok(val) if val == "trace" => true,
+        _ => false
+    }
+}

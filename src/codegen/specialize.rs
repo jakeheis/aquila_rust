@@ -212,9 +212,11 @@ pub struct SpecializationPropagator<'a> {
 
 impl<'a> SpecializationPropagator<'a> {
     pub fn propagate(program: &'a Program, main: Symbol) -> FinalSpecializationMap {
-        // for module in &program.modules {
-        //     module.specialization_record.dump();
-        // }
+        if crate::should_trace() {
+            for module in &program.modules {
+                module.specialization_record.dump();
+            }
+        }
 
         let mut prop = SpecializationPropagator {
             program,
