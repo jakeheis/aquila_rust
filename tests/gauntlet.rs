@@ -68,7 +68,7 @@ fn vector() -> Result<(), &'static str> {
 
 fn test_file(file_root: &str) -> Result<(), &'static str> {
     let path = format!(
-        "/Users/jakeheiser/Desktop/Projects/Rust/aquila/tests/aquila/{}.aq",
+        "/Users/jakeheiser/aquila/tests/aquila/{}.aq",
         file_root
     );
     let path = PathBuf::from(&path);
@@ -195,7 +195,7 @@ fn run_file(file: PathBuf) -> (String, Vec<Diagnostic>) {
             assert_eq!(diagnostics.unwrap().len(), 0);
 
             let output =
-                Command::new("/Users/jakeheiser/Desktop/Projects/Rust/aquila/build/program")
+                Command::new("/Users/jakeheiser/aquila/build/program")
                     .output()
                     .unwrap();
 

@@ -248,6 +248,10 @@ pub type Vec[T] {
 
 }
 
+/*
+Passing object itself must be either move or copy
+*/
+
 impl Vec: Writable {
     def write(buffer: ref StringBuffer) {
         buffer.push("Vec");
@@ -390,6 +394,60 @@ pub type StringBuffer {
         content = content.append_literal(actual_buffer);
     }
 
+}
+
+pub def copy[T](obj: T): T where T: Copyable {
+    let buffer: T;
+    obj.copy(cast[ptr any](&buffer));
+    return buffer;
+}
+
+pub type Box[T] {
+    let location: ptr BoxImpl[T];
+
+    pub meta def new(obj: T): Box[T] {
+        let heap = Memory.allocate[BoxImpl[T]]();
+        (*heap).object = obj;
+        return Box[T](heap);
+    }
+
+    pub def as_ptr(): ptr T {
+        return cast[ptr T](location);
+    }
+}
+
+impl Box: Copyable {
+    def copy(into: ptr any) {
+        let destination = cast[ptr Box[T]](into);
+        (*destination).location = self.location;
+        (*location).retain();
+    }
+}
+
+impl Box: Freeable {
+    def free() {
+        (*location).release();
+    }
+}
+
+type BoxImpl[T] {
+    let object: T;
+    let count: int;
+
+    def retain() {
+        count = count + 1;
+    }
+
+    def release() {
+        count = count - 1;
+        if count == 0 {
+            deinit();
+        }
+    }
+}
+
+trait Copyable {
+    def copy(into: ptr any);
 }
 
 trait Writable {

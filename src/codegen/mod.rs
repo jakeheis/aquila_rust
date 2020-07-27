@@ -24,7 +24,7 @@ pub fn generate(program: Program, main_sym: Symbol) -> Result<(), &'static str> 
     let code_writer = codewriter::CodeWriter::new(program, file, spec_map);
     code_writer.write();
 
-    let status = Command::new("/usr/local/opt/llvm/bin/clang")
+    let status = Command::new("/usr/bin/clang")
         .args(&[
             "-g",
             "-Iinclude",

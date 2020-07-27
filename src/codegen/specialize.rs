@@ -292,14 +292,22 @@ impl<'a> SpecializationPropagator<'a> {
         if let Some(type_metadata) = self.program.symbols.type_metadata(cur) {
             let fields = type_metadata.fields.clone();
             for field in &fields {
-                if let NodeType::Instance(target, field_spec) = &field.var_type {
-                    let field_spec = field_spec.resolve_generics_using(&current_spec);
-                    self.propagate_through_type(target, &field_spec);
-                }
+                self.propagate_through_field(&field.var_type, current_spec);
             }
         }
 
         trace!("Finished function {}", cur);
+    }
+
+    fn propagate_through_field(&mut self, field: &NodeType, current_spec: &GenericSpecialization) {
+        match field {
+            NodeType::Instance(target, field_spec) => {
+                let field_spec = field_spec.resolve_generics_using(&current_spec);
+                self.propagate_through_type(target, &field_spec);   
+            },
+            NodeType::Pointer(to) | NodeType::Reference(to) | NodeType::Array(to, _) => self.propagate_through_field(to, current_spec),
+            _ => ()
+        }
     }
 
     fn should_propagate(&self, current_spec: &GenericSpecialization, conditions: &[IRCompilationCondition]) -> bool {

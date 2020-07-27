@@ -8,7 +8,7 @@ fn main() -> Result<(), &'static str> {
     let file_name = if args.len() > 1 {
         &args[1]
     } else {
-        "/Users/jakeheiser/Desktop/Projects/Rust/aquila/test.aq"
+        "/Users/jakeheiser/aquila/test.aq"
     };
     let link_stdlib = args.len() <= 2;
     let source = aquila::file(file_name);

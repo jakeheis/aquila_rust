@@ -1,101 +1,21 @@
 
-// def take_ref(obj: ref Vec[int]) {
-//   print(obj.count);
-// }
-
-// // print_object[Vec[int]](vector);
-
-// let obj = Vec[int].new();
-// take_ref(@obj);
-
-// // let maybe_str = Optional[String].some(obj);
-// // print(maybe_str);
-
-// let maybe_int = Optional[int].some(5);
-// print(maybe_int);
-
-// let vec = Vec[String].new();
-// vec.push(String.literal("first"));
-// vec.push(String.literal("second"));
-// vec.push(String.literal("third"));
-
-// print(vec);
-
-// print(4);
-
-// type OtherType {
-
-// }
-
-// let o: OtherType;
-
-// print(o);
-
-print(2.0 / 3);
-
-for i in @Range.bounds(1, 5) {
-  print(i);
+type MyObject {
+    let num: int;
 }
 
-// let
-
-// print_object[String](obj);
-
-// let heap = box Adder[int](3, 4);
-// let stack = Adder[ptr byte]("hi", "byte");
-
-// def add_one(i: ref Adder[int], r: ref Adder[int]): int {
-//     return i.pick() + r.pick();
-// }
-
-// add_one(heap, ref stack);
-
-// def keep_one(i: box Adder[int], r: box Adder[int]): int {
-//     return i.pick() + r.pick();
-// }
-
-// let uno = box 1;
-// let duo = box 2;
-
-// let vector = Vec[int].new();
-// vector.insert(2);
-// vector.insert(4);
-
-// let vec = Vec[int].heap();
-
-
-// print(vector);
-
-// let a = 4 + 5;
-// print a;
-
-// let adder = Adder(1, 2);
-// adder.sum(false, 4, a);
-
-// while a > 6 {
-//   print a;
-//   a = a - 1;
-// }
-
-/*
-enum Hello {
-    case one;
-    case two;
+impl MyObject: Freeable {
+    def free() {
+        
+    }
 }
 
-def fib(num: int): int {
-  if num == 0 {
-    return 0;
-  }
-  if num == 1 {
-    return 1;
-  }
-  return fib(num - 2) + fib(num - 1);
+type MyOtherObject {
+    let vector: Vec[int];
 }
 
-print fib(1);
-print;
-print fib(3);
-print;
-print fib(5);
-*/
+let box = Box[int].new(MyObject(5));
+
+print(*box.as_ptr());
+
+let obj = MyOtherObject(Vec[int].new());
+

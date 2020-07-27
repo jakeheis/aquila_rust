@@ -5,6 +5,7 @@ use crate::source;
 use crate::parsing::*;
 use crate::lexing::Lexer;
 use crate::type_checker::{TypeChecker, SymbolTableBuilder};
+use crate::analysis::CycleChecker;
 use std::rc::Rc;
 use log::trace;
 
@@ -86,13 +87,13 @@ impl ModuleBuilder {
         let tokens = lexer.lex();
 
         let parser = Parser::new(tokens, Rc::clone(&self.reporter));
-        let lib = parser.parse(&module_name);
+        let mut module = parser.parse(&module_name);
 
         if self.reporter.has_errored() {
             return Err("Parsing failed");
         }
 
-        let symbols = SymbolTableBuilder::build_symbols(&lib, &self.symbol_store, Rc::clone(&self.reporter));
+        let symbols = SymbolTableBuilder::build_symbols(&module, &self.symbol_store, Rc::clone(&self.reporter));
         let symbols = Rc::new(symbols);
         self.symbol_store.add_source(Rc::clone(&symbols));
 
@@ -102,18 +103,18 @@ impl ModuleBuilder {
             return Err("Symbol table builder failed");
         }
 
-        TypeChecker::check(&lib, self.symbol_store.clone(), Rc::clone(&symbols), Rc::clone(&self.reporter));
+        TypeChecker::check(&module, self.symbol_store.clone(), Rc::clone(&symbols), Rc::clone(&self.reporter));
 
         if self.reporter.has_errored() {
             return Err("Type checker failed");
         }
 
-        // CycleChecker::check(&mut lib, Rc::clone(&reporter));
-        // if reporter.has_errored() {
-        //     return Err("Cycle checker failed");
-        // }
+        CycleChecker::check(&mut module, symbols.as_ref(), Rc::clone(&self.reporter));
+        if self.reporter.has_errored() {
+            return Err("Cycle checker failed");
+        }
 
-        let module = IRGen::new(self.symbol_store.clone()).generate(lib, symbols);
+        let module = IRGen::new(self.symbol_store.clone()).generate(module, symbols);
         
         self.modules.push(module);
         
@@ -121,7 +122,7 @@ impl ModuleBuilder {
     }
 
     pub fn build_stdlib(&mut self) {
-        let src = source::file("/Users/jakeheiser/Desktop/Projects/Rust/aquila/src/codegen/stdlib.aq");
+        let src = source::file("/Users/jakeheiser/aquila/src/codegen/stdlib.aq");
         self.build_src(src).expect("Standard library build should succeed");
     }
 
