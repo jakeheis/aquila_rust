@@ -1,21 +1,23 @@
-
 type MyObject {
     let num: int;
 }
 
 impl MyObject: Freeable {
     def free() {
-        
+        print("being freed");
     }
 }
 
-type MyOtherObject {
-    let vector: Vec[int];
+def make_box() {
+    print("start make box");
+    let box = Box[MyObject].new(MyObject(5));
+    print("end make box");
 }
 
-let box = Box[int].new(MyObject(5));
+// print((*box.as_ptr()).num);
 
-print(*box.as_ptr());
+print("pre make box");
+make_box();
+print("post make box");
 
-let obj = MyOtherObject(Vec[int].new());
-
+// print((*box.as_ptr()).num);

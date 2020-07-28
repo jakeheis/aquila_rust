@@ -403,46 +403,60 @@ pub def copy[T](obj: T): T where T: Copyable {
 }
 
 pub type Box[T] {
-    let location: ptr BoxImpl[T];
+    let box_impl: ptr BoxImpl[T];
 
-    pub meta def new(obj: T): Box[T] {
-        let heap = Memory.allocate[BoxImpl[T]]();
-        (*heap).object = obj;
-        return Box[T](heap);
+    pub meta def new(obj: T): Box[T] {        
+        let box_heap = Memory.allocate[BoxImpl[T]]();
+        *box_heap = BoxImpl[T].new(obj);
+        return Box[T](box_heap);
     }
 
     pub def as_ptr(): ptr T {
-        return cast[ptr T](location);
+        return (*box_impl).object;
     }
 }
 
 impl Box: Copyable {
     def copy(into: ptr any) {
         let destination = cast[ptr Box[T]](into);
-        (*destination).location = self.location;
-        (*location).retain();
+        (*destination).box_impl = self.box_impl;
+        (*box_impl).retain();
     }
 }
 
 impl Box: Freeable {
     def free() {
-        (*location).release();
+        let dead = (*box_impl).release();
+        if dead {
+            (*box_impl).deinit();
+            Memory.drop(box_impl);
+        }
     }
 }
 
 type BoxImpl[T] {
-    let object: T;
+    let object: ptr T;
     let count: int;
+
+    meta def new(obj: T): BoxImpl[T] {
+        let heap = Memory.allocate[T]();
+        *heap = obj;
+        return BoxImpl[T](heap, 1);
+    }
 
     def retain() {
         count = count + 1;
     }
 
-    def release() {
+    def release(): bool {
         count = count - 1;
-        if count == 0 {
-            deinit();
-        }
+        return count == 0;
+    }
+}
+
+impl BoxImpl: Freeable {
+    def free() {
+        Memory.drop(object);
     }
 }
 

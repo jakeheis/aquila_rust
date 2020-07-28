@@ -316,16 +316,13 @@ impl<'a> ExprVisitor for ExprChecker<'a> {
         let function_specialization = if is_init {
             GenericSpecialization::empty()
         } else if call.name.specialization.is_empty() {
-            match generic_inference::infer_from_args(&metadata, &arg_types) {
-                Ok(spec) => spec,
-                Err(symbol) => {
-                    let message = format!(
-                        "Couldn't infer generic type {}",
-                        symbol.name()
-                    );
-                    return Err(Diagnostic::error(expr, &message));
-                }
-            }
+            generic_inference::infer_from_args(
+                &metadata, 
+                &arg_types,
+                &target_specialization, 
+                call.name.span(), 
+                &call.arguments
+            )?
         } else {
             if call.name.specialization.len() != metadata.generics.len() {
                 let message = format!(

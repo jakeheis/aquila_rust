@@ -620,10 +620,18 @@ impl Parser {
         Ok(Expr::binary(lhs, operator, rhs))
     }
 
-    fn unary(&mut self, _can_assign: bool) -> DiagnosticResult<Expr> {
+    fn unary(&mut self, can_assign: bool) -> DiagnosticResult<Expr> {
         let operator = self.previous().clone();
         let expr = self.parse_precedence(Precedence::Unary.next())?;
-        Ok(Expr::unary(operator, expr))
+
+        let can_assign = can_assign && operator.kind == TokenKind::Star;
+
+        let unary = Expr::unary(operator, expr);
+        if can_assign && self.matches(TokenKind::Equal) {
+            self.assignment(unary)
+        } else {
+            Ok(unary)
+        }
     }
 
     fn call(&mut self, lhs: Expr, _can_assign: bool) -> DiagnosticResult<Expr> {

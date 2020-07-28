@@ -19,8 +19,8 @@ mod check {
         }
     }
 
-    pub fn check_type_match(
-        expr: &Expr,
+    pub fn check_type_match<T: ContainsSpan>(
+        span: &T,
         given: &NodeType,
         expected: &NodeType,
     ) -> DiagnosticResult<()> {
@@ -28,7 +28,7 @@ mod check {
             Ok(())
         } else {
             let message = format!("Expected {}, got {}", expected, given);
-            Err(Diagnostic::error(expr, &message))
+            Err(Diagnostic::error(span, &message))
         }
     }
 
@@ -57,25 +57,38 @@ mod generic_inference {
 
     use crate::library::{FunctionMetadata, NodeType, Symbol, GenericSpecialization};
     use std::collections::HashMap;
+    use crate::diagnostic::*;
+    use crate::parsing::Expr;
 
     pub fn infer_from_args(
         metadata: &FunctionMetadata,
         arg_types: &[NodeType],
-    ) -> Result<GenericSpecialization, Symbol> {
+        requirements: &GenericSpecialization,
+        expr: &Span,
+        args: &[Expr],
+    ) -> DiagnosticResult<GenericSpecialization> {
         let mut spec_map: HashMap<Symbol, NodeType> = HashMap::new();
         for gen in &metadata.generics {
             let sym = metadata.symbol.child(&gen);
             spec_map.insert(sym, NodeType::Ambiguous);
         }
 
-        for (param, arg_type) in metadata.parameters.iter().zip(arg_types).rev() {
-            if let Some(inferred) = infer_generic_type(&param.var_type, arg_type) {
-                spec_map.insert(inferred.0, inferred.1);
+        let iterator = metadata.parameters.iter().zip(arg_types).rev().enumerate();
+        for (index, (param, arg_type)) in iterator {
+            if let Some((sym, node_type)) = infer_generic_type(&param.var_type, arg_type) {
+                if let Some(requirement ) = requirements.type_for(&sym) {
+                    super::check::check_type_match(&args[index], &node_type, requirement)?;
+                }
+                spec_map.insert(sym, node_type);
             }
         }
         for (symbol, spec) in spec_map.iter() {
             if spec.contains_ambiguity() {
-                return Err(symbol.clone());
+                let message = format!(
+                    "Couldn't infer generic type {}",
+                    symbol.name()
+                );
+                return Err(Diagnostic::error(expr, &message));
             }
         }
 
