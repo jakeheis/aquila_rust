@@ -4,9 +4,76 @@ type MyObject {
 
 impl MyObject: Freeable {
     def free() {
-        print("being freed");
+        print("obj free");
     }
 }
+
+type Storage {
+    let object: MyObject;
+}
+
+impl Storage: Freeable {
+    def free() {
+        print("storage free");
+    }
+}
+
+def memory_think() {
+    if true {
+        let obj = MyObject(4);
+        // obj should be deallocated
+    }
+
+    if true {
+        let obj = MyObject(4);
+        let moved = obj;
+        // moved should be deallocated
+        // obj should not be deallocated
+    }
+
+    if true {
+        let obj = MyObject(4);
+        let storage = Storage(obj);
+        // storage should be deallocated
+        // obj should not be deallocated
+    }
+
+    if true {
+        let obj = MyObject(4);
+        let storage = Storage(obj);
+
+        let replacement = MyObject(5);
+        storage.object = replacement;
+
+        // storage should be deallocated
+        // obj should be deallocated
+        // relacement should not be deallocated
+    }
+
+    if true {
+        let obj = MyObject(4);
+
+        obj = MyObject(5);
+
+        // obj initial (4) should be deallocated
+        // obj final (5) should be deallocated
+    }
+
+    let obj2 = MyObject(4);
+    return obj2;
+    // obj2 should not be deallocated
+}
+
+// Rules:
+// Moved values are not deallocated
+// Something is moved if:
+// - Returned from function
+// - Passed as argument
+// - Assigned to a different variable (or field)
+// - A property is moved (?)
+// Assignment:
+// - Prior value, if present, should be deallocated before assignment
+// - Newly assigned value should be considered moved and not deallocated
 
 def make_box() {
     print("start make box");
