@@ -2,6 +2,6 @@
 
 set -e
 
-/usr/bin/clang -g -Iinclude -I/Library/Developer/CommandLineTools/usr/include/c++/v1 -O0 /Users/jakeheiser/aquila/build/main.c -o /Users/jakeheiser/aquila/build/program
+/usr/bin/clang -g -Iinclude -I/Library/Developer/CommandLineTools/usr/include/c++/v1 -O0 /Users/jakeheiser/Desktop/Projects/Rust/aquila/build/main.c -o /Users/jakeheiser/aquila/build/program
 
 ./bin/run

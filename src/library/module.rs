@@ -122,7 +122,7 @@ impl ModuleBuilder {
     }
 
     pub fn build_stdlib(&mut self) {
-        let src = source::file("/Users/jakeheiser/aquila/src/codegen/stdlib.aq");
+        let src = source::file("/Users/jakeheiser/Desktop/Projects/Rust/aquila/src/codegen/stdlib.aq");
         self.build_src(src).expect("Standard library build should succeed");
     }
 
